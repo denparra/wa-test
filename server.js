@@ -2,6 +2,9 @@ import 'dotenv/config';
 import express from 'express';
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+
 app.use(express.urlencoded({ extended: false })); // Twilio envía form-urlencoded
 
 app.post('/twilio/inbound', (req, res) => {
@@ -27,4 +30,4 @@ app.post('/twilio/inbound', (req, res) => {
 
 app.get('/health', (_, res) => res.status(200).send('ok'));
 
-app.listen(3000, () => console.log('Listening on http://localhost:3000'));
+app.listen(PORT, () => console.log('Listening on', PORT));
