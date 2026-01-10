@@ -20,6 +20,27 @@ if (dbPath !== ':memory:') {
 const db = new Database(dbPath);
 db.pragma('foreign_keys = ON');
 
+// Check for old schema state (migration hack)
+const tableInfo = db.prepare("PRAGMA table_info(contacts)").all();
+const hasPhone = tableInfo.some(col => col.name === 'phone');
+const hasPhoneE164 = tableInfo.some(col => col.name === 'phone_e164');
+
+// If contacts exists but has old column name, this is a breaking schema change.
+// Since we don't have a real migration system yet, we wipe and recreate.
+if (tableInfo.length > 0 && !hasPhone && hasPhoneE164) {
+    console.warn('Old schema detected (phone_e164). Dropping all tables to migrate to new schema (phone).');
+    db.exec(`
+        PRAGMA foreign_keys = OFF;
+        DROP TABLE IF EXISTS messages;
+        DROP TABLE IF EXISTS campaign_recipients;
+        DROP TABLE IF EXISTS campaigns;
+        DROP TABLE IF EXISTS opt_outs;
+        DROP TABLE IF EXISTS vehicles;
+        DROP TABLE IF EXISTS contacts;
+        PRAGMA foreign_keys = ON;
+    `);
+}
+
 // Read and execute schema
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
