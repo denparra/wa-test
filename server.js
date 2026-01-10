@@ -109,7 +109,7 @@ app.post('/twilio/inbound', (req, res) => {
     const from = req.body.From;            // "whatsapp:+569..."
     const body = (req.body.Body || '').trim(); // texto del usuario
 
-    const phoneE164 = normalizePhone(from);
+    const phone = normalizePhone(from); // Renamed internal var for clarity, though not strictly required
     const upper = body.toUpperCase();
     const isBaja = upper === 'BAJA' || upper === '3';
 
@@ -126,20 +126,21 @@ app.post('/twilio/inbound', (req, res) => {
     }
 
     try {
-        if (phoneE164) {
-            const contact = upsertContact(phoneE164, null);
+        if (phone) {
+            const contact = upsertContact(phone, null);
             insertMessage({
                 contactId: contact?.id || null,
                 campaignId: null,
                 direction: 'inbound',
+                phone: phone, // NEW REQUIRED FIELD
                 body,
-                providerMessageId: req.body.MessageSid || null,
+                messageSid: req.body.MessageSid || null, // RENAMED
                 status: 'received'
             });
 
             if (isBaja) {
-                insertOptOut(phoneE164, 'user_request');
-                updateContactStatus(phoneE164, 'opted_out');
+                insertOptOut(phone, 'user_request');
+                updateContactStatus(phone, 'opted_out');
             }
         }
     } catch (error) {
@@ -147,7 +148,7 @@ app.post('/twilio/inbound', (req, res) => {
     }
 
     console.log('INBOUND:', {
-        from: maskPhone(phoneE164),
+        from: maskPhone(phone),
         bodyLength: body.length,
         isBaja
     });
@@ -170,12 +171,12 @@ function escapeXml(str = '') {
         .replace(/'/g, '&apos;');
 }
 
-function maskPhone(phoneE164 = '') {
-    if (!phoneE164) {
+function maskPhone(phone = '') { // RENAMED arg
+    if (!phone) {
         return '';
     }
-    const visible = phoneE164.slice(-4);
-    return `${phoneE164.slice(0, Math.max(0, phoneE164.length - 4)).replace(/\d/g, '*')}${visible}`;
+    const visible = phone.slice(-4);
+    return `${phone.slice(0, Math.max(0, phone.length - 4)).replace(/\d/g, '*')}${visible}`;
 }
 
 function adminAuth(req, res, next) {

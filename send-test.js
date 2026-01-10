@@ -81,12 +81,12 @@ function parseArgs(argv) {
     return args;
 }
 
-function maskPhone(phoneE164 = '') {
-    if (!phoneE164) {
+function maskPhone(phone = '') {
+    if (!phone) {
         return '';
     }
-    const visible = phoneE164.slice(-4);
-    return `${phoneE164.slice(0, Math.max(0, phoneE164.length - 4)).replace(/\d/g, '*')}${visible}`;
+    const visible = phone.slice(-4);
+    return `${phone.slice(0, Math.max(0, phone.length - 4)).replace(/\d/g, '*')}${visible}`;
 }
 
 function safeDb(label, fn, fallback = null) {
@@ -125,7 +125,7 @@ function resolveCampaign({ campaignName, campaignId, body }) {
         }
         const created = safeDb('campaign-create', () => createCampaign({
             name: campaignName,
-            messageBody: body || null,
+            messageTemplate: body || null, // RENAMED
             status: 'active'
         }));
         if (!created) {
@@ -153,7 +153,7 @@ async function main() {
         ...args,
         body: normalizedBody || null
     });
-    const bodyFromCampaign = campaign?.message_body ? String(campaign.message_body).trim() : '';
+    const bodyFromCampaign = campaign?.message_template ? String(campaign.message_template).trim() : ''; // RENAMED
     const messageBody = normalizedBody || bodyFromCampaign;
     if (!messageBody && !process.env.CONTENT_SID) {
         console.error('Falta CONTENT_SID o --body para enviar mensaje.');
@@ -163,21 +163,21 @@ async function main() {
     console.log('Enviando mensajes a', RECIPIENTS.length, 'destinatarios...');
 
     const results = await Promise.allSettled(RECIPIENTS.map(async (to) => {
-        const phoneE164 = normalizePhone(to);
-        if (!phoneE164) {
+        const phone = normalizePhone(to); // RENAMED
+        if (!phone) {
             return { to, skipped: true, reason: 'invalid_phone' };
         }
 
-        const contact = safeDb('contact-upsert', () => upsertContact(phoneE164, null));
-        const optedOut = safeDb('opt-out-check', () => isOptedOut(phoneE164), false);
+        const contact = safeDb('contact-upsert', () => upsertContact(phone, null));
+        const optedOut = safeDb('opt-out-check', () => isOptedOut(phone), false);
 
         if (optedOut) {
-            safeDb('contact-opt-out', () => updateContactStatus(phoneE164, 'opted_out'));
+            safeDb('contact-opt-out', () => updateContactStatus(phone, 'opted_out'));
             if (campaign && contact?.id) {
                 safeDb('campaign-recipient-skip', () => insertCampaignRecipient({
                     campaignId: campaign.id,
                     contactId: contact.id,
-                    phoneE164,
+                    phone, // RENAMED
                     status: 'skipped_optout',
                     errorMessage: 'opted_out'
                 }));
@@ -187,7 +187,7 @@ async function main() {
 
         const toForTwilio = to.toLowerCase().startsWith('whatsapp:')
             ? to
-            : `whatsapp:${phoneE164}`;
+            : `whatsapp:${phone}`;
 
         try {
             const payload = {
@@ -213,9 +213,9 @@ async function main() {
                 safeDb('campaign-recipient-sent', () => insertCampaignRecipient({
                     campaignId: campaign.id,
                     contactId: contact.id,
-                    phoneE164,
+                    phone, // RENAMED
                     status,
-                    providerMessageId: msg.sid,
+                    messageSid: msg.sid, // RENAMED
                     sentAt: new Date().toISOString()
                 }));
             }
@@ -224,8 +224,9 @@ async function main() {
                 contactId: contact?.id || null,
                 campaignId: campaign?.id || null,
                 direction: 'outbound',
+                phone, // NEW REQUIRED
                 body: messageBody || null,
-                providerMessageId: msg.sid,
+                messageSid: msg.sid, // RENAMED
                 status
             }));
 
@@ -235,7 +236,7 @@ async function main() {
                 safeDb('campaign-recipient-failed', () => insertCampaignRecipient({
                     campaignId: campaign.id,
                     contactId: contact.id,
-                    phoneE164,
+                    phone, // RENAMED
                     status: 'failed',
                     errorMessage: error?.message || 'send_failed'
                 }));
