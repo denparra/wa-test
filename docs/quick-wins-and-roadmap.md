@@ -41,9 +41,10 @@ echo "0 3 * * * /app/scripts/backup-db.sh" | crontab -
 
 ---
 
-#### 2. Monitoring Básico (Health Check Mejorado)
+#### 2. Monitoring Básico (Health Check Mejorado) ✅ COMPLETADO
 **Impacto**: 🟡 Alto - Detección temprana de fallos
 **Esfuerzo**: ⚡ Bajo (modificar endpoint existente)
+**Estado**: Implementado en v0.2.0 (Quick Win implementado)
 
 **Implementación:**
 ```javascript
@@ -173,9 +174,10 @@ app.post('/twilio/inbound', validateTwilioRequest, (req, res) => {
 
 ---
 
-#### 6. WAL Mode para SQLite
+#### 6. WAL Mode para SQLite ✅ COMPLETADO
 **Impacto**: 🟡 Alto - Mejora concurrencia y previene locks
 **Esfuerzo**: ⚡ Bajo (1 línea en db/index.js)
+**Estado**: Implementado en v0.2.0 (Quick Win implementado)
 
 **Implementación:**
 ```javascript
@@ -190,9 +192,10 @@ db.pragma('synchronous = NORMAL'); // Opcional: mejora performance
 
 ### 🗓️ 1 Semana (Refuerzo)
 
-#### 7. Dashboard: Exportación de Datos
+#### 7. Dashboard: Exportación de Datos ✅ COMPLETADO
 **Impacto**: 🟢 Medio - Análisis externo
 **Esfuerzo**: 🔧 Moderado (nuevo endpoint)
+**Estado**: Implementado en v0.2.0 (Quick Win implementado)
 
 **Implementación:**
 ```javascript
@@ -217,9 +220,10 @@ app.get('/admin/export/contacts', adminAuth, (req, res) => {
 
 ---
 
-#### 8. Opt-Out Automático por Keyword
+#### 8. Opt-Out Automático por Keyword ✅ COMPLETADO
 **Impacto**: 🟡 Alto - Compliance (TCPA, GDPR-like)
 **Esfuerzo**: ⚡ Bajo (ya implementado parcialmente)
+**Estado**: Implementado en v0.2.0 (Quick Win implementado)
 
 **Mejora:**
 ```javascript

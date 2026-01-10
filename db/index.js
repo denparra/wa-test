@@ -20,6 +20,10 @@ if (dbPath !== ':memory:') {
 const db = new Database(dbPath);
 db.pragma('foreign_keys = ON');
 
+// Quick Win #6: WAL Mode for better concurrency
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+
 // Check for old schema state (migration hack)
 const tableInfo = db.prepare("PRAGMA table_info(contacts)").all();
 const hasPhone = tableInfo.some(col => col.name === 'phone');

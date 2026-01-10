@@ -105,20 +105,104 @@ app.get('/admin/opt-outs', (req, res) => {
     }));
 });
 
+// Quick Win #7: CSV Export endpoints
+app.get('/admin/export/contacts', adminAuth, (req, res) => {
+    try {
+        const contacts = listContacts({ limit: 10000, offset: 0 });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename=contacts.csv');
+
+        const csv = [
+            'phone,name,status,created_at,updated_at',
+            ...contacts.map(c =>
+                `"${c.phone}","${(c.name || '').replace(/"/g, '""')}","${c.status}","${c.created_at}","${c.updated_at}"`
+            )
+        ].join('\n');
+
+        res.send(csv);
+    } catch (error) {
+        console.error('Export contacts error:', error);
+        res.status(500).send('Error exporting contacts');
+    }
+});
+
+app.get('/admin/export/messages', adminAuth, (req, res) => {
+    try {
+        const messages = listMessages({ limit: 10000, offset: 0 });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename=messages.csv');
+
+        const csv = [
+            'created_at,direction,phone,name,campaign,status,body',
+            ...messages.map(m =>
+                `"${m.created_at}","${m.direction}","${m.contact_phone}","${(m.contact_name || '').replace(/"/g, '""')}","${(m.campaign_name || '').replace(/"/g, '""')}","${m.status || ''}","${(m.body || '').replace(/"/g, '""')}"`
+            )
+        ].join('\n');
+
+        res.send(csv);
+    } catch (error) {
+        console.error('Export messages error:', error);
+        res.status(500).send('Error exporting messages');
+    }
+});
+
+app.get('/admin/export/campaigns', adminAuth, (req, res) => {
+    try {
+        const campaigns = listCampaigns({ limit: 10000, offset: 0 });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename=campaigns.csv');
+
+        const csv = [
+            'id,name,status,created_at,total_recipients,sent_count,failed_count,skipped_count,message_template',
+            ...campaigns.map(c =>
+                `"${c.id}","${(c.name || '').replace(/"/g, '""')}","${c.status}","${c.created_at}","${c.total_recipients || 0}","${c.sent_count || 0}","${c.recipients_failed || 0}","${c.recipients_skipped || 0}","${(c.message_template || '').replace(/"/g, '""')}"`
+            )
+        ].join('\n');
+
+        res.send(csv);
+    } catch (error) {
+        console.error('Export campaigns error:', error);
+        res.status(500).send('Error exporting campaigns');
+    }
+});
+
+app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
+    try {
+        const optOuts = listOptOuts({ limit: 10000, offset: 0 });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename=opt-outs.csv');
+
+        const csv = [
+            'phone,name,reason,opted_out_at',
+            ...optOuts.map(o =>
+                `"${o.phone}","${(o.contact_name || '').replace(/"/g, '""')}","${o.reason || 'user_request'}","${o.created_at}"`
+            )
+        ].join('\n');
+
+        res.send(csv);
+    } catch (error) {
+        console.error('Export opt-outs error:', error);
+        res.status(500).send('Error exporting opt-outs');
+    }
+});
+
 app.post('/twilio/inbound', (req, res) => {
     const from = req.body.From;            // "whatsapp:+569..."
     const body = (req.body.Body || '').trim(); // texto del usuario
 
     const phone = normalizePhone(from); // Renamed internal var for clarity, though not strictly required
     const upper = body.toUpperCase();
-    const isBaja = upper === 'BAJA' || upper === '3';
+
+    // Quick Win #8: Expanded opt-out keywords for better compliance
+    const OPTOUT_KEYWORDS = ['BAJA', '3', 'STOP', 'UNSUBSCRIBE', 'CANCELAR', 'REMOVER'];
+    const isBaja = OPTOUT_KEYWORDS.some(kw => upper.includes(kw));
 
     // Respuesta simple
     let reply = 'Gracias por escribir a Queirolo Autos. Responde:\n1) Me interesa consignar\n2) Quiero mas info\n3) BAJA';
 
 
     if (isBaja) {
-        reply = 'Listo. Te daremos de baja y no volveremos a contactarte por este canal.';
+        reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
     } else if (upper === '1' || upper.includes('CONSIGN')) {
         reply = 'Perfecto. Para avanzar, dime: Marca, Modelo, Ano y Comuna.';
     } else if (upper === '2' || upper.includes('INFO')) {
@@ -210,6 +294,44 @@ function getPaging(req) {
 }
 
 
-app.get('/health', (_, res) => res.status(200).send('ok'));
+// Quick Win #2: Enhanced health endpoint with basic metrics
+app.get('/health', (req, res) => {
+    try {
+        const stats = getAdminStats();
+        const uptime = process.uptime();
+        const memoryUsage = process.memoryUsage();
+
+        const healthData = {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            uptime: Math.floor(uptime),
+            memory: {
+                rss: Math.floor(memoryUsage.rss / 1024 / 1024),
+                heapUsed: Math.floor(memoryUsage.heapUsed / 1024 / 1024),
+                heapTotal: Math.floor(memoryUsage.heapTotal / 1024 / 1024)
+            },
+            database: {
+                contacts: stats.contacts,
+                messages: stats.messages,
+                campaigns: stats.campaigns,
+                optOuts: stats.optOuts
+            }
+        };
+
+        // Simple text response for basic monitoring (backward compatible)
+        if (req.query.format === 'text') {
+            return res.status(200).send('ok');
+        }
+
+        // JSON response with metrics
+        res.status(200).json(healthData);
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
 
 app.listen(PORT, () => console.log('Listening on', PORT));
