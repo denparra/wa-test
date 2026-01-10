@@ -54,17 +54,28 @@ CREATE INDEX IF NOT EXISTS idx_opt_outs_phone ON opt_outs(phone);
 CREATE TABLE IF NOT EXISTS campaigns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft', -- draft|active|completed|cancelled
+    status TEXT NOT NULL DEFAULT 'draft', -- draft|scheduled|sending|paused|completed|cancelled|failed
     message_template TEXT, -- Plantilla del mensaje
+    type TEXT NOT NULL DEFAULT 'twilio_template', -- twilio_template|custom_message
+    category TEXT, -- LEGACY: kept for backward compatibility
+    scheduled_at TEXT, -- ISO timestamp para envío programado
+    content_sid TEXT, -- Twilio Content Template SID (HX...)
+    filters TEXT, -- JSON con filtros: {"make":"Toyota","year_min":2015}
     started_at TEXT,
     completed_at TEXT,
+    paused_at TEXT,
+    failed_at TEXT,
+    error_message TEXT, -- Error a nivel campaña
     total_recipients INTEGER DEFAULT 0,
     sent_count INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
 CREATE INDEX IF NOT EXISTS idx_campaigns_created_at ON campaigns(created_at);
+CREATE INDEX IF NOT EXISTS idx_campaigns_type ON campaigns(type);
+CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled_at ON campaigns(scheduled_at);
 
 -- ============================================================
 -- CAMPAIGN_RECIPIENTS: Tracking por destinatario
@@ -125,4 +136,11 @@ AFTER UPDATE ON vehicles
 FOR EACH ROW
 BEGIN
     UPDATE vehicles SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_campaigns_updated_at
+AFTER UPDATE ON campaigns
+FOR EACH ROW
+BEGIN
+    UPDATE campaigns SET updated_at = datetime('now') WHERE id = NEW.id;
 END;

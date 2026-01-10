@@ -49,6 +49,42 @@ if (tableInfo.length > 0 && !hasPhone && hasPhoneE164) {
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
 
+// Phase 2.1 Migration: Add new columns to campaigns table if they don't exist
+const campaignsInfo = db.prepare("PRAGMA table_info(campaigns)").all();
+const hasType = campaignsInfo.some(col => col.name === 'type');
+const hasScheduledAt = campaignsInfo.some(col => col.name === 'scheduled_at');
+const hasUpdatedAt = campaignsInfo.some(col => col.name === 'updated_at');
+
+if (campaignsInfo.length > 0) {
+    // Add missing columns (backward compatible - existing data preserved)
+    if (!hasType) {
+        console.log('Migrating campaigns: adding type column');
+        db.exec(`ALTER TABLE campaigns ADD COLUMN type TEXT NOT NULL DEFAULT 'twilio_template'`);
+    }
+    if (!hasScheduledAt) {
+        console.log('Migrating campaigns: adding scheduled_at column');
+        db.exec(`ALTER TABLE campaigns ADD COLUMN scheduled_at TEXT`);
+    }
+    if (!hasUpdatedAt) {
+        console.log('Migrating campaigns: adding updated_at column');
+        db.exec(`ALTER TABLE campaigns ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
+    }
+    // Add other new columns silently (they won't cause errors if already exist in schema.sql)
+    const newColumns = [
+        ['content_sid', 'TEXT'],
+        ['filters', 'TEXT'],
+        ['paused_at', 'TEXT'],
+        ['failed_at', 'TEXT'],
+        ['error_message', 'TEXT']
+    ];
+    for (const [colName, colType] of newColumns) {
+        const hasColumn = campaignsInfo.some(col => col.name === colName);
+        if (!hasColumn) {
+            db.exec(`ALTER TABLE campaigns ADD COLUMN ${colName} ${colType}`);
+        }
+    }
+}
+
 const statements = {
     upsertContact: db.prepare(`
         INSERT INTO contacts (phone, name)
@@ -104,8 +140,8 @@ const statements = {
         WHERE name = ?
     `),
     insertCampaign: db.prepare(`
-        INSERT INTO campaigns (name, message_template, status)
-        VALUES (?, ?, ?)
+        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, content_sid, filters)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     `),
     updateCampaignMessage: db.prepare(`
         UPDATE campaigns
@@ -133,6 +169,30 @@ const statements = {
         UPDATE campaigns
         SET sent_count = sent_count + 1
         WHERE id = ?
+    `),
+    // Phase 2.1: New campaign management statements
+    updateCampaign: db.prepare(`
+        UPDATE campaigns
+        SET name = ?, message_template = ?, type = ?, scheduled_at = ?, content_sid = ?, filters = ?
+        WHERE id = ?
+    `),
+    pauseCampaign: db.prepare(`
+        UPDATE campaigns
+        SET status = 'paused', paused_at = datetime('now')
+        WHERE id = ? AND status = 'sending'
+    `),
+    cancelCampaign: db.prepare(`
+        UPDATE campaigns
+        SET status = 'cancelled', completed_at = datetime('now')
+        WHERE id = ? AND status IN ('draft', 'scheduled', 'paused')
+    `),
+    getCampaignProgress: db.prepare(`
+        SELECT
+            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ?) AS total,
+            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'sent') AS sent,
+            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'delivered') AS delivered,
+            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'failed') AS failed,
+            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status LIKE 'skipped%') AS skipped
     `)
 };
 
@@ -210,10 +270,23 @@ export function getCampaignByName(name) {
 
 export function createCampaign({
     name,
-    messageTemplate = null, // RENAMED
-    status = 'draft'
+    messageTemplate = null,
+    status = 'draft',
+    type = 'twilio_template', // Phase 2.1
+    scheduledAt = null, // Phase 2.1
+    contentSid = null, // Phase 2.1
+    filters = null // Phase 2.1
 }) {
-    const result = statements.insertCampaign.run(name, messageTemplate, status);
+    const filtersJson = filters ? JSON.stringify(filters) : null;
+    const result = statements.insertCampaign.run(
+        name,
+        messageTemplate,
+        status,
+        type,
+        scheduledAt,
+        contentSid,
+        filtersJson
+    );
     return getCampaignById(result.lastInsertRowid);
 }
 
@@ -342,4 +415,91 @@ export function listOptOuts({ limit = 50, offset = 0 }) {
         ORDER BY o.opted_out_at DESC
         LIMIT ? OFFSET ?
     `).all(limit, offset);
+}
+
+// ============================================================
+// Phase 2.1: Campaign Management Functions
+// ============================================================
+
+export function updateCampaignFull(id, { name, messageTemplate, type, scheduledAt, contentSid, filters }) {
+    const filtersJson = filters ? JSON.stringify(filters) : null;
+    statements.updateCampaign.run(name, messageTemplate, type, scheduledAt, contentSid, filtersJson, id);
+    return getCampaignById(id);
+}
+
+export function pauseCampaign(id) {
+    const info = statements.pauseCampaign.run(id);
+    return info.changes > 0 ? getCampaignById(id) : null;
+}
+
+export function cancelCampaign(id) {
+    const info = statements.cancelCampaign.run(id);
+    return info.changes > 0 ? getCampaignById(id) : null;
+}
+
+export function getCampaignProgress(campaignId) {
+    return statements.getCampaignProgress.get(
+        campaignId, campaignId, campaignId, campaignId, campaignId
+    );
+}
+
+export function listContactsByFilters({ make = null, model = null, yearMin = null, yearMax = null, limit = 1000 }) {
+    const sql = `
+        SELECT DISTINCT c.id, c.phone, c.name, c.status
+        FROM contacts c
+        INNER JOIN vehicles v ON v.contact_id = c.id
+        WHERE c.status = 'active'
+            AND (? IS NULL OR v.make = ?)
+            AND (? IS NULL OR v.model = ?)
+            AND (? IS NULL OR v.year >= ?)
+            AND (? IS NULL OR v.year <= ?)
+            AND c.phone NOT IN (SELECT phone FROM opt_outs)
+        LIMIT ?
+    `;
+    return db.prepare(sql).all(
+        make, make,
+        model, model,
+        yearMin, yearMin,
+        yearMax, yearMax,
+        limit
+    );
+}
+
+export function assignRecipientsToCampaign(campaignId, contactIds) {
+    // Use transaction for batch insert
+    const insert = db.prepare(`
+        INSERT OR IGNORE INTO campaign_recipients (campaign_id, contact_id, phone, status)
+        SELECT ?, c.id, c.phone, 'pending'
+        FROM contacts c
+        WHERE c.id = ?
+    `);
+
+    const transaction = db.transaction((ids) => {
+        for (const contactId of ids) {
+            insert.run(campaignId, contactId);
+        }
+    });
+
+    transaction(contactIds);
+
+    // Update total_recipients count
+    const count = db.prepare(`
+        SELECT COUNT(*) AS count FROM campaign_recipients WHERE campaign_id = ?
+    `).get(campaignId).count;
+
+    db.prepare(`UPDATE campaigns SET total_recipients = ? WHERE id = ?`).run(count, campaignId);
+
+    return count;
+}
+
+export function renderMessageTemplate(template, variables = {}) {
+    // Safe variable substitution without eval()
+    // Only allows alphanumeric variable names: {{nombre}}, {{marca}}, {{modelo}}
+    if (!template) {
+        return '';
+    }
+    return String(template).replace(/\{\{(\w+)\}\}/g, (match, varName) => {
+        const value = variables[varName];
+        return value !== undefined && value !== null ? String(value) : match;
+    });
 }

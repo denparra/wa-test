@@ -281,12 +281,12 @@ if (isBaja) {
 
 **Features:**
 
-#### 2.1 Gestión de Campañas (3-5 días)
-- [ ] CRUD de campañas desde Dashboard (crear, editar, cancelar)
-- [ ] Preview de mensajes con variables (nombre, marca, modelo, etc.)
-- [ ] Programación de envío (fecha/hora específica)
-- [ ] Asignación automática de recipients por filtros
-- [ ] Progress bar de envío en tiempo real (SSE o polling)
+#### 2.1 Gestión de Campañas (3-5 días) ✅ COMPLETADO
+- [x] CRUD de campañas desde Dashboard (crear, editar, cancelar)
+- [x] Preview de mensajes con variables (nombre, marca, modelo, etc.)
+- [x] Programación de envío (fecha/hora específica)
+- [x] Asignación automática de recipients por filtros
+- [x] Progress bar de envío en tiempo real (SSE o polling)
 
 #### 2.2 Templates de Mensajes (2-3 días)
 - [ ] Gestor de templates en Dashboard

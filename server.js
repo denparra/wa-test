@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import {
+    createCampaign,
     getAdminStats,
     getCampaignById,
     insertMessage,
@@ -12,7 +13,14 @@ import {
     listOptOuts,
     normalizePhone,
     upsertContact,
-    updateContactStatus
+    updateContactStatus,
+    updateCampaignFull,
+    pauseCampaign,
+    cancelCampaign,
+    getCampaignProgress,
+    listContactsByFilters,
+    assignRecipientsToCampaign,
+    renderMessageTemplate
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -20,7 +28,8 @@ import {
     renderContactsPage,
     renderDashboardPage,
     renderMessagesPage,
-    renderOptOutsPage
+    renderOptOutsPage,
+    renderCampaignFormPage
 } from './admin/pages.js';
 
 const app = express();
@@ -68,6 +77,19 @@ app.get('/admin/campaigns', (req, res) => {
         offset,
         limit
     }));
+});
+
+app.get('/admin/campaigns/new', (req, res) => {
+    res.status(200).type('text/html').send(renderCampaignFormPage({}));
+});
+
+app.get('/admin/campaigns/:id/edit', (req, res) => {
+    const id = Number(req.params.id);
+    const campaign = getCampaignById(id);
+    if (!campaign) {
+        return res.status(404).send('Not found');
+    }
+    res.status(200).type('text/html').send(renderCampaignFormPage({ campaign }));
 });
 
 app.get('/admin/campaigns/:id', (req, res) => {
@@ -186,6 +208,125 @@ app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
     }
 });
 
+// ============================================================
+// Campaign Management API
+// ============================================================
+
+app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
+    try {
+        const { name, messageTemplate, type, scheduledAt, contentSid, filters } = req.body;
+
+        if (!name) {
+            return res.status(400).json({ error: 'Name is required' });
+        }
+
+        const campaign = createCampaign({
+            name,
+            messageTemplate,
+            type,
+            scheduledAt,
+            contentSid,
+            filters,
+            status: 'draft' // Always start as draft
+        });
+
+        res.status(201).json(campaign);
+    } catch (error) {
+        console.error('Create campaign error:', error);
+        res.status(500).json({ error: 'Failed to create campaign' });
+    }
+});
+
+app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const updates = req.body;
+
+        const campaign = updateCampaignFull(id, updates);
+        if (!campaign) {
+            return res.status(404).json({ error: 'Campaign not found' });
+        }
+
+        res.json(campaign);
+    } catch (error) {
+        console.error('Update campaign error:', error);
+        res.status(500).json({ error: 'Failed to update campaign' });
+    }
+});
+
+app.post('/admin/api/campaigns/:id/pause', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const campaign = pauseCampaign(id);
+        if (!campaign) {
+            // Could mean not found OR not in 'sending' status
+            return res.status(400).json({ error: 'Campaign not found or not in sending state' });
+        }
+        res.json(campaign);
+    } catch (error) {
+        console.error('Pause campaign error:', error);
+        res.status(500).json({ error: 'Failed to pause campaign' });
+    }
+});
+
+app.post('/admin/api/campaigns/:id/cancel', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const campaign = cancelCampaign(id);
+        if (!campaign) {
+            return res.status(400).json({ error: 'Campaign not found or cannot be cancelled' });
+        }
+        res.json(campaign);
+    } catch (error) {
+        console.error('Cancel campaign error:', error);
+        res.status(500).json({ error: 'Failed to cancel campaign' });
+    }
+});
+
+app.get('/admin/api/campaigns/:id/progress', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const progress = getCampaignProgress(id);
+        if (!progress) {
+            return res.status(404).json({ error: 'Campaign not found' });
+        }
+        res.json(progress);
+    } catch (error) {
+        console.error('Progress error:', error);
+        res.status(500).json({ error: 'Failed to get progress' });
+    }
+});
+
+app.post('/admin/api/campaigns/:id/assign-recipients', adminAuth, express.json(), (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const { filters } = req.body; // Expect JSON filters or use saved campaign filters if body empty? 
+        // For now, let's assume we fetch candidates based on filters valid at this moment
+
+        const candidates = listContactsByFilters({ ...filters, limit: 10000 });
+        const count = assignRecipientsToCampaign(id, candidates.map(c => c.id));
+
+        res.json({ assigned: count, totalRecipients: count });
+    } catch (error) {
+        console.error('Assign recipients error:', error);
+        res.status(500).json({ error: 'Failed to assign recipients' });
+    }
+});
+
+app.post('/admin/api/campaigns/preview', adminAuth, express.json(), (req, res) => {
+    try {
+        const { template, variableSource } = req.body;
+        // variableSource could be a contact object or mock data
+        const rendered = renderMessageTemplate(template, variableSource);
+        res.json({ preview: rendered });
+    } catch (error) {
+        res.status(500).json({ error: 'Preview failed' });
+    }
+});
+
+// ============================================================
+// Webhooks
+// ============================================================
 app.post('/twilio/inbound', (req, res) => {
     const from = req.body.From;            // "whatsapp:+569..."
     const body = (req.body.Body || '').trim(); // texto del usuario
