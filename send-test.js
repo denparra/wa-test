@@ -18,7 +18,7 @@ const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TO
 // Cambia por tu numero de prueba (formato E.164)
 // Cambia por tus numeros de prueba (formato E.164)
 const RECIPIENTS = [
-    'whatsapp:+56990080338'/*,
+    'whatsapp:+56975400946'/*,
     'whatsapp:+56990080338', // Agrega aqui el segundo numero
     'whatsapp:+56983785269', // Agrega aqui el segundo numero
     'whatsapp:+56958012294',
