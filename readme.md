@@ -1,95 +1,428 @@
-# Proyecto WhatsApp Test (Queirolo Autos)
+# WA-Test: WhatsApp Campaign System (Queirolo Autos)
 
-Este proyecto implementa un servicio backend en Node.js y Express para gestionar la comunicación vía WhatsApp utilizando la API de Twilio. Está diseñado para recibir mensajes entrantes (Inbound), procesar respuestas automáticas mediante lógica condicional y TwiML, y permitir el envío de mensajes salientes (Outbound).
+Sistema de mensajería WhatsApp para Queirolo Autos utilizando Twilio API. Incluye webhook inbound, dashboard administrativo y gestión de campañas outbound con SQLite como base de datos persistente.
 
-El servicio está desplegado actualmente en un VPS Hostinger gestionado con Easypanel.
+## 📋 Tabla de Contenidos
 
-## 1. Visión General
+- [Visión General](#visión-general)
+- [Tecnologías](#tecnologías)
+- [Estructura del Proyecto](#estructura-del-proyecto)
+- [Instalación](#instalación)
+- [Configuración](#configuración)
+- [Uso](#uso)
+- [Base de Datos](#base-de-datos)
+- [Endpoints](#endpoints)
+- [Despliegue](#despliegue)
+- [Documentación Adicional](#documentación-adicional)
 
-El sistema actúa como un intermediario entre WhatsApp (usuario final) y la lógica de negocio de Queirolo Autos.
-- **Inbound (Entrante):** Recibe webhooks de Twilio cuando un usuario escribe al número de WhatsApp Business. Responde automáticamente con un menú o confirmaciones.
-- **Outbound (Saliente):** Script para envío de mensajes proactivos (notificaciones, campañas).
-- **Infraestructura:** Contenedor Docker gestionado por Easypanel en un VPS.
+## 🎯 Visión General
 
-## 2. Estructura del Proyecto
+El sistema actúa como un intermediario entre WhatsApp (usuario final) y la lógica de negocio de Queirolo Autos con tres componentes principales:
+
+### 1. **Inbound (Webhook)**
+- Recibe mensajes entrantes de WhatsApp vía Twilio
+- Procesa respuestas automáticas con TwiML
+- Gestiona opt-outs (BAJA) con persistencia en SQLite
+- Registra todos los mensajes para análisis
+
+### 2. **Dashboard Administrativo**
+- Interfaz web para visualizar contactos, mensajes, campañas y opt-outs
+- Búsqueda y ordenamiento client-side en todas las tablas
+- Acciones rápidas (copiar teléfono, ver detalles)
+- Estados visuales con badges (active/opted_out, sent/delivered/failed)
+
+### 3. **Outbound (Campañas)**
+- Envío masivo mediante script (`send-test.js`)
+- Soporte para templates de Twilio o mensajes directos
+- Tracking de estado por destinatario
+- Filtrado automático de opt-outs
+
+## 🚀 Tecnologías
+
+- **Backend:** Node.js v20+ (ES Modules)
+- **Framework:** Express 5.x
+- **Base de Datos:** SQLite 3.x (con volumen persistente `/app/data` en VPS)
+- **Mensajería:** Twilio API (WhatsApp)
+- **Deployment:** Docker + Easypanel (Hostinger VPS)
+- **Frontend:** HTML/CSS/JS vanilla (sin frameworks pesados)
+
+## 📁 Estructura del Proyecto
 
 ```
-/
-├── server.js           # Servidor Express principal. Maneja el webhook /twilio/inbound y /health.
-├── send-test.js        # Script de prueba para envío de mensajes salientes (Outbound) a múltiples destinatarios.
-├── package.json        # Definición de dependencias y scripts (ES Modules activado).
-├── Dockerfile          # Configuración para construir la imagen del contenedor (Node 20 Alpine).
-├── .env                # Variables de entorno (NO se debe subir al repositorio).
-├── docs/               # Documentación del proyecto.
-│   └── ProyectoWatest.md # Este archivo.
-└── .gitignore          # Archivos ignorados por Git.
+wa-test/
+├── server.js              # Servidor Express con rutas admin + webhook
+├── send-test.js           # Script de envío de campañas outbound
+├── package.json           # Dependencias y scripts
+├── Dockerfile             # Imagen Docker para deployment
+├── .env                   # Variables de entorno (NO subir a repo)
+├── .gitignore             # Archivos ignorados por Git
+├── admin/
+│   ├── pages.js           # Renderizado de vistas admin (Dashboard, Contactos, Mensajes, Campañas, Opt-outs)
+│   └── render.js          # Utilidades de renderizado (layout, tablas, badges, helpers)
+├── db/
+│   ├── index.js           # Funciones de acceso a SQLite (queries, inserts, updates)
+│   └── schema.sql         # Esquema completo de base de datos
+└── docs/
+    ├── ProyectoWatest.md  # Documentación histórica del proyecto
+    └── db-minimal-with-campaigns-v0.md  # Documentación del esquema DB
 ```
 
-## 3. Instalación y Configuración Local
+## 💻 Instalación
 
 ### Prerrequisitos
-- Node.js (v18 o superior recomendado)
-- npm
+- Node.js v20+ recomendado
+- npm o yarn
+- SQLite 3.x (incluido en Node.js)
 
-### Pasos
-1.  **Clonar el repositorio:**
-    ```bash
-    git clone <url-del-repo>
-    cd wa-test
-    ```
+### Pasos para Setup Local
 
-2.  **Instalar dependencias:**
-    ```bash
-    npm install
-    ```
+```bash
+# 1. Clonar el repositorio
+git clone <url-del-repo>
+cd wa-test
 
-3.  **Configurar variables de entorno:**
-    Crea un archivo `.env` en la raíz con las siguientes claves (solicitar credenciales al administrador):
-    ```env
-    TWILIO_ACCOUNT_SID=AC...
-    TWILIO_AUTH_TOKEN=...
-    MESSAGING_SERVICE_SID=MG...
-    CONTENT_SID=HX... (Opcional, para templates)
-    PORT=3000
-    ```
+# 2. Instalar dependencias
+npm install
 
-## 4. Uso
+# 3. Crear archivo .env (ver sección Configuración)
+cp .env.example .env  # Si existe, sino crear manualmente
 
-### Ejecutar el servidor (Inbound)
-Para levantar el servidor localmente:
+# 4. Inicializar base de datos (automático al ejecutar server.js)
+# La DB se crea en db/watest.db por defecto
+
+# 5. Ejecutar servidor
+npm start  # Puerto 3000 por defecto
+```
+
+## ⚙️ Configuración
+
+### Variables de Entorno Requeridas
+
+Crear archivo `.env` en la raíz del proyecto con:
+
+```env
+# Twilio Credentials (obligatorias para inbound/outbound)
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+MESSAGING_SERVICE_SID=MG...
+
+# Twilio Content Template (opcional, para campañas con templates)
+CONTENT_SID=HX...
+
+# Server Configuration
+PORT=3000  # Puerto local (Easypanel asigna 80 automáticamente)
+
+# Database Path (crítico para VPS/Easypanel)
+DB_PATH=./db/watest.db  # Local
+# DB_PATH=/app/data/watest.db  # En VPS con volumen montado
+
+# Admin Dashboard Authentication (opcional pero recomendado)
+ADMIN_USER=admin
+ADMIN_PASS=tu_password_seguro
+```
+
+### Configuración de Base de Datos
+
+#### Local (desarrollo)
+```env
+DB_PATH=./db/watest.db
+```
+La base de datos se crea automáticamente en `db/watest.db` la primera vez que se ejecuta `server.js`.
+
+#### VPS/Easypanel (producción)
+```env
+DB_PATH=/app/data/watest.db
+```
+
+**IMPORTANTE:** En Easypanel, configurar un volumen persistente:
+- Nombre del volumen: `watest-data`
+- Mount path: `/app/data`
+- Esto garantiza que la base de datos sobreviva a reinicios y redespliegues
+
+## 📱 Uso
+
+### Ejecutar el Servidor (Local)
 ```bash
 npm start
 ```
-El servidor escuchará en el puerto 3000 (o el definido en `.env`).
-- **Endpoint Inbound:** `POST http://localhost:3000/twilio/inbound`
-- **Health Check:** `GET http://localhost:3000/health`
+El servidor escuchará en el puerto configurado (default: 3000)
 
-Para probar el webhook localmente, puedes usar herramientas como **ngrok** para exponer tu puerto 3000 a internet y configurar la URL en Twilio.
+- Dashboard Admin: `http://localhost:3000/admin`
+- Webhook Inbound: `POST http://localhost:3000/twilio/inbound`
+- Health Check: `GET http://localhost:3000/health`
 
-### Enviar mensajes de prueba (Outbound)
-Para ejecutar el script de envío:
+### Probar Webhook Localmente con ngrok
+
+```bash
+# 1. Instalar ngrok (si no lo tienes)
+# https://ngrok.com/download
+
+# 2. Exponer puerto local
+ngrok http 3000
+
+# 3. Copiar URL pública (ej: https://abc123.ngrok.io)
+# 4. Configurar en Twilio Messaging Service → Integration → Incoming Messages:
+#    https://abc123.ngrok.io/twilio/inbound
+```
+
+### Enviar Campañas Outbound
+
+#### Modo 1: Con Template de Twilio (CONTENT_SID)
 ```bash
 node send-test.js
 ```
-*Nota: Revisa `send-test.js` para configurar los números de destino en la constante `RECIPIENTS`.*
+Usa el template configurado en `.env` con variables definidas en el script.
 
-## 5. Rutas API (Endpoints)
+#### Modo 2: Mensaje Directo (sin template)
+```bash
+node send-test.js --body "Tu mensaje personalizado aquí"
+```
+Envía un mensaje de texto simple sin usar templates.
 
-### `POST /twilio/inbound`
-- **Descripción:** Webhook encargado de recibir los mensajes de WhatsApp procesados por Twilio.
-- **Formato:** `application/x-www-form-urlencoded` (estándar de Twilio).
-- **Parámetros Clave:**
-    - `From`: Número del remitente (ej. `whatsapp:+569...`).
-    - `Body`: Contenido del mensaje.
-- **Respuesta:** XML (TwiML) con la respuesta automática.
+**Configuración de destinatarios:** Editar `RECIPIENTS` en `send-test.js:14-20`
 
-### `GET /health`
-- **Descripción:** Endpoint simple para verificar que el servicio está activo.
-- **Respuesta:** `200 OK`, texto `ok`.
+### Acceder al Dashboard Admin
+
+```
+URL: http://localhost:3000/admin
+Autenticación: Basic Auth (usuario/contraseña configurados en .env)
+```
+
+**Secciones del Dashboard:**
+- **Resumen**: Estadísticas generales (contactos, mensajes, campañas, opt-outs)
+- **Contactos**: Listado completo con búsqueda, ordenamiento y acciones rápidas
+- **Mensajes**: Registro de mensajes inbound/outbound con filtros
+- **Campañas**: Gestión de campañas con detalle de destinatarios
+- **Opt-outs**: Usuarios que solicitaron BAJA
+
+## 🗄️ Base de Datos
+
+### Esquema SQLite
+
+El sistema usa SQLite con **6 tablas principales**:
+
+| Tabla | Propósito | Campos Clave |
+|-------|-----------|--------------|
+| **contacts** | Contactos master | phone (único), name, status (active/opted_out/invalid) |
+| **vehicles** | Vehículos asociados a contactos | make, model, year, price, link |
+| **opt_outs** | Registro de BAJA | phone (único), reason (user_request/manual) |
+| **campaigns** | Campañas outbound | name, status (draft/active/completed/cancelled), message_template |
+| **campaign_recipients** | Tracking por destinatario | status (pending/sent/delivered/failed/skipped), message_sid, error_message |
+| **messages** | Log unificado inbound/outbound | direction (inbound/outbound), contact_id, campaign_id, body, message_sid, status |
+
+**Ver esquema completo:** `db/schema.sql`
+
+**Documentación detallada:** `docs/db-minimal-with-campaigns-v0.md`
+
+### Estados de Contactos
+
+- **active**: Contacto normal, puede recibir campañas
+- **opted_out**: Usuario pidió BAJA, excluido de futuras campañas
+- **invalid**: Teléfono inválido o delivery failures
+
+### Flujo de Opt-out (BAJA)
+
+1. Usuario responde "BAJA" o "3" al webhook inbound
+2. Sistema inserta en `opt_outs` (phone, reason='user_request')
+3. Actualiza `contacts.status = 'opted_out'`
+4. Futuras campañas filtran automáticamente con `WHERE status='active'`
+
+## 🔌 Endpoints
+
+### Webhook Inbound
+
+```
+POST /twilio/inbound
+Content-Type: application/x-www-form-urlencoded
+```
+
+**Parámetros (Twilio envía):**
+- `From`: Número del remitente (ej: `whatsapp:+56975400946`)
+- `Body`: Contenido del mensaje
+- `MessageSid`: ID único del mensaje de Twilio
+
+**Respuesta:** TwiML XML
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>Texto de respuesta automática</Message>
+</Response>
+```
+
+**Lógica condicional actual:**
+- "BAJA" o "3" → Procesa opt-out y confirma
+- "1" o "CONSIGN" → Flujo de consignación
+- "2" o "INFO" → Flujo de información
+- Default → Menú principal
+
+### Dashboard Admin
+
+```
+GET /admin                   # Resumen (estadísticas)
+GET /admin/contacts          # Lista de contactos (paginada, búsqueda)
+GET /admin/messages          # Mensajes (filtro inbound/outbound)
+GET /admin/campaigns         # Campañas (paginada)
+GET /admin/campaigns/:id     # Detalle de campaña + recipients
+GET /admin/opt-outs          # Lista de opt-outs (paginada)
+```
+
+**Autenticación:** HTTP Basic Auth (opcional, configurar `ADMIN_USER` y `ADMIN_PASS`)
+
+### Health Check
+
+```
+GET /health
+Response: "ok" (200 OK)
+```
+Útil para monitoring y healthchecks de Easypanel/Docker.
+
+## 🚢 Despliegue
+
+### Despliegue en Easypanel (Hostinger VPS)
+
+#### 1. Configuración Inicial en Easypanel
+
+**Crear nueva aplicación:**
+- Nombre: `wa-test` (o el nombre que prefieras)
+- Source: GitHub repository (este repo)
+- Build method: **Dockerfile** (NO buildpacks)
+
+**Configurar Variables de Entorno:**
+```env
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+MESSAGING_SERVICE_SID=MG...
+CONTENT_SID=HX...  # Opcional
+DB_PATH=/app/data/watest.db  # IMPORTANTE: usar path con volumen
+ADMIN_USER=admin
+ADMIN_PASS=tu_password_seguro
+```
+
+**Configurar Volumen Persistente (CRÍTICO):**
+- Nombre: `watest-data`
+- Mount path: `/app/data`
+- Esto garantiza que SQLite persista entre redespliegues
+
+#### 2. Configuración de Dominio
+
+Easypanel asigna automáticamente un dominio HTTPS:
+```
+https://wa-test-wa-test.abc123.easypanel.host
+```
+
+O configurar dominio custom en Easypanel → Domains.
+
+#### 3. Configurar Webhook en Twilio
+
+En Twilio Console → Messaging Services → [Tu Servicio]:
+- **Integration → Incoming Messages**
+- Seleccionar: "Send a webhook"
+- **Request URL**: `https://tu-dominio.easypanel.host/twilio/inbound`
+- **Method**: HTTP POST
+- **Format**: application/x-www-form-urlencoded
+
+#### 4. Verificar Deployment
+
+```bash
+# 1. Health check
+curl https://tu-dominio.easypanel.host/health
+# Debe responder: ok
+
+# 2. Verificar dashboard
+# Abrir en navegador: https://tu-dominio.easypanel.host/admin
+
+# 3. Verificar logs en Easypanel
+# Buscar: "Listening on 80" (o el puerto asignado)
+```
+
+### Docker Build Local (Opcional)
+
+```bash
+# Build imagen
+docker build -t wa-test .
+
+# Run con .env
+docker run -p 3000:3000 --env-file .env wa-test
+
+# Run con volumen para DB persistente
+docker run -p 3000:3000 --env-file .env \
+  -v $(pwd)/data:/app/data \
+  wa-test
+```
+
+### Troubleshooting Deployment
+
+**Problema:** "package.json missing" durante build
+- **Causa:** Build context incorrecto
+- **Solución:** Verificar que el Source en Easypanel apunta al repositorio correcto
+
+**Problema:** Base de datos se borra al redesplegar
+- **Causa:** Volumen no configurado
+- **Solución:** Crear volumen `watest-data` montado en `/app/data` y configurar `DB_PATH=/app/data/watest.db`
+
+**Problema:** Webhook no recibe mensajes
+- **Checklist:**
+  1. URL webhook configurada correctamente en Twilio
+  2. HTTPS habilitado (requerido por Twilio)
+  3. Servidor accesible públicamente
+  4. Health check responde correctamente
+
+**Problema:** Error "Docker API version 1.44 required"
+- **Causa:** Docker Engine del VPS desactualizado, buildpacks incompatibles
+- **Solución:** Usar **Dockerfile** en lugar de buildpacks (ya configurado)
+
+## 📚 Documentación Adicional
+
+- **[docs/ProyectoWatest.md](docs/ProyectoWatest.md)**: Documentación histórica completa del proyecto, setup y resolución de problemas
+- **[docs/db-minimal-with-campaigns-v0.md](docs/db-minimal-with-campaigns-v0.md)**: Documentación detallada del esquema de base de datos, queries útiles y ejemplos
+- **[docs/quick-wins-and-roadmap.md](docs/quick-wins-and-roadmap.md)**: Quick wins, roadmap por etapas y checklist de seguridad (próximo)
+
+## 🔐 Seguridad y Buenas Prácticas
+
+### Protección de Credenciales
+- **NUNCA** subir `.env` al repositorio
+- Usar `.gitignore` para excluir archivos sensibles
+- Rotar credenciales periódicamente
+
+### Backup de Base de Datos
+
+```bash
+# Backup manual (local)
+cp db/watest.db db/backups/watest-$(date +%Y%m%d).db
+
+# Backup en VPS (conectar por SSH)
+docker exec -it wa-test-container cp /app/data/watest.db /app/data/backups/watest-$(date +%Y%m%d).db
+```
+
+**Recomendación:** Configurar backups automáticos diarios del volumen `/app/data`
+
+### Rate Limiting (Pendiente)
+Actualmente NO implementado. Considerar agregar rate limiting para:
+- Webhook inbound (evitar spam)
+- Dashboard admin (evitar ataques de fuerza bruta)
+
+### Validación de Webhooks de Twilio (Pendiente)
+Validar que los requests a `/twilio/inbound` realmente vienen de Twilio usando Request Validation (X-Twilio-Signature).
+
+## 🤝 Contribuir
+
+1. Fork del repositorio
+2. Crear branch para feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit cambios (`git commit -m 'feat: añadir nueva funcionalidad'`)
+4. Push al branch (`git push origin feature/nueva-funcionalidad`)
+5. Crear Pull Request
+
+## 📄 Licencia
+
+[Especificar licencia del proyecto]
 
 ---
 
-# Bitácora de Despliegue y Estado del Proyecto (Contexto Histórico)
+# Bitácora Histórica y Contexto Técnico
+
+> *Sección de referencia histórica sobre el proceso de desarrollo y resolución de problemas. Ver [docs/ProyectoWatest.md](docs/ProyectoWatest.md) para contexto completo.*
+
+## Guía base (hasta aquí): Twilio + WhatsApp (Meta) + Webhook en VPS (Easypanel)
 
 > *Esta sección contiene la documentación original del proceso de configuración, despliegue y resolución de problemas. Se mantiene como referencia histórica y técnica.*
 

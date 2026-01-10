@@ -100,6 +100,12 @@ export function renderLayout({ title, content, active }) {
       font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.2px;
+      transition: all 0.2s ease;
+    }
+    .nav-link:hover {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
     }
     .nav-link.active {
       background: var(--ink);
@@ -132,6 +138,20 @@ export function renderLayout({ title, content, active }) {
       margin: 0;
       font-size: 20px;
     }
+    .help-text {
+      background: #f8f5f1;
+      border-left: 3px solid var(--accent-2);
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .help-text strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
     .cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -142,6 +162,11 @@ export function renderLayout({ title, content, active }) {
       border-radius: 14px;
       border: 1px solid var(--line);
       background: #fff9f2;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(31, 29, 27, 0.12);
     }
     .card h2 {
       margin: 0;
@@ -171,6 +196,60 @@ export function renderLayout({ title, content, active }) {
       text-transform: uppercase;
       letter-spacing: 0.8px;
       color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+    }
+    th.sortable:hover {
+      color: var(--accent);
+    }
+    th .sort-icon {
+      display: inline-block;
+      margin-left: 4px;
+      opacity: 0.3;
+      font-size: 10px;
+    }
+    th.sorted .sort-icon {
+      opacity: 1;
+      color: var(--accent);
+    }
+    .row-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .action-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      background: var(--bg-accent);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .action-btn:hover {
+      background: var(--accent-2);
+      color: #fff;
+      border-color: var(--accent-2);
+    }
+    .search-box {
+      position: relative;
+      display: inline-block;
+    }
+    .search-box input {
+      padding-left: 32px;
+    }
+    .search-box::before {
+      content: "🔍";
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px;
+      opacity: 0.5;
     }
     .muted { color: var(--muted); }
     .badge {
@@ -201,6 +280,11 @@ export function renderLayout({ title, content, active }) {
       border: 1px solid var(--line);
       font-size: 13px;
       min-width: 160px;
+      transition: border-color 0.2s ease;
+    }
+    input[type="text"]:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-2);
     }
     button {
       padding: 8px 12px;
@@ -212,10 +296,16 @@ export function renderLayout({ title, content, active }) {
       font-weight: 700;
       letter-spacing: 0.4px;
       cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    button:hover {
+      background: var(--accent-2);
+      border-color: var(--accent-2);
     }
     .pager {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       margin-top: 12px;
       font-size: 12px;
     }
@@ -223,17 +313,55 @@ export function renderLayout({ title, content, active }) {
       color: var(--accent);
       text-decoration: none;
       font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+    .pager a:hover {
+      background: var(--bg-accent);
+    }
+    .pager-info {
+      color: var(--muted);
+      font-size: 12px;
     }
     .empty {
-      padding: 20px;
+      padding: 32px 20px;
       border-radius: 12px;
       background: #f8f5f1;
       border: 1px dashed var(--line);
       color: var(--muted);
+      text-align: center;
+    }
+    .empty-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .empty-cta {
+      margin-top: 12px;
+      display: inline-block;
+      padding: 8px 16px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+      transition: all 0.2s ease;
+    }
+    .empty-cta:hover {
+      background: var(--accent-2);
+    }
+    .hidden {
+      display: none;
     }
     @media (max-width: 700px) {
       header, nav, main { padding-left: 18px; padding-right: 18px; }
       .panel { padding: 16px; }
+      .cards { grid-template-columns: 1fr; }
+      table { font-size: 12px; }
+      th, td { padding: 8px 6px; }
     }
   </style>
 </head>
@@ -250,12 +378,33 @@ export function renderLayout({ title, content, active }) {
 </html>`;
 }
 
-export function renderTable({ columns, rows }) {
+export function renderHelpText(text) {
+    return `<div class="help-text">${text}</div>`;
+}
+
+export function renderEmptyState({ title, message, ctaText, ctaLink }) {
+    const cta = ctaText && ctaLink
+        ? `<a href="${ctaLink}" class="empty-cta">${escapeHtml(ctaText)}</a>`
+        : '';
+    return `<div class="empty">
+      <div class="empty-title">${escapeHtml(title)}</div>
+      <div>${escapeHtml(message)}</div>
+      ${cta}
+    </div>`;
+}
+
+export function renderTable({ columns, rows, searchable = false, sortable = false, tableId = 'data-table' }) {
     if (!rows.length) {
         return '<div class="empty">Sin datos para mostrar.</div>';
     }
-    const header = columns.map((col) => `<th>${escapeHtml(col.label)}</th>`).join('');
-    const body = rows.map((row) => {
+
+    const header = columns.map((col) => {
+        const sortClass = sortable ? 'sortable' : '';
+        const sortIcon = sortable ? '<span class="sort-icon">↕</span>' : '';
+        return `<th class="${sortClass}" data-key="${col.key}">${escapeHtml(col.label)}${sortIcon}</th>`;
+    }).join('');
+
+    const body = rows.map((row, idx) => {
         const cells = columns.map((col) => {
             if (col.render) {
                 return `<td>${col.render(row)}</td>`;
@@ -263,13 +412,67 @@ export function renderTable({ columns, rows }) {
             const value = row[col.key];
             return `<td>${escapeHtml(value ?? '')}</td>`;
         }).join('');
-        return `<tr>${cells}</tr>`;
+        return `<tr data-row-index="${idx}">${cells}</tr>`;
     }).join('');
 
-    return `<table>
+    const searchBox = searchable
+        ? `<div class="search-box" style="margin-bottom: 12px;">
+             <input type="text" id="${tableId}-search" placeholder="Buscar en tabla..." />
+           </div>`
+        : '';
+
+    const script = (searchable || sortable) ? `
+      <script>
+      (function() {
+        const table = document.getElementById('${tableId}');
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        ${searchable ? `
+        const searchInput = document.getElementById('${tableId}-search');
+        searchInput.addEventListener('input', function(e) {
+          const query = e.target.value.toLowerCase();
+          rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.classList.toggle('hidden', !text.includes(query));
+          });
+        });
+        ` : ''}
+
+        ${sortable ? `
+        let currentSort = { key: null, asc: true };
+        const headers = table.querySelectorAll('th.sortable');
+
+        headers.forEach(th => {
+          th.addEventListener('click', function() {
+            const key = this.dataset.key;
+            const asc = currentSort.key === key ? !currentSort.asc : true;
+            currentSort = { key, asc };
+
+            headers.forEach(h => h.classList.remove('sorted'));
+            this.classList.add('sorted');
+            this.querySelector('.sort-icon').textContent = asc ? '↑' : '↓';
+
+            const colIndex = Array.from(this.parentNode.children).indexOf(this);
+            const sorted = rows.sort((a, b) => {
+              const aVal = a.children[colIndex].textContent.trim();
+              const bVal = b.children[colIndex].textContent.trim();
+              const result = aVal.localeCompare(bVal, 'es', { numeric: true, sensitivity: 'base' });
+              return asc ? result : -result;
+            });
+
+            sorted.forEach(row => tbody.appendChild(row));
+          });
+        });
+        ` : ''}
+      })();
+      </script>
+    ` : '';
+
+    return `${searchBox}<table id="${tableId}">
       <thead><tr>${header}</tr></thead>
       <tbody>${body}</tbody>
-    </table>`;
+    </table>${script}`;
 }
 
 export function renderPager({ basePath, query, offset, limit, hasNext }) {
@@ -293,4 +496,9 @@ export function buildQuery(params) {
         search.set(key, String(value));
     });
     return search.toString();
+}
+
+export function renderCopyButton(text, label = 'Copiar') {
+    const encoded = escapeHtml(text).replace(/'/g, '&apos;');
+    return `<button type="button" class="action-btn" onclick="navigator.clipboard.writeText('${encoded}').then(() => { this.textContent='✓ Copiado'; setTimeout(() => this.textContent='${label}', 1500); })">${label}</button>`;
 }
