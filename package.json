@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "better-sqlite3": "^9.4.3",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
     "twilio": "^5.11.2"
