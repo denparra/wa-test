@@ -56,20 +56,19 @@ CREATE TABLE IF NOT EXISTS campaigns (
     name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft', -- draft|scheduled|sending|paused|completed|cancelled|failed
     message_template TEXT, -- Plantilla del mensaje
-    type TEXT NOT NULL DEFAULT 'twilio_template', -- twilio_template|custom_message
-    category TEXT, -- LEGACY: kept for backward compatibility
-    scheduled_at TEXT, -- ISO timestamp para envío programado
-    content_sid TEXT, -- Twilio Content Template SID (HX...)
-    filters TEXT, -- JSON con filtros: {"make":"Toyota","year_min":2015}
     started_at TEXT,
     completed_at TEXT,
-    paused_at TEXT,
-    failed_at TEXT,
-    error_message TEXT, -- Error a nivel campaña
     total_recipients INTEGER DEFAULT 0,
     sent_count INTEGER DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    type TEXT NOT NULL DEFAULT 'twilio_template', -- twilio_template|custom_message
+    scheduled_at TEXT, -- ISO timestamp para envio programado
+    updated_at TEXT NOT NULL DEFAULT '2026-01-11 00:01:16',
+    content_sid TEXT, -- Twilio Content Template SID (HX...)
+    filters TEXT, -- JSON con filtros: {"make":"Toyota","year_min":2015}
+    paused_at TEXT,
+    failed_at TEXT,
+    error_message TEXT -- Error a nivel campana
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
@@ -144,3 +143,4 @@ FOR EACH ROW
 BEGIN
     UPDATE campaigns SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
+

@@ -64,7 +64,7 @@ wa-test/
 │   └── schema.sql         # Esquema completo de base de datos
 └── docs/
     ├── ProyectoWatest.md  # Documentación histórica del proyecto
-    └── db-minimal-with-campaigns-v0.md  # Documentación del esquema DB
+    └── db.md  # Documentación del esquema DB
 ```
 
 ## 💻 Instalación
@@ -88,7 +88,7 @@ npm install
 cp .env.example .env  # Si existe, sino crear manualmente
 
 # 4. Inicializar base de datos (automático al ejecutar server.js)
-# La DB se crea en db/watest.db por defecto
+# La DB se crea en data/watest.db por defecto
 
 # 5. Ejecutar servidor
 npm start  # Puerto 3000 por defecto
@@ -113,7 +113,7 @@ CONTENT_SID=HX...
 PORT=3000  # Puerto local (Easypanel asigna 80 automáticamente)
 
 # Database Path (crítico para VPS/Easypanel)
-DB_PATH=./db/watest.db  # Local
+DB_PATH=./data/watest.db  # Local
 # DB_PATH=/app/data/watest.db  # En VPS con volumen montado
 
 # Admin Dashboard Authentication (opcional pero recomendado)
@@ -125,9 +125,9 @@ ADMIN_PASS=tu_password_seguro
 
 #### Local (desarrollo)
 ```env
-DB_PATH=./db/watest.db
+DB_PATH=./data/watest.db
 ```
-La base de datos se crea automáticamente en `db/watest.db` la primera vez que se ejecuta `server.js`.
+La base de datos se crea automáticamente en `data/watest.db` la primera vez que se ejecuta `server.js`.
 
 #### VPS/Easypanel (producción)
 ```env
@@ -212,7 +212,7 @@ El sistema usa SQLite con **6 tablas principales**:
 
 **Ver esquema completo:** `db/schema.sql`
 
-**Documentación detallada:** `docs/db-minimal-with-campaigns-v0.md`
+**Documentación detallada:** `docs/db.md`
 
 ### Estados de Contactos
 
@@ -374,7 +374,7 @@ docker run -p 3000:3000 --env-file .env \
 ## 📚 Documentación Adicional
 
 - **[docs/ProyectoWatest.md](docs/ProyectoWatest.md)**: Documentación histórica completa del proyecto, setup y resolución de problemas
-- **[docs/db-minimal-with-campaigns-v0.md](docs/db-minimal-with-campaigns-v0.md)**: Documentación detallada del esquema de base de datos, queries útiles y ejemplos
+- **[docs/db.md](docs/db.md)**: Documentación detallada del esquema de base de datos, queries útiles y ejemplos
 - **[docs/quick-wins-and-roadmap.md](docs/quick-wins-and-roadmap.md)**: Quick wins, roadmap por etapas y checklist de seguridad (próximo)
 
 ## 🔐 Seguridad y Buenas Prácticas
@@ -388,7 +388,7 @@ docker run -p 3000:3000 --env-file .env \
 
 ```bash
 # Backup manual (local)
-cp db/watest.db db/backups/watest-$(date +%Y%m%d).db
+cp data/watest.db data/backups/watest-$(date +%Y%m%d).db
 
 # Backup en VPS (conectar por SSH)
 docker exec -it wa-test-container cp /app/data/watest.db /app/data/backups/watest-$(date +%Y%m%d).db
@@ -747,3 +747,4 @@ Se debe aterrizar según lo que tienes aprobado en Meta/Twilio.
 ---
 
 **Fin de guía (estado actual):** inbound + reply automático funcionando en producción (VPS).
+
