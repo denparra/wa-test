@@ -1,9 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
+import twilio from 'twilio';
 import {
     createCampaign,
     getAdminStats,
     getCampaignById,
+    incrementCampaignSentCount,
+    isOptedOut,
     insertMessage,
     insertOptOut,
     listCampaignRecipients,
@@ -17,9 +20,21 @@ import {
     updateCampaignFull,
     pauseCampaign,
     cancelCampaign,
+    resumeCampaign,
+    deleteCampaign,
+    updateCampaignStatus,
+    setCampaignStatus,
     getCampaignProgress,
     listContactsByFilters,
+    listVehicleContactsByFilters,
+    listContactsForCampaign,
+    listScheduledCampaignsDue,
+    listCampaignsByStatus,
+    listPendingRecipients,
+    updateCampaignRecipientStatus,
+    getContactWithVehicle,
     assignRecipientsToCampaign,
+    listCampaignRecipientsByContacts,
     renderMessageTemplate
 } from './db/index.js';
 import {
@@ -35,8 +50,166 @@ import {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+    ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+    : null;
+const SCHEDULER_INTERVAL_MS = Number(process.env.CAMPAIGN_SCHEDULER_INTERVAL_MS || 30000);
+const SCHEDULER_BATCH_SIZE = Number(process.env.CAMPAIGN_SEND_BATCH_SIZE || 20);
+const schedulerState = { running: false };
 
-app.use(express.urlencoded({ extended: false })); // Twilio envía form-urlencoded
+function normalizeScheduledAt(value) {
+    if (!value) {
+        return null;
+    }
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+        return null;
+    }
+    if (trimmed.includes('T')) {
+        const normalized = trimmed.replace('T', ' ');
+        return normalized.length === 16 ? `${normalized}:00` : normalized;
+    }
+    return trimmed;
+}
+
+function toTwilioRecipient(phone) {
+    if (!phone) {
+        return '';
+    }
+    return phone.toLowerCase().startsWith('whatsapp:') ? phone : `whatsapp:${phone}`;
+}
+
+function buildTemplateVariables(contact = {}) {
+    return {
+        name: contact.name || '',
+        make: contact.make || '',
+        model: contact.model || '',
+        year: contact.year || ''
+    };
+}
+
+async function processCampaignQueue() {
+    if (schedulerState.running) {
+        return;
+    }
+    schedulerState.running = true;
+    try {
+        if (!twilioClient || !process.env.MESSAGING_SERVICE_SID) {
+            return;
+        }
+
+        const dueCampaigns = listScheduledCampaignsDue(5);
+        for (const campaign of dueCampaigns) {
+            setCampaignStatus(campaign.id, 'sending');
+        }
+
+        const sendingCampaigns = listCampaignsByStatus({ status: 'sending', limit: 5 });
+        for (const campaign of sendingCampaigns) {
+            await processCampaignSendBatch(campaign);
+        }
+    } catch (error) {
+        console.error('Campaign scheduler error:', error?.message || error);
+    } finally {
+        schedulerState.running = false;
+    }
+}
+
+async function processCampaignSendBatch(campaign) {
+    const recipients = listPendingRecipients({ campaignId: campaign.id, limit: SCHEDULER_BATCH_SIZE });
+    if (!recipients.length) {
+        updateCampaignStatus(campaign.id, 'completed');
+        return;
+    }
+
+    for (const recipient of recipients) {
+        const contact = getContactWithVehicle(recipient.contact_id);
+        const rawPhone = recipient.phone || contact?.phone || '';
+        const phone = normalizePhone(rawPhone);
+
+        if (!phone) {
+            updateCampaignRecipientStatus({
+                id: recipient.id,
+                status: 'failed',
+                errorMessage: 'invalid_phone'
+            });
+            continue;
+        }
+
+        if (isOptedOut(phone)) {
+            updateContactStatus(phone, 'opted_out');
+            updateCampaignRecipientStatus({
+                id: recipient.id,
+                status: 'skipped_optout',
+                errorMessage: 'opted_out'
+            });
+            continue;
+        }
+
+        const variables = buildTemplateVariables(contact || {});
+        const rendered = renderMessageTemplate(campaign.message_template || '', variables).trim();
+        const contentSid = campaign.content_sid || process.env.CONTENT_SID || null;
+
+        if (!rendered && !contentSid) {
+            updateCampaignRecipientStatus({
+                id: recipient.id,
+                status: 'failed',
+                errorMessage: 'missing_template'
+            });
+            continue;
+        }
+
+        try {
+            const payload = {
+                to: toTwilioRecipient(phone),
+                messagingServiceSid: process.env.MESSAGING_SERVICE_SID
+            };
+
+            if (rendered) {
+                payload.body = rendered;
+            } else {
+                payload.contentSid = contentSid;
+                if (variables.name) {
+                    payload.contentVariables = JSON.stringify({ "1": variables.name });
+                }
+            }
+
+            const msg = await twilioClient.messages.create(payload);
+            const rawStatus = msg.status || 'sent';
+            const status = ['queued', 'accepted', 'sending'].includes(rawStatus) ? 'sent' : rawStatus;
+            const sentAt = new Date().toISOString();
+
+            updateCampaignRecipientStatus({
+                id: recipient.id,
+                status,
+                messageSid: msg.sid,
+                sentAt
+            });
+            incrementCampaignSentCount(campaign.id);
+
+            insertMessage({
+                contactId: recipient.contact_id || null,
+                campaignId: campaign.id,
+                direction: 'outbound',
+                phone,
+                body: rendered || null,
+                messageSid: msg.sid,
+                status
+            });
+        } catch (error) {
+            updateCampaignRecipientStatus({
+                id: recipient.id,
+                status: 'failed',
+                errorMessage: error?.message || 'send_failed'
+            });
+        }
+    }
+}
+
+
+app.use(express.urlencoded({ extended: false })); // Twilio envia form-urlencoded
+
+setInterval(processCampaignQueue, SCHEDULER_INTERVAL_MS);
+processCampaignQueue();
 
 app.use('/admin', adminAuth);
 
@@ -215,6 +388,8 @@ app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
 app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
     try {
         const { name, messageTemplate, type, scheduledAt, contentSid, filters } = req.body;
+        const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
+        const status = normalizedScheduledAt ? 'scheduled' : 'draft';
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required' });
@@ -224,10 +399,10 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
             name,
             messageTemplate,
             type,
-            scheduledAt,
+            scheduledAt: normalizedScheduledAt,
             contentSid,
             filters,
-            status: 'draft' // Always start as draft
+            status
         });
 
         res.status(201).json(campaign);
@@ -240,11 +415,44 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
 app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
     try {
         const id = Number(req.params.id);
-        const updates = req.body;
-
-        const campaign = updateCampaignFull(id, updates);
-        if (!campaign) {
+        const updates = req.body || {};
+        const current = getCampaignById(id);
+        if (!current) {
             return res.status(404).json({ error: 'Campaign not found' });
+        }
+
+        const hasScheduledAt = Object.prototype.hasOwnProperty.call(updates, 'scheduledAt')
+            || Object.prototype.hasOwnProperty.call(updates, 'scheduled_at');
+        const normalizedScheduledAt = hasScheduledAt
+            ? normalizeScheduledAt(updates.scheduledAt || updates.scheduled_at)
+            : current.scheduled_at;
+
+        const payload = {
+            name: updates.name ?? current.name,
+            messageTemplate: updates.messageTemplate ?? current.message_template,
+            type: updates.type ?? current.type,
+            scheduledAt: normalizedScheduledAt,
+            contentSid: updates.contentSid ?? current.content_sid,
+            filters: updates.filters ?? current.filters
+        };
+
+        let campaign = updateCampaignFull(id, payload);
+
+        if (hasScheduledAt && normalizedScheduledAt && current.status === 'draft') {
+            campaign = setCampaignStatus(id, 'scheduled') || campaign;
+        }
+        if (hasScheduledAt && !normalizedScheduledAt && current.status === 'scheduled') {
+            campaign = setCampaignStatus(id, 'draft') || campaign;
+        }
+
+        if (updates.status) {
+            if (updates.status === 'sending') {
+                campaign = setCampaignStatus(id, 'sending') || campaign;
+            } else if (updates.status === 'scheduled') {
+                campaign = setCampaignStatus(id, 'scheduled') || campaign;
+            } else {
+                campaign = updateCampaignStatus(id, updates.status) || campaign;
+            }
         }
 
         res.json(campaign);
@@ -283,6 +491,51 @@ app.post('/admin/api/campaigns/:id/cancel', adminAuth, (req, res) => {
     }
 });
 
+app.post('/admin/api/campaigns/:id/start', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const current = getCampaignById(id);
+        if (!current || !['draft', 'scheduled', 'paused'].includes(current.status)) {
+            return res.status(400).json({ error: 'Campaign not found or cannot be started' });
+        }
+        const campaign = setCampaignStatus(id, 'sending');
+        processCampaignQueue();
+        res.json(campaign);
+    } catch (error) {
+        console.error('Start campaign error:', error);
+        res.status(500).json({ error: 'Failed to start campaign' });
+    }
+});
+
+app.post('/admin/api/campaigns/:id/resume', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const campaign = resumeCampaign(id);
+        if (!campaign) {
+            return res.status(400).json({ error: 'Campaign not found or cannot be resumed' });
+        }
+        processCampaignQueue();
+        res.json(campaign);
+    } catch (error) {
+        console.error('Resume campaign error:', error);
+        res.status(500).json({ error: 'Failed to resume campaign' });
+    }
+});
+
+app.delete('/admin/api/campaigns/:id', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const deleted = deleteCampaign(id);
+        if (!deleted) {
+            return res.status(404).json({ error: 'Campaign not found' });
+        }
+        res.status(204).send();
+    } catch (error) {
+        console.error('Delete campaign error:', error);
+        res.status(500).json({ error: 'Failed to delete campaign' });
+    }
+});
+
 app.get('/admin/api/campaigns/:id/progress', adminAuth, (req, res) => {
     try {
         const id = Number(req.params.id);
@@ -297,19 +550,171 @@ app.get('/admin/api/campaigns/:id/progress', adminAuth, (req, res) => {
     }
 });
 
+app.get('/admin/api/contacts', adminAuth, (req, res) => {
+    try {
+        const query = String(req.query.q || '').trim();
+        const limitRaw = Number(req.query.limit || 200);
+        const limit = Math.max(1, Math.min(limitRaw || 200, 1000));
+        const contacts = listContactsForCampaign({ query, limit });
+        res.json({ contacts });
+    } catch (error) {
+        console.error('List contacts error:', error);
+        res.status(500).json({ error: 'Failed to list contacts' });
+    }
+});
+
 app.post('/admin/api/campaigns/:id/assign-recipients', adminAuth, express.json(), (req, res) => {
     try {
         const id = Number(req.params.id);
-        const { filters } = req.body; // Expect JSON filters or use saved campaign filters if body empty? 
-        // For now, let's assume we fetch candidates based on filters valid at this moment
+        const { source = 'vehicles', filters = {}, query = '' } = req.body || {};
+        const search = query || filters.query || '';
 
-        const candidates = listContactsByFilters({ ...filters, limit: 10000 });
+        const candidates = source === 'contacts'
+            ? listContactsForCampaign({ query: search, limit: 10000 })
+            : listContactsByFilters({ ...filters, limit: 10000 });
         const count = assignRecipientsToCampaign(id, candidates.map(c => c.id));
 
         res.json({ assigned: count, totalRecipients: count });
     } catch (error) {
         console.error('Assign recipients error:', error);
         res.status(500).json({ error: 'Failed to assign recipients' });
+    }
+});
+
+app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async (req, res) => {
+    try {
+        if (!twilioClient || !process.env.MESSAGING_SERVICE_SID) {
+            return res.status(500).json({ error: 'Twilio not configured' });
+        }
+
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id)) {
+            return res.status(400).json({ error: 'Invalid campaign id' });
+        }
+
+        const campaign = getCampaignById(id);
+        if (!campaign) {
+            return res.status(404).json({ error: 'Campaign not found' });
+        }
+
+        const contactIdsRaw = Array.isArray(req.body?.contactIds) ? req.body.contactIds : [];
+        const contactIds = [...new Set(contactIdsRaw.map(Number).filter(Number.isInteger))];
+        if (!contactIds.length) {
+            return res.status(400).json({ error: 'No contacts selected' });
+        }
+
+        const hasBody = String(campaign.message_template || '').trim();
+        const hasContentSid = String(campaign.content_sid || process.env.CONTENT_SID || '').trim();
+        if (!hasBody && !hasContentSid) {
+            return res.status(400).json({ error: 'Missing template or content SID' });
+        }
+
+        assignRecipientsToCampaign(id, contactIds);
+        const recipients = listCampaignRecipientsByContacts(id, contactIds);
+        if (!recipients.length) {
+            return res.status(400).json({ error: 'No recipients available' });
+        }
+
+        const results = { total: recipients.length, sent: 0, skipped: 0, failed: 0 };
+
+        for (const recipient of recipients) {
+            if (recipient.status && recipient.status !== 'pending') {
+                results.skipped += 1;
+                continue;
+            }
+
+            const contact = getContactWithVehicle(recipient.contact_id);
+            const rawPhone = recipient.phone || contact?.phone || '';
+            const phone = normalizePhone(rawPhone);
+
+            if (!phone) {
+                updateCampaignRecipientStatus({
+                    id: recipient.id,
+                    status: 'failed',
+                    errorMessage: 'invalid_phone'
+                });
+                results.failed += 1;
+                continue;
+            }
+
+            if (isOptedOut(phone)) {
+                updateContactStatus(phone, 'opted_out');
+                updateCampaignRecipientStatus({
+                    id: recipient.id,
+                    status: 'skipped_optout',
+                    errorMessage: 'opted_out'
+                });
+                results.skipped += 1;
+                continue;
+            }
+
+            const variables = buildTemplateVariables(contact || {});
+            const rendered = renderMessageTemplate(campaign.message_template || '', variables).trim();
+            const contentSid = campaign.content_sid || process.env.CONTENT_SID || null;
+
+            if (!rendered && !contentSid) {
+                updateCampaignRecipientStatus({
+                    id: recipient.id,
+                    status: 'failed',
+                    errorMessage: 'missing_template'
+                });
+                results.failed += 1;
+                continue;
+            }
+
+            try {
+                const payload = {
+                    to: toTwilioRecipient(phone),
+                    messagingServiceSid: process.env.MESSAGING_SERVICE_SID
+                };
+
+                if (rendered) {
+                    payload.body = rendered;
+                } else {
+                    payload.contentSid = contentSid;
+                    if (variables.name) {
+                        payload.contentVariables = JSON.stringify({ "1": variables.name });
+                    }
+                }
+
+                const msg = await twilioClient.messages.create(payload);
+                const rawStatus = msg.status || 'sent';
+                const status = ['queued', 'accepted', 'sending'].includes(rawStatus) ? 'sent' : rawStatus;
+                const sentAt = new Date().toISOString();
+
+                updateCampaignRecipientStatus({
+                    id: recipient.id,
+                    status,
+                    messageSid: msg.sid,
+                    sentAt
+                });
+                incrementCampaignSentCount(campaign.id);
+
+                insertMessage({
+                    contactId: recipient.contact_id || null,
+                    campaignId: campaign.id,
+                    direction: 'outbound',
+                    phone,
+                    body: rendered || null,
+                    messageSid: msg.sid,
+                    status
+                });
+
+                results.sent += 1;
+            } catch (error) {
+                updateCampaignRecipientStatus({
+                    id: recipient.id,
+                    status: 'failed',
+                    errorMessage: error?.message || 'send_failed'
+                });
+                results.failed += 1;
+            }
+        }
+
+        res.json(results);
+    } catch (error) {
+        console.error('Test send error:', error);
+        res.status(500).json({ error: 'Failed to send test messages' });
     }
 });
 
@@ -321,6 +726,21 @@ app.post('/admin/api/campaigns/preview', adminAuth, express.json(), (req, res) =
         res.json({ preview: rendered });
     } catch (error) {
         res.status(500).json({ error: 'Preview failed' });
+    }
+});
+
+app.post('/admin/api/campaigns/preview-samples', adminAuth, express.json(), (req, res) => {
+    try {
+        const { source = 'vehicles', filters = {}, limit = 3 } = req.body || {};
+        const safeLimit = Math.max(1, Math.min(Number(limit) || 3, 5));
+        const samples = source === 'contacts'
+            ? listContactsForCampaign({ query: filters.query || '', limit: safeLimit })
+            : listVehicleContactsByFilters({ ...filters, limit: safeLimit });
+
+        res.json({ samples });
+    } catch (error) {
+        console.error('Preview samples error:', error);
+        res.status(500).json({ error: 'Preview samples failed' });
     }
 });
 
@@ -476,3 +896,5 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => console.log('Listening on', PORT));
+
+

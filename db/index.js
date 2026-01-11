@@ -136,12 +136,16 @@ const statements = {
         VALUES (?, ?, ?, ?, ?, ?)
     `),
     getCampaignById: db.prepare(`
-        SELECT id, name, message_template, status, total_recipients, sent_count, created_at
+        SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
+               type, scheduled_at, content_sid, filters, started_at, completed_at, paused_at,
+               failed_at, error_message, updated_at
         FROM campaigns
         WHERE id = ?
     `),
     getCampaignByName: db.prepare(`
-        SELECT id, name, message_template, status, total_recipients, sent_count, created_at
+        SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
+               type, scheduled_at, content_sid, filters, started_at, completed_at, paused_at,
+               failed_at, error_message, updated_at
         FROM campaigns
         WHERE name = ?
     `),
@@ -182,15 +186,30 @@ const statements = {
         SET name = ?, message_template = ?, type = ?, scheduled_at = ?, content_sid = ?, filters = ?
         WHERE id = ?
     `),
+    setCampaignStatus: db.prepare(`
+        UPDATE campaigns
+        SET status = ?,
+            started_at = CASE WHEN ? = 'sending' THEN datetime('now') ELSE started_at END
+        WHERE id = ?
+    `),
     pauseCampaign: db.prepare(`
         UPDATE campaigns
         SET status = 'paused', paused_at = datetime('now')
         WHERE id = ? AND status = 'sending'
     `),
+    resumeCampaign: db.prepare(`
+        UPDATE campaigns
+        SET status = 'sending'
+        WHERE id = ? AND status = 'paused'
+    `),
     cancelCampaign: db.prepare(`
         UPDATE campaigns
         SET status = 'cancelled', completed_at = datetime('now')
         WHERE id = ? AND status IN ('draft', 'scheduled', 'paused')
+    `),
+    deleteCampaign: db.prepare(`
+        DELETE FROM campaigns
+        WHERE id = ?
     `),
     getCampaignProgress: db.prepare(`
         SELECT
@@ -199,6 +218,64 @@ const statements = {
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'delivered') AS delivered,
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'failed') AS failed,
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status LIKE 'skipped%') AS skipped
+    `),
+    listScheduledCampaignsDue: db.prepare(`
+        SELECT id, name, message_template, status, type, scheduled_at, content_sid, filters
+        FROM campaigns
+        WHERE status = 'scheduled'
+          AND scheduled_at IS NOT NULL
+          AND datetime(scheduled_at) <= datetime('now')
+        ORDER BY scheduled_at ASC
+        LIMIT ?
+    `),
+    listCampaignsByStatus: db.prepare(`
+        SELECT id, name, message_template, status, type, scheduled_at, content_sid, filters
+        FROM campaigns
+        WHERE status = ?
+        ORDER BY created_at ASC
+        LIMIT ?
+    `),
+    listPendingRecipients: db.prepare(`
+        SELECT id, contact_id, phone
+        FROM campaign_recipients
+        WHERE campaign_id = ? AND status = 'pending'
+        ORDER BY id ASC
+        LIMIT ?
+    `),
+    updateCampaignRecipientStatus: db.prepare(`
+        UPDATE campaign_recipients
+        SET status = ?, message_sid = ?, sent_at = ?, error_message = ?
+        WHERE id = ?
+    `),
+    getContactWithVehicle: db.prepare(`
+        SELECT c.id, c.phone, c.name, v.make, v.model, v.year
+        FROM contacts c
+        LEFT JOIN vehicles v ON v.contact_id = c.id
+        WHERE c.id = ?
+        ORDER BY v.created_at DESC
+        LIMIT 1
+    `),
+    listContactsForCampaign: db.prepare(`
+        SELECT c.id, c.phone, c.name, c.status
+        FROM contacts c
+        WHERE c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs)
+          AND (? IS NULL OR c.phone LIKE ? OR c.name LIKE ?)
+        ORDER BY c.updated_at DESC
+        LIMIT ?
+    `),
+    listVehicleContactsByFilters: db.prepare(`
+        SELECT DISTINCT c.id, c.phone, c.name, v.make, v.model, v.year
+        FROM contacts c
+        INNER JOIN vehicles v ON v.contact_id = c.id
+        WHERE c.status = 'active'
+            AND (? IS NULL OR v.make = ?)
+            AND (? IS NULL OR v.model = ?)
+            AND (? IS NULL OR v.year >= ?)
+            AND (? IS NULL OR v.year <= ?)
+            AND c.phone NOT IN (SELECT phone FROM opt_outs)
+        ORDER BY c.updated_at DESC
+        LIMIT ?
     `)
 };
 
@@ -390,7 +467,7 @@ export function listMessages({ limit = 50, offset = 0, direction = '' }) {
 
 export function listCampaigns({ limit = 50, offset = 0 }) {
     return db.prepare(`
-        SELECT c.id, c.name, c.status, c.message_template, c.created_at,
+        SELECT c.id, c.name, c.status, c.message_template, c.created_at, c.type, c.scheduled_at,
                c.total_recipients,
                c.sent_count,
                (SELECT COUNT(*) FROM campaign_recipients cr WHERE cr.campaign_id = c.id AND cr.status = 'failed') AS recipients_failed,
@@ -443,10 +520,45 @@ export function cancelCampaign(id) {
     return info.changes > 0 ? getCampaignById(id) : null;
 }
 
+export function resumeCampaign(id) {
+    const info = statements.resumeCampaign.run(id);
+    return info.changes > 0 ? getCampaignById(id) : null;
+}
+
+export function setCampaignStatus(id, status) {
+    const info = statements.setCampaignStatus.run(status, status, id);
+    return info.changes > 0 ? getCampaignById(id) : null;
+}
+
+export function deleteCampaign(id) {
+    const info = statements.deleteCampaign.run(id);
+    return info.changes > 0;
+}
+
 export function getCampaignProgress(campaignId) {
     return statements.getCampaignProgress.get(
         campaignId, campaignId, campaignId, campaignId, campaignId
     );
+}
+
+export function listScheduledCampaignsDue(limit = 10) {
+    return statements.listScheduledCampaignsDue.all(limit);
+}
+
+export function listCampaignsByStatus({ status, limit = 10 }) {
+    return statements.listCampaignsByStatus.all(status, limit);
+}
+
+export function listPendingRecipients({ campaignId, limit = 50 }) {
+    return statements.listPendingRecipients.all(campaignId, limit);
+}
+
+export function updateCampaignRecipientStatus({ id, status, messageSid = null, sentAt = null, errorMessage = null }) {
+    statements.updateCampaignRecipientStatus.run(status, messageSid, sentAt, errorMessage, id);
+}
+
+export function getContactWithVehicle(contactId) {
+    return statements.getContactWithVehicle.get(contactId) || null;
 }
 
 export function listContactsByFilters({ make = null, model = null, yearMin = null, yearMax = null, limit = 1000 }) {
@@ -469,6 +581,36 @@ export function listContactsByFilters({ make = null, model = null, yearMin = nul
         yearMax, yearMax,
         limit
     );
+}
+
+export function listVehicleContactsByFilters({ make = null, model = null, yearMin = null, yearMax = null, limit = 1000 }) {
+    return statements.listVehicleContactsByFilters.all(
+        make, make,
+        model, model,
+        yearMin, yearMin,
+        yearMax, yearMax,
+        limit
+    );
+}
+
+export function listContactsForCampaign({ query = '', limit = 1000 }) {
+    const like = query ? `%${query}%` : null;
+    return statements.listContactsForCampaign.all(like, like, like, limit);
+}
+
+export function listCampaignRecipientsByContacts(campaignId, contactIds = []) {
+    const ids = Array.isArray(contactIds) ? contactIds.filter(Boolean) : [];
+    if (!ids.length) {
+        return [];
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const sql = `
+        SELECT id, contact_id, phone, status
+        FROM campaign_recipients
+        WHERE campaign_id = ?
+          AND contact_id IN (${placeholders})
+    `;
+    return db.prepare(sql).all(campaignId, ...ids);
 }
 
 export function assignRecipientsToCampaign(campaignId, contactIds) {

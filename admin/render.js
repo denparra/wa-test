@@ -274,7 +274,7 @@ export function renderLayout({ title, content, active }) {
       align-items: center;
       flex-wrap: wrap;
     }
-    input[type="text"], select {
+    input[type="text"], input[type="number"], input[type="datetime-local"], select {
       padding: 8px 10px;
       border-radius: 10px;
       border: 1px solid var(--line);
@@ -282,7 +282,7 @@ export function renderLayout({ title, content, active }) {
       min-width: 160px;
       transition: border-color 0.2s ease;
     }
-    input[type="text"]:focus, select:focus {
+    input[type="text"]:focus, input[type="number"]:focus, input[type="datetime-local"]:focus, select:focus {
       outline: none;
       border-color: var(--accent-2);
     }
