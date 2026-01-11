@@ -45,17 +45,18 @@ if (tableInfo.length > 0 && !hasPhone && hasPhoneE164) {
     `);
 }
 
-// Read and execute schema
-const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-db.exec(schemaSql);
-
 // Phase 2.1 Migration: Add new columns to campaigns table if they don't exist
-const campaignsInfo = db.prepare("PRAGMA table_info(campaigns)").all();
-const hasType = campaignsInfo.some(col => col.name === 'type');
-const hasScheduledAt = campaignsInfo.some(col => col.name === 'scheduled_at');
-const hasUpdatedAt = campaignsInfo.some(col => col.name === 'updated_at');
+// IMPORTANT: This must run BEFORE schema.sql is executed to prevent CREATE INDEX errors
+// if the columns are missing in the existing table.
 
-if (campaignsInfo.length > 0) {
+const campaignsTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='campaigns'").get();
+
+if (campaignsTableExists) {
+    const campaignsInfo = db.prepare("PRAGMA table_info(campaigns)").all();
+    const hasType = campaignsInfo.some(col => col.name === 'type');
+    const hasScheduledAt = campaignsInfo.some(col => col.name === 'scheduled_at');
+    const hasUpdatedAt = campaignsInfo.some(col => col.name === 'updated_at');
+
     // Add missing columns (backward compatible - existing data preserved)
     if (!hasType) {
         console.log('Migrating campaigns: adding type column');
@@ -67,7 +68,8 @@ if (campaignsInfo.length > 0) {
     }
     if (!hasUpdatedAt) {
         console.log('Migrating campaigns: adding updated_at column');
-        db.exec(`ALTER TABLE campaigns ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        db.exec(`ALTER TABLE campaigns ADD COLUMN updated_at TEXT NOT NULL DEFAULT '${now}'`);
     }
     // Add other new columns silently (they won't cause errors if already exist in schema.sql)
     const newColumns = [
@@ -84,6 +86,10 @@ if (campaignsInfo.length > 0) {
         }
     }
 }
+
+// Read and execute schema
+const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+db.exec(schemaSql);
 
 const statements = {
     upsertContact: db.prepare(`
