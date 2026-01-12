@@ -3,7 +3,8 @@ const NAV_ITEMS = [
     { key: 'contacts', label: 'Contactos', href: '/admin/contacts' },
     { key: 'messages', label: 'Mensajes', href: '/admin/messages' },
     { key: 'campaigns', label: 'Campanas', href: '/admin/campaigns' },
-    { key: 'opt-outs', label: 'Opt-outs', href: '/admin/opt-outs' }
+    { key: 'opt-outs', label: 'Opt-outs', href: '/admin/opt-outs' },
+    { key: 'import', label: 'Importar', href: '/admin/import' }
 ];
 
 export function escapeHtml(value = '') {

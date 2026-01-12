@@ -12,8 +12,10 @@
   "type": "module",
   "dependencies": {
     "better-sqlite3": "^9.4.3",
+    "csv-parse": "^6.1.0",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
+    "multer": "^2.0.2",
     "twilio": "^5.11.2"
   }
 }

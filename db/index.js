@@ -104,10 +104,24 @@ const statements = {
         FROM contacts
         WHERE phone = ?
     `),
+    getContactById: db.prepare(`
+        SELECT id, phone, name, status, created_at, updated_at
+        FROM contacts
+        WHERE id = ?
+    `),
+    updateContact: db.prepare(`
+        UPDATE contacts
+        SET phone = ?, name = ?, status = ?, updated_at = datetime('now')
+        WHERE id = ?
+    `),
     updateContactStatus: db.prepare(`
         UPDATE contacts
         SET status = ?, updated_at = datetime('now')
         WHERE phone = ?
+    `),
+    deleteContact: db.prepare(`
+        DELETE FROM contacts
+        WHERE id = ?
     `),
     insertOptOut: db.prepare(`
         INSERT OR IGNORE INTO opt_outs (phone, reason)
@@ -298,6 +312,20 @@ export function normalizePhone(value) {
 export function upsertContact(phone, name = null) {
     statements.upsertContact.run(phone, name);
     return statements.getContactByPhone.get(phone) || null;
+}
+
+export function getContactById(id) {
+    return statements.getContactById.get(id) || null;
+}
+
+export function updateContact(id, { phone, name, status }) {
+    const info = statements.updateContact.run(phone, name, status, id);
+    return info.changes > 0 ? getContactById(id) : null;
+}
+
+export function deleteContact(id) {
+    const info = statements.deleteContact.run(id);
+    return info.changes > 0;
 }
 
 export function updateContactStatus(phone, status) {
@@ -650,4 +678,79 @@ export function renderMessageTemplate(template, variables = {}) {
         const value = variables[varName];
         return value !== undefined && value !== null ? String(value) : match;
     });
+}
+
+// ============================================================
+// CSV Import Functions
+// ============================================================
+
+export function bulkImportContactsAndVehicles(records) {
+    const transaction = db.transaction((items) => {
+        const stats = {
+            processed: 0,
+            contactsInserted: 0,
+            contactsUpdated: 0,
+            vehiclesInserted: 0,
+            errors: []
+        };
+
+        const getContactStmt = db.prepare('SELECT id FROM contacts WHERE phone = ?');
+        const insertContactStmt = db.prepare(`
+            INSERT INTO contacts (phone, name, status)
+            VALUES (?, ?, 'active')
+            ON CONFLICT(phone) DO UPDATE SET
+                name = COALESCE(NULLIF(excluded.name, ''), contacts.name),
+                updated_at = datetime('now')
+        `);
+        const insertVehicleStmt = db.prepare(`
+            INSERT INTO vehicles (contact_id, make, model, year, price, link)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const record of items) {
+            stats.processed++;
+            try {
+                // Check if contact exists before insert
+                const existingContact = getContactStmt.get(record.phone);
+                const wasExisting = Boolean(existingContact);
+
+                // Insert/Update contact
+                const contactResult = insertContactStmt.run(record.phone, record.name || null);
+
+                if (!wasExisting && contactResult.changes > 0) {
+                    stats.contactsInserted++;
+                } else if (wasExisting) {
+                    stats.contactsUpdated++;
+                }
+
+                // Get contact ID (either just inserted or existing)
+                const contact = getContactStmt.get(record.phone);
+                if (!contact) {
+                    throw new Error('Failed to retrieve contact after insert');
+                }
+
+                // Insert vehicle
+                insertVehicleStmt.run(
+                    contact.id,
+                    record.make,
+                    record.model,
+                    record.year,
+                    record.price || null,
+                    record.link || null
+                );
+                stats.vehiclesInserted++;
+
+            } catch (error) {
+                stats.errors.push({
+                    row: record.row || stats.processed,
+                    phone: record.phone,
+                    error: error.message || 'Unknown error'
+                });
+            }
+        }
+
+        return stats;
+    });
+
+    return transaction(records);
 }

@@ -4,7 +4,7 @@ import {
   renderBadge,
   renderCopyButton,
   renderEmptyState,
-  renderHelpText, // Quick Win #9
+  renderHelpText,
   renderLayout,
   renderPager,
   renderTable,
@@ -87,7 +87,11 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
         { key: 'status', label: 'Status', render: (row) => renderBadge(row.status, statusTone(row.status)) },
         { key: 'created_at', label: 'Creado', render: (row) => escapeHtml(formatDate(row.created_at)) },
         { key: 'updated_at', label: 'Actualizado', render: (row) => escapeHtml(formatDate(row.updated_at)) },
-        { key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">${renderCopyButton(row.phone, '📋')}</div>` }
+        { key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
+          <a href="/admin/contacts/${row.id}/edit" class="action-btn" title="Editar contacto">✏️</a>
+          <button onclick="deleteContact(${row.id}, '${escapeHtml(row.phone)}')" class="action-btn" title="Eliminar contacto">🗑️</button>
+          ${renderCopyButton(row.phone, '📋')}
+        </div>` }
       ],
       rows: contacts,
       searchable: true,
@@ -100,6 +104,27 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
       ctaText: 'Ver mensajes',
       ctaLink: '/admin/messages'
     });
+
+  const script = `
+    <script>
+      async function deleteContact(id, phone) {
+        if (!confirm('¿Eliminar contacto ' + phone + '?\\n\\nEsto eliminará también todos los vehículos asociados.')) {
+          return;
+        }
+        try {
+          const res = await fetch('/admin/api/contacts/' + id, { method: 'DELETE' });
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            const error = await res.text();
+            alert('Error al eliminar: ' + error);
+          }
+        } catch (error) {
+          alert('Error al eliminar: ' + error.message);
+        }
+      }
+    </script>
+  `;
 
   const content = `<section class="panel">
       <div class="panel-header">
@@ -118,9 +143,82 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
     limit,
     hasNext: contacts.length === limit
   }) : ''}
-    </section>`;
+    </section>${script}`;
 
   return renderLayout({ title: 'Contactos', content, active: 'contacts' });
+}
+
+export function renderContactEditPage({ contact = null, error = null }) {
+  const isNew = !contact;
+  const title = isNew ? 'Nuevo Contacto' : 'Editar Contacto';
+  const action = isNew ? 'Crear' : 'Guardar';
+
+  const helpText = renderHelpText(
+    `<strong>Editar contacto:</strong> Modifica la información del contacto.
+    <strong>Importante:</strong> El teléfono debe estar en formato E.164 (+56...).
+    Si cambias el estado a <strong>opted_out</strong>, el contacto no recibirá más mensajes.`
+  );
+
+  const errorMessage = error ? `<div class="muted" style="color:var(--bad); margin-bottom:10px;">${escapeHtml(error)}</div>` : '';
+
+  const form = `
+    <form id="contactForm" class="panel" method="POST" action="/admin/contacts/${contact ? contact.id : 'new'}">
+      <div class="panel-header"><h1>${title}</h1></div>
+      ${helpText}
+      ${errorMessage}
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Teléfono (E.164) *</label>
+        <input type="text" name="phone" value="${escapeHtml(contact?.phone || '')}" required
+               pattern="^\\+[1-9]\\d{1,14}$"
+               placeholder="+56975400946"
+               style="width:100%;" />
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Formato E.164: +[código país][número]. Ejemplo: +56975400946
+        </div>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Nombre</label>
+        <input type="text" name="name" value="${escapeHtml(contact?.name || '')}"
+               placeholder="Juan Perez"
+               style="width:100%;" />
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Opcional. Nombre del contacto.
+        </div>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Estado *</label>
+        <select name="status" required style="width:100%;">
+          <option value="active" ${!contact || contact.status === 'active' ? 'selected' : ''}>Active (Activo)</option>
+          <option value="opted_out" ${contact?.status === 'opted_out' ? 'selected' : ''}>Opted Out (BAJA)</option>
+          <option value="invalid" ${contact?.status === 'invalid' ? 'selected' : ''}>Invalid (Inválido)</option>
+        </select>
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          <strong>active</strong>: Recibe mensajes normalmente<br/>
+          <strong>opted_out</strong>: No recibirá más mensajes (BAJA)<br/>
+          <strong>invalid</strong>: Teléfono inválido, no se usará
+        </div>
+      </div>
+
+      ${contact ? `
+      <div class="muted" style="margin-bottom:15px; padding:10px; background:#f8f5f1; border-radius:8px;">
+        <strong>Información adicional:</strong><br/>
+        <strong>ID:</strong> ${contact.id}<br/>
+        <strong>Creado:</strong> ${escapeHtml(formatDate(contact.created_at))}<br/>
+        <strong>Actualizado:</strong> ${escapeHtml(formatDate(contact.updated_at))}
+      </div>
+      ` : ''}
+
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button type="submit">${action}</button>
+        <a href="/admin/contacts" class="action-btn">Cancelar</a>
+      </div>
+    </form>
+  `;
+
+  return renderLayout({ title, content: form, active: 'contacts' });
 }
 
 export function renderMessagesPage({ messages, direction, offset, limit }) {
@@ -623,6 +721,8 @@ export function renderCampaignFormPage({ campaign = {} }) {
         </div>
     </form>
     <script>
+    console.log('Campaign form script loaded');
+
     function escapeHtml(value) {
         return String(value || '')
             .replace(/&/g, '&amp;')
@@ -640,6 +740,7 @@ export function renderCampaignFormPage({ campaign = {} }) {
     }
 
     const campaignId = ${campaign.id ? Number(campaign.id) : 'null'};
+    console.log('Campaign ID:', campaignId);
 
     function setFormError(message) {
         const errorEl = document.getElementById('campaignFormError');
@@ -730,13 +831,39 @@ export function renderCampaignFormPage({ campaign = {} }) {
     }
 
     function toggleTestMode() {
+        console.log('toggleTestMode called');
         const panel = document.getElementById('testModePanel');
         const toggle = document.getElementById('testModeToggle');
-        if (!panel || !toggle) return;
+        console.log('Test mode panel:', panel, 'toggle:', toggle);
+        if (!panel || !toggle) {
+            console.error('Panel or toggle not found');
+            return;
+        }
+        console.log('Toggle checked:', toggle.checked);
         if (toggle.checked) {
             panel.classList.remove('hidden');
+            console.log('Panel shown, campaignId:', campaignId);
+
+            // Disable send button if campaign not saved
+            const sendBtn = document.getElementById('testSendBtn');
+            if (sendBtn) {
+                if (!campaignId) {
+                    sendBtn.disabled = true;
+                    sendBtn.style.opacity = '0.5';
+                    sendBtn.style.cursor = 'not-allowed';
+                    sendBtn.title = 'Debes guardar la campaña primero';
+                } else {
+                    sendBtn.disabled = false;
+                    sendBtn.style.opacity = '1';
+                    sendBtn.style.cursor = 'pointer';
+                    sendBtn.title = 'Enviar mensajes a contactos seleccionados';
+                }
+            }
+
             if (!campaignId) {
-                setTestHint('Guarda la campana para habilitar el envio de prueba.', true);
+                setTestHint('⚠️ Para enviar mensajes de prueba, primero guarda la campaña haciendo clic en "Crear" abajo. Puedes previsualizar contactos ahora.', true);
+            } else {
+                setTestHint('Puedes previsualizar y enviar mensajes a los contactos seleccionados.', false);
             }
         } else {
             panel.classList.add('hidden');
@@ -798,84 +925,148 @@ export function renderCampaignFormPage({ campaign = {} }) {
         if (!wrapper) return;
         const query = document.getElementById('testQuery')?.value?.trim() || '';
         wrapper.textContent = 'Cargando contactos...';
-        const res = await fetch('/admin/api/contacts?q=' + encodeURIComponent(query) + '&limit=200');
-        if (!res.ok) {
-            wrapper.textContent = 'Error al cargar contactos.';
-            return;
+        try {
+            const res = await fetch('/admin/api/contacts?q=' + encodeURIComponent(query) + '&limit=200');
+            if (!res.ok) {
+                const errorText = await res.text();
+                wrapper.textContent = 'Error al cargar contactos: ' + (errorText || res.statusText);
+                console.error('Failed to load contacts:', res.status, errorText);
+                return;
+            }
+            const data = await res.json();
+            renderTestContacts(data.contacts || []);
+        } catch (error) {
+            wrapper.textContent = 'Error de conexion: ' + error.message;
+            console.error('Error loading contacts:', error);
         }
-        const data = await res.json();
-        renderTestContacts(data.contacts || []);
     }
 
     async function sendTestSelection() {
+        console.log('sendTestSelection called, campaignId:', campaignId);
         if (!campaignId) {
-            setTestHint('Guarda la campana para habilitar el envio de prueba.', true);
+            const message = \`Debes guardar la campaña primero antes de enviar mensajes de prueba.
+
+1. Haz clic en "Crear" al final del formulario
+2. Luego edita la campaña guardada
+3. Entonces podrás usar el modo test\`;
+            alert(message);
+            setTestHint('Guarda la campana primero haciendo clic en "Crear" abajo.', true);
+            console.log('Cannot send: campaign not saved yet');
             return;
         }
         const selected = getSelectedContactIds();
+        console.log('Selected contact IDs:', selected);
         if (!selected.length) {
             setTestHint('Selecciona al menos un contacto.', true);
             return;
         }
         setTestHint('Enviando...', false);
-        const res = await fetch('/admin/api/campaigns/' + campaignId + '/test-send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contactIds: selected })
-        });
-        if (!res.ok) {
-            setTestHint('Error al enviar a seleccionados.', true);
-            return;
+        try {
+            const url = '/admin/api/campaigns/' + campaignId + '/test-send';
+            console.log('Sending test to:', url, 'with contactIds:', selected);
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactIds: selected })
+            });
+            console.log('Response status:', res.status);
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error('Error sending test:', res.status, errorText);
+                setTestHint('Error al enviar: ' + (errorText || res.statusText), true);
+                return;
+            }
+            const data = await res.json();
+            console.log('Send result:', data);
+            setTestHint('Enviados: ' + (data.sent || 0) + ' | Omitidos: ' + (data.skipped || 0) + ' | Fallidos: ' + (data.failed || 0), false);
+        } catch (error) {
+            console.error('Exception sending test:', error);
+            setTestHint('Error de conexion: ' + error.message, true);
         }
-        const data = await res.json();
-        setTestHint('Enviados: ' + (data.sent || 0) + ' | Omitidos: ' + (data.skipped || 0) + ' | Fallidos: ' + (data.failed || 0), false);
     }
 
-    document.getElementById('campaignForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        setFormError('');
-        const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData.entries());
-        const messageTemplate = String(data.messageTemplate || '').trim();
-        const contentSid = String(data.contentSid || '').trim();
-        if (!messageTemplate && !contentSid) {
-            setFormError('Debes ingresar Content SID o mensaje libre.');
-            return;
-        }
-
-        const url = ${isNew ? "'/admin/api/campaigns'" : `'/admin/api/campaigns/${campaign.id}'`};
-        const method = ${isNew ? "'POST'" : "'PATCH'"};
-        
-        const res = await fetch(url, {
-            method,
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        
-        if(res.ok) {
-            window.location.href = '/admin/campaigns';
-        } else {
-            setFormError('Error al guardar.');
-        }
-    });
-
     document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOMContentLoaded fired');
+
+        // Form submit handler
+        const campaignForm = document.getElementById('campaignForm');
+        console.log('Campaign form element:', campaignForm);
+        if (campaignForm) {
+            campaignForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                setFormError('');
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                const messageTemplate = String(data.messageTemplate || '').trim();
+                const contentSid = String(data.contentSid || '').trim();
+                if (!messageTemplate && !contentSid) {
+                    setFormError('Debes ingresar Content SID o mensaje libre.');
+                    return;
+                }
+
+                let url, method;
+                if (${isNew ? 'true' : 'false'}) {
+                    url = '/admin/api/campaigns';
+                    method = 'POST';
+                } else {
+                    url = '/admin/api/campaigns/' + ${campaign.id ? campaign.id : 'null'};
+                    method = 'PATCH';
+                }
+
+                const res = await fetch(url, {
+                    method,
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+
+                if(res.ok) {
+                    window.location.href = '/admin/campaigns';
+                } else {
+                    setFormError('Error al guardar.');
+                }
+            });
+        }
+
+        // Preview source toggle
         const sourceEl = document.getElementById('previewSource');
         if (sourceEl) {
             sourceEl.addEventListener('change', togglePreviewFilters);
             togglePreviewFilters();
         }
+
+        // Preview button
         const previewBtn = document.getElementById('previewBtn');
         if (previewBtn) previewBtn.addEventListener('click', runPreview);
 
+        // Test mode toggle
         const testToggle = document.getElementById('testModeToggle');
         if (testToggle) {
             testToggle.addEventListener('change', toggleTestMode);
         }
+
+        // Test preview button
         const testPreviewBtn = document.getElementById('testPreviewBtn');
-        if (testPreviewBtn) testPreviewBtn.addEventListener('click', loadTestContacts);
+        console.log('Test preview button element:', testPreviewBtn);
+        if (testPreviewBtn) {
+            console.log('Attaching click listener to test preview button');
+            testPreviewBtn.addEventListener('click', () => {
+                console.log('Test preview button clicked!');
+                loadTestContacts();
+            });
+        }
+
+        // Test send button
         const testSendBtn = document.getElementById('testSendBtn');
-        if (testSendBtn) testSendBtn.addEventListener('click', sendTestSelection);
+        console.log('Test send button element:', testSendBtn);
+        if (testSendBtn) {
+            console.log('Attaching click listener to test send button');
+            testSendBtn.addEventListener('click', () => {
+                console.log('Test send button clicked!');
+                sendTestSelection();
+            });
+        } else {
+            console.error('Test send button NOT FOUND in DOM');
+        }
     });
 </script>
     `;
@@ -927,6 +1118,133 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
     </section>`;
 
   return renderLayout({ title: 'Opt-outs', content, active: 'opt-outs' });
+}
+
+export function renderImportPage({ preview = null, result = null }) {
+  const helpText = renderHelpText(
+    `<strong>Importación CSV:</strong> Importa contactos y vehículos desde un archivo CSV.
+    El formato esperado es: <code>Telefono,Nombre,Marca,Modelo,Año,Precio,Link</code><br/>
+    <strong>Importante:</strong> Los teléfonos deben incluir código de país (+56 para Chile).
+    Si vienen sin '+', se normalizarán automáticamente.`
+  );
+
+  const uploadForm = !preview && !result ? `
+    <section class="panel">
+      <div class="panel-header"><h3>1. Cargar Archivo CSV</h3></div>
+      <form id="uploadForm" enctype="multipart/form-data" method="POST" action="/admin/import/upload">
+        <div style="margin-bottom:15px;">
+          <input type="file" name="csvFile" accept=".csv,text/csv" required style="padding: 8px; width:100%; border:1px solid var(--line); border-radius:10px; font-size:13px;" />
+          <div class="muted" style="font-size:12px; margin-top:5px;">
+            Selecciona un archivo CSV con contactos. Máximo 5000 registros por importación.
+          </div>
+        </div>
+        <button type="submit">Previsualizar datos</button>
+      </form>
+    </section>
+  ` : '';
+
+  const previewSection = preview ? `
+    <section class="panel">
+      <div class="panel-header">
+        <h3>2. Previsualización (${preview.valid.length} válidos, ${preview.invalid.length} inválidos)</h3>
+      </div>
+      ${preview.valid.length > 0 ? `
+        <div style="margin-bottom:15px;">
+          <strong>Registros válidos que serán importados:</strong>
+          ${renderTable({
+            columns: [
+              { key: 'phone', label: 'Teléfono (E.164)' },
+              { key: 'name', label: 'Nombre' },
+              { key: 'make', label: 'Marca' },
+              { key: 'model', label: 'Modelo' },
+              { key: 'year', label: 'Año' },
+              { key: 'price', label: 'Precio' },
+              { key: 'link', label: 'Link', render: (row) => row.link ? `<span title="${escapeHtml(row.link)}">${escapeHtml(truncate(row.link, 30))}</span>` : '' }
+            ],
+            rows: preview.valid.slice(0, 100),
+            searchable: true,
+            sortable: true,
+            tableId: 'preview-valid-table'
+          })}
+          ${preview.valid.length > 100 ? `<div class="muted" style="margin-top:8px;">Mostrando primeros 100 de ${preview.valid.length} registros válidos.</div>` : ''}
+        </div>
+      ` : ''}
+
+      ${preview.invalid.length > 0 ? `
+        <div style="margin-bottom:15px;">
+          <strong>Registros inválidos (NO se importarán):</strong>
+          ${renderTable({
+            columns: [
+              { key: 'row', label: 'Fila' },
+              { key: 'phone', label: 'Teléfono' },
+              { key: 'name', label: 'Nombre' },
+              { key: 'error', label: 'Motivo del error' }
+            ],
+            rows: preview.invalid.slice(0, 50),
+            searchable: false,
+            sortable: false,
+            tableId: 'preview-invalid-table'
+          })}
+          ${preview.invalid.length > 50 ? `<div class="muted" style="margin-top:8px;">Mostrando primeros 50 de ${preview.invalid.length} registros inválidos.</div>` : ''}
+        </div>
+      ` : ''}
+
+      <form method="POST" action="/admin/import/confirm">
+        <input type="hidden" name="csvData" value="${escapeHtml(JSON.stringify(preview.valid))}" />
+        <div style="display:flex; gap:10px;">
+          <button type="submit" ${preview.valid.length === 0 ? 'disabled' : ''}>Finalizar y cargar ${preview.valid.length} contactos</button>
+          <a href="/admin/import" class="action-btn">Cancelar</a>
+        </div>
+      </form>
+    </section>
+  ` : '';
+
+  const resultSection = result ? `
+    <section class="panel">
+      <div class="panel-header"><h3>✅ Importación completada</h3></div>
+      <div style="margin-bottom:15px;">
+        <p><strong>Total procesados:</strong> ${result.processed}</p>
+        <p><strong>Contactos insertados:</strong> ${result.contactsInserted}</p>
+        <p><strong>Contactos actualizados:</strong> ${result.contactsUpdated}</p>
+        <p><strong>Vehículos insertados:</strong> ${result.vehiclesInserted}</p>
+        ${result.errors.length > 0 ? `<p><strong>Errores:</strong> ${result.errors.length}</p>` : ''}
+      </div>
+
+      ${result.errors.length > 0 ? `
+        <div style="margin-bottom:15px;">
+          <strong>Errores durante la importación:</strong>
+          ${renderTable({
+            columns: [
+              { key: 'row', label: 'Fila' },
+              { key: 'phone', label: 'Teléfono' },
+              { key: 'error', label: 'Error' }
+            ],
+            rows: result.errors.slice(0, 50),
+            searchable: false,
+            sortable: false,
+            tableId: 'result-errors-table'
+          })}
+        </div>
+      ` : ''}
+
+      <div style="display:flex; gap:10px;">
+        <a href="/admin/import" class="action-btn">Nueva importación</a>
+        <a href="/admin/contacts" class="action-btn">Ver contactos</a>
+      </div>
+    </section>
+  ` : '';
+
+  const content = `
+    <section class="panel">
+      <div class="panel-header"><h1>Importar Contactos desde CSV</h1></div>
+      ${helpText}
+    </section>
+    ${uploadForm}
+    ${previewSection}
+    ${resultSection}
+  `;
+
+  return renderLayout({ title: 'Importar', content, active: 'import' });
 }
 
 

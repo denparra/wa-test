@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import twilio from 'twilio';
+import multer from 'multer';
+import { parse } from 'csv-parse/sync';
 import {
     createCampaign,
     getAdminStats,
@@ -16,6 +18,9 @@ import {
     listOptOuts,
     normalizePhone,
     upsertContact,
+    getContactById,
+    updateContact,
+    deleteContact as dbDeleteContact,
     updateContactStatus,
     updateCampaignFull,
     pauseCampaign,
@@ -35,7 +40,8 @@ import {
     getContactWithVehicle,
     assignRecipientsToCampaign,
     listCampaignRecipientsByContacts,
-    renderMessageTemplate
+    renderMessageTemplate,
+    bulkImportContactsAndVehicles
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -44,7 +50,9 @@ import {
     renderDashboardPage,
     renderMessagesPage,
     renderOptOutsPage,
-    renderCampaignFormPage
+    renderCampaignFormPage,
+    renderImportPage,
+    renderContactEditPage
 } from './admin/pages.js';
 
 const app = express();
@@ -230,6 +238,83 @@ app.get('/admin/contacts', (req, res) => {
     }));
 });
 
+// GET /admin/contacts/:id/edit - Show edit form
+app.get('/admin/contacts/:id/edit', adminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Invalid contact ID');
+    }
+
+    const contact = getContactById(id);
+    if (!contact) {
+        return res.status(404).send('Contact not found');
+    }
+
+    res.status(200).type('text/html').send(renderContactEditPage({ contact }));
+});
+
+// POST /admin/contacts/:id - Update contact
+app.post('/admin/contacts/:id', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Invalid contact ID');
+    }
+
+    const { phone, name, status } = req.body;
+
+    // Validate phone format (E.164)
+    if (!phone || !phone.match(/^\+[1-9]\d{1,14}$/)) {
+        const contact = getContactById(id);
+        return res.status(400).type('text/html').send(
+            renderContactEditPage({ contact, error: 'Invalid phone format. Must be E.164 format (e.g., +56975400946)' })
+        );
+    }
+
+    // Validate status
+    if (!['active', 'opted_out', 'invalid'].includes(status)) {
+        const contact = getContactById(id);
+        return res.status(400).type('text/html').send(
+            renderContactEditPage({ contact, error: 'Invalid status value' })
+        );
+    }
+
+    try {
+        const updated = updateContact(id, { phone, name: name || null, status });
+        if (!updated) {
+            return res.status(500).send('Failed to update contact');
+        }
+
+        // Redirect back to contacts list
+        res.redirect('/admin/contacts');
+    } catch (error) {
+        console.error('Contact update error:', error);
+        const contact = getContactById(id);
+        res.status(500).type('text/html').send(
+            renderContactEditPage({ contact, error: error.message })
+        );
+    }
+});
+
+// DELETE /admin/api/contacts/:id - Delete contact via API
+app.delete('/admin/api/contacts/:id', adminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Invalid contact ID');
+    }
+
+    try {
+        const deleted = dbDeleteContact(id);
+        if (!deleted) {
+            return res.status(404).send('Contact not found');
+        }
+
+        res.status(200).send('Contact deleted successfully');
+    } catch (error) {
+        console.error('Contact delete error:', error);
+        res.status(500).send('Failed to delete contact: ' + error.message);
+    }
+});
+
 app.get('/admin/messages', (req, res) => {
     const { limit, offset } = getPaging(req);
     const direction = String(req.query.direction || '').trim();
@@ -298,6 +383,10 @@ app.get('/admin/opt-outs', (req, res) => {
         offset,
         limit
     }));
+});
+
+app.get('/admin/import', adminAuth, (req, res) => {
+    res.status(200).type('text/html').send(renderImportPage({}));
 });
 
 // Quick Win #7: CSV Export endpoints
@@ -378,6 +467,181 @@ app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
     } catch (error) {
         console.error('Export opt-outs error:', error);
         res.status(500).send('Error exporting opt-outs');
+    }
+});
+
+// ============================================================
+// CSV Import Routes
+// ============================================================
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB max
+});
+
+app.post('/admin/import/upload', adminAuth, upload.single('csvFile'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).send('No file uploaded');
+        }
+
+        // Parse CSV with BOM handling
+        const csvContent = req.file.buffer.toString('utf8').replace(/^\uFEFF/, '');
+
+        let records;
+        try {
+            records = parse(csvContent, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+                bom: true,
+                relax_column_count: true
+            });
+        } catch (parseError) {
+            return res.status(400).send(`Error al parsear CSV: ${parseError.message}`);
+        }
+
+        if (records.length === 0) {
+            return res.status(400).send('El archivo CSV está vacío');
+        }
+
+        if (records.length > 5000) {
+            return res.status(400).send('Máximo 5000 registros por importación');
+        }
+
+        // Validate headers (case-insensitive)
+        const firstRecord = records[0];
+        const headers = Object.keys(firstRecord).map(h => h.toLowerCase());
+        const requiredHeaders = ['telefono', 'nombre', 'marca', 'modelo', 'año', 'precio', 'link'];
+        const headerMap = {};
+
+        // Build case-insensitive header mapping
+        for (const required of requiredHeaders) {
+            const found = headers.find(h => h === required || h === required.replace(/ñ/g, 'n'));
+            if (!found) {
+                return res.status(400).send(`Falta columna requerida: ${required}`);
+            }
+            // Find original casing
+            headerMap[required] = Object.keys(firstRecord).find(k => k.toLowerCase() === found);
+        }
+
+        const valid = [];
+        const invalid = [];
+
+        records.forEach((row, index) => {
+            const rowNum = index + 2; // +2 because index is 0-based and row 1 is headers
+            const errors = [];
+
+            // Extract values using header mapping
+            const phone = String(row[headerMap.telefono] || '').trim();
+            const name = String(row[headerMap.nombre] || '').trim();
+            const make = String(row[headerMap.marca] || '').trim();
+            const model = String(row[headerMap.modelo] || '').trim();
+            const yearRaw = String(row[headerMap['año']] || row[headerMap.ano] || '').trim();
+            const priceRaw = String(row[headerMap.precio] || '').trim();
+            const link = String(row[headerMap.link] || '').trim();
+
+            // Validate phone
+            if (!phone) {
+                errors.push('Teléfono vacío');
+            }
+
+            // Normalize phone to E.164
+            let normalizedPhone = '';
+            if (phone) {
+                normalizedPhone = normalizePhone(phone);
+                if (!normalizedPhone) {
+                    errors.push('Teléfono inválido');
+                } else if (!normalizedPhone.match(/^\+\d{8,15}$/)) {
+                    errors.push('Formato de teléfono inválido (debe ser E.164)');
+                }
+            }
+
+            // Validate make, model
+            if (!make) {
+                errors.push('Marca vacía');
+            }
+            if (!model) {
+                errors.push('Modelo vacío');
+            }
+
+            // Validate year
+            const year = Number(yearRaw);
+            if (!yearRaw || isNaN(year) || year < 1900 || year > new Date().getFullYear() + 2) {
+                errors.push('Año inválido');
+            }
+
+            // Validate price (optional but must be numeric if present)
+            let price = null;
+            if (priceRaw) {
+                price = Number(priceRaw);
+                if (isNaN(price) || price < 0) {
+                    errors.push('Precio inválido');
+                }
+            }
+
+            // Validate link (optional but must be non-empty if present)
+            if (link && link.length < 5) {
+                errors.push('Link demasiado corto');
+            }
+
+            if (errors.length > 0) {
+                invalid.push({
+                    row: rowNum,
+                    phone,
+                    name,
+                    error: errors.join(', ')
+                });
+            } else {
+                valid.push({
+                    row: rowNum,
+                    phone: normalizedPhone,
+                    name: name || null,
+                    make,
+                    model,
+                    year,
+                    price,
+                    link: link || null
+                });
+            }
+        });
+
+        res.status(200).type('text/html').send(renderImportPage({
+            preview: { valid, invalid }
+        }));
+
+    } catch (error) {
+        console.error('CSV upload error:', error);
+        res.status(500).send(`Error al procesar CSV: ${error.message}`);
+    }
+});
+
+app.post('/admin/import/confirm', adminAuth, express.urlencoded({ extended: false, limit: '50mb' }), (req, res) => {
+    try {
+        const csvData = req.body.csvData;
+        if (!csvData) {
+            return res.status(400).send('No hay datos para importar');
+        }
+
+        let records;
+        try {
+            records = JSON.parse(csvData);
+        } catch (parseError) {
+            return res.status(400).send('Datos inválidos');
+        }
+
+        if (!Array.isArray(records) || records.length === 0) {
+            return res.status(400).send('No hay registros válidos');
+        }
+
+        // Execute bulk import with transaction
+        const result = bulkImportContactsAndVehicles(records);
+
+        res.status(200).type('text/html').send(renderImportPage({ result }));
+
+    } catch (error) {
+        console.error('CSV confirm error:', error);
+        res.status(500).send(`Error al importar datos: ${error.message}`);
     }
 });
 
@@ -583,42 +847,60 @@ app.post('/admin/api/campaigns/:id/assign-recipients', adminAuth, express.json()
 
 app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async (req, res) => {
     try {
+        console.log('TEST-SEND: Request received for campaign', req.params.id);
+        console.log('TEST-SEND: Body:', req.body);
+
         if (!twilioClient || !process.env.MESSAGING_SERVICE_SID) {
+            console.error('TEST-SEND: Twilio not configured');
             return res.status(500).json({ error: 'Twilio not configured' });
         }
 
         const id = Number(req.params.id);
         if (!Number.isInteger(id)) {
+            console.error('TEST-SEND: Invalid campaign id:', req.params.id);
             return res.status(400).json({ error: 'Invalid campaign id' });
         }
 
         const campaign = getCampaignById(id);
         if (!campaign) {
+            console.error('TEST-SEND: Campaign not found:', id);
             return res.status(404).json({ error: 'Campaign not found' });
         }
+        console.log('TEST-SEND: Campaign found:', campaign.name);
 
         const contactIdsRaw = Array.isArray(req.body?.contactIds) ? req.body.contactIds : [];
         const contactIds = [...new Set(contactIdsRaw.map(Number).filter(Number.isInteger))];
+        console.log('TEST-SEND: Contact IDs received:', contactIds);
         if (!contactIds.length) {
+            console.error('TEST-SEND: No contacts selected');
             return res.status(400).json({ error: 'No contacts selected' });
         }
 
         const hasBody = String(campaign.message_template || '').trim();
         const hasContentSid = String(campaign.content_sid || process.env.CONTENT_SID || '').trim();
+        console.log('TEST-SEND: Template:', hasBody ? `"${hasBody.substring(0, 50)}..."` : 'none');
+        console.log('TEST-SEND: Content SID:', hasContentSid || 'none');
         if (!hasBody && !hasContentSid) {
+            console.error('TEST-SEND: Missing template or content SID');
             return res.status(400).json({ error: 'Missing template or content SID' });
         }
 
+        console.log('TEST-SEND: Assigning recipients to campaign');
         assignRecipientsToCampaign(id, contactIds);
         const recipients = listCampaignRecipientsByContacts(id, contactIds);
+        console.log('TEST-SEND: Recipients found:', recipients.length);
         if (!recipients.length) {
+            console.error('TEST-SEND: No recipients available');
             return res.status(400).json({ error: 'No recipients available' });
         }
 
         const results = { total: recipients.length, sent: 0, skipped: 0, failed: 0 };
+        console.log('TEST-SEND: Starting send loop for', recipients.length, 'recipients');
 
         for (const recipient of recipients) {
+            console.log('TEST-SEND: Processing recipient', recipient.id, 'contact', recipient.contact_id, 'status', recipient.status);
             if (recipient.status && recipient.status !== 'pending') {
+                console.log('TEST-SEND: Skipping recipient', recipient.id, 'with status', recipient.status);
                 results.skipped += 1;
                 continue;
             }
@@ -626,8 +908,10 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
             const contact = getContactWithVehicle(recipient.contact_id);
             const rawPhone = recipient.phone || contact?.phone || '';
             const phone = normalizePhone(rawPhone);
+            console.log('TEST-SEND: Phone for recipient', recipient.id, ':', rawPhone, '->', phone);
 
             if (!phone) {
+                console.error('TEST-SEND: Invalid phone for recipient', recipient.id);
                 updateCampaignRecipientStatus({
                     id: recipient.id,
                     status: 'failed',
@@ -638,6 +922,7 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
             }
 
             if (isOptedOut(phone)) {
+                console.log('TEST-SEND: Recipient', recipient.id, 'is opted out');
                 updateContactStatus(phone, 'opted_out');
                 updateCampaignRecipientStatus({
                     id: recipient.id,
@@ -651,8 +936,10 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
             const variables = buildTemplateVariables(contact || {});
             const rendered = renderMessageTemplate(campaign.message_template || '', variables).trim();
             const contentSid = campaign.content_sid || process.env.CONTENT_SID || null;
+            console.log('TEST-SEND: Rendered message for', recipient.id, ':', rendered ? `"${rendered.substring(0, 50)}..."` : 'none');
 
             if (!rendered && !contentSid) {
+                console.error('TEST-SEND: No message body or content SID for recipient', recipient.id);
                 updateCampaignRecipientStatus({
                     id: recipient.id,
                     status: 'failed',
@@ -677,7 +964,9 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
                     }
                 }
 
+                console.log('TEST-SEND: Sending to Twilio for recipient', recipient.id, 'payload:', { to: payload.to, hasBody: !!payload.body, contentSid: payload.contentSid });
                 const msg = await twilioClient.messages.create(payload);
+                console.log('TEST-SEND: Twilio response for recipient', recipient.id, ':', msg.sid, msg.status);
                 const rawStatus = msg.status || 'sent';
                 const status = ['queued', 'accepted', 'sending'].includes(rawStatus) ? 'sent' : rawStatus;
                 const sentAt = new Date().toISOString();
@@ -702,6 +991,7 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
 
                 results.sent += 1;
             } catch (error) {
+                console.error('TEST-SEND: Twilio error for recipient', recipient.id, ':', error.message);
                 updateCampaignRecipientStatus({
                     id: recipient.id,
                     status: 'failed',
@@ -711,10 +1001,11 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
             }
         }
 
+        console.log('TEST-SEND: Completed. Results:', results);
         res.json(results);
     } catch (error) {
-        console.error('Test send error:', error);
-        res.status(500).json({ error: 'Failed to send test messages' });
+        console.error('TEST-SEND: Fatal error:', error);
+        res.status(500).json({ error: 'Failed to send test messages', details: error.message });
     }
 });
 

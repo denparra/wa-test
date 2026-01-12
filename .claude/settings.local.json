@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout 5 npm start)",
+      "Bash(exit 0)",
+      "Bash(sqlite3:*)",
+      "Bash(node test-js-gen.js:*)",
+      "Bash(node test-gen.js)",
+      "Bash(node test-render.js:*)"
     ]
   }
 }
