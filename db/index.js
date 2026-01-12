@@ -142,8 +142,9 @@ const statements = {
             body,
             message_sid,
             status,
+            created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
     `),
     insertVehicle: db.prepare(`
         INSERT INTO vehicles (contact_id, make, model, year, price, link, created_at, updated_at)
