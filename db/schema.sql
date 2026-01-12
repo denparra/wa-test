@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS contacts (
     phone TEXT NOT NULL UNIQUE, -- E.164: +56975400946
     name TEXT,
     status TEXT NOT NULL DEFAULT 'active', -- active|opted_out|invalid
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
     year INTEGER NOT NULL, -- Año: 2015
     price REAL,           -- Precio (CLP)
     link TEXT,            -- URL publicación
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
 
@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_vehicles_year ON vehicles(year);
 CREATE TABLE IF NOT EXISTS opt_outs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     phone TEXT NOT NULL UNIQUE, -- E.164
-    opted_out_at TEXT NOT NULL DEFAULT (datetime('now')),
+    opted_out_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     reason TEXT -- "user_request" | "manual"
 );
 
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     completed_at TEXT,
     total_recipients INTEGER DEFAULT 0,
     sent_count INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     type TEXT NOT NULL DEFAULT 'twilio_template', -- twilio_template|custom_message
     scheduled_at TEXT, -- ISO timestamp para envio programado
     updated_at TEXT NOT NULL DEFAULT '2026-01-11 00:01:16',
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS campaign_recipients (
     message_sid TEXT, -- Twilio message SID
     sent_at TEXT,
     error_message TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
     FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS messages (
     body TEXT,
     message_sid TEXT UNIQUE, -- Twilio SID
     status TEXT, -- queued|sent|delivered|failed
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL,
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL
 );
@@ -123,24 +123,27 @@ CREATE INDEX IF NOT EXISTS idx_messages_message_sid ON messages(message_sid);
 -- ============================================================
 -- TRIGGERS: Auto-update timestamps
 -- ============================================================
+DROP TRIGGER IF EXISTS trg_contacts_updated_at;
 CREATE TRIGGER IF NOT EXISTS trg_contacts_updated_at
 AFTER UPDATE ON contacts
 FOR EACH ROW
 BEGIN
-    UPDATE contacts SET updated_at = datetime('now') WHERE id = NEW.id;
+    UPDATE contacts SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
 END;
 
+DROP TRIGGER IF EXISTS trg_vehicles_updated_at;
 CREATE TRIGGER IF NOT EXISTS trg_vehicles_updated_at
 AFTER UPDATE ON vehicles
 FOR EACH ROW
 BEGIN
-    UPDATE vehicles SET updated_at = datetime('now') WHERE id = NEW.id;
+    UPDATE vehicles SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
 END;
 
+DROP TRIGGER IF EXISTS trg_campaigns_updated_at;
 CREATE TRIGGER IF NOT EXISTS trg_campaigns_updated_at
 AFTER UPDATE ON campaigns
 FOR EACH ROW
 BEGIN
-    UPDATE campaigns SET updated_at = datetime('now') WHERE id = NEW.id;
+    UPDATE campaigns SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
 END;
 

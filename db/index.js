@@ -93,11 +93,11 @@ db.exec(schemaSql);
 
 const statements = {
     upsertContact: db.prepare(`
-        INSERT INTO contacts (phone, name)
-        VALUES (?, ?)
+        INSERT INTO contacts (phone, name, created_at, updated_at)
+        VALUES (?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
         ON CONFLICT(phone) DO UPDATE SET
             name = COALESCE(NULLIF(excluded.name, ''), contacts.name),
-            updated_at = datetime('now')
+            updated_at = datetime('now', 'localtime')
     `),
     getContactByPhone: db.prepare(`
         SELECT id, phone, name, status
@@ -111,12 +111,12 @@ const statements = {
     `),
     updateContact: db.prepare(`
         UPDATE contacts
-        SET phone = ?, name = ?, status = ?, updated_at = datetime('now')
+        SET phone = ?, name = ?, status = ?, updated_at = datetime('now', 'localtime')
         WHERE id = ?
     `),
     updateContactStatus: db.prepare(`
         UPDATE contacts
-        SET status = ?, updated_at = datetime('now')
+        SET status = ?, updated_at = datetime('now', 'localtime')
         WHERE phone = ?
     `),
     deleteContact: db.prepare(`
@@ -124,8 +124,8 @@ const statements = {
         WHERE id = ?
     `),
     insertOptOut: db.prepare(`
-        INSERT OR IGNORE INTO opt_outs (phone, reason)
-        VALUES (?, ?)
+        INSERT OR IGNORE INTO opt_outs (phone, reason, opted_out_at)
+        VALUES (?, ?, datetime('now', 'localtime'))
     `),
     isOptedOut: db.prepare(`
         SELECT 1
@@ -141,13 +141,13 @@ const statements = {
             phone,
             body,
             message_sid,
-            status
+            status,
         )
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `),
     insertVehicle: db.prepare(`
-        INSERT INTO vehicles (contact_id, make, model, year, price, link)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO vehicles (contact_id, make, model, year, price, link, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
     `),
     getCampaignById: db.prepare(`
         SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
@@ -164,8 +164,8 @@ const statements = {
         WHERE name = ?
     `),
     insertCampaign: db.prepare(`
-        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, content_sid, filters)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, content_sid, filters, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
     `),
     updateCampaignMessage: db.prepare(`
         UPDATE campaigns
@@ -174,7 +174,7 @@ const statements = {
     `),
     updateCampaignStatus: db.prepare(`
         UPDATE campaigns
-        SET status = ?, completed_at = CASE WHEN ? = 'completed' THEN datetime('now') ELSE completed_at END
+        SET status = ?, completed_at = CASE WHEN ? = 'completed' THEN datetime('now', 'localtime') ELSE completed_at END
         WHERE id = ?
     `),
     insertCampaignRecipient: db.prepare(`
@@ -185,9 +185,10 @@ const statements = {
             status,
             message_sid,
             sent_at,
-            error_message
+            error_message,
+            created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
     `),
     incrementCampaignSentCount: db.prepare(`
         UPDATE campaigns
@@ -203,12 +204,12 @@ const statements = {
     setCampaignStatus: db.prepare(`
         UPDATE campaigns
         SET status = ?,
-            started_at = CASE WHEN ? = 'sending' THEN datetime('now') ELSE started_at END
+            started_at = CASE WHEN ? = 'sending' THEN datetime('now', 'localtime') ELSE started_at END
         WHERE id = ?
     `),
     pauseCampaign: db.prepare(`
         UPDATE campaigns
-        SET status = 'paused', paused_at = datetime('now')
+        SET status = 'paused', paused_at = datetime('now', 'localtime')
         WHERE id = ? AND status = 'sending'
     `),
     resumeCampaign: db.prepare(`
@@ -218,7 +219,7 @@ const statements = {
     `),
     cancelCampaign: db.prepare(`
         UPDATE campaigns
-        SET status = 'cancelled', completed_at = datetime('now')
+        SET status = 'cancelled', completed_at = datetime('now', 'localtime')
         WHERE id = ? AND status IN ('draft', 'scheduled', 'paused')
     `),
     deleteCampaign: db.prepare(`
@@ -238,7 +239,7 @@ const statements = {
         FROM campaigns
         WHERE status = 'scheduled'
           AND scheduled_at IS NOT NULL
-          AND datetime(scheduled_at) <= datetime('now')
+          AND datetime(scheduled_at) <= datetime('now', 'localtime')
         ORDER BY scheduled_at ASC
         LIMIT ?
     `),
@@ -696,15 +697,15 @@ export function bulkImportContactsAndVehicles(records) {
 
         const getContactStmt = db.prepare('SELECT id FROM contacts WHERE phone = ?');
         const insertContactStmt = db.prepare(`
-            INSERT INTO contacts (phone, name, status)
-            VALUES (?, ?, 'active')
+            INSERT INTO contacts (phone, name, status, created_at, updated_at)
+            VALUES (?, ?, 'active', datetime('now', 'localtime'), datetime('now', 'localtime'))
             ON CONFLICT(phone) DO UPDATE SET
                 name = COALESCE(NULLIF(excluded.name, ''), contacts.name),
-                updated_at = datetime('now')
+                updated_at = datetime('now', 'localtime')
         `);
         const insertVehicleStmt = db.prepare(`
-            INSERT INTO vehicles (contact_id, make, model, year, price, link)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO vehicles (contact_id, make, model, year, price, link, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
         `);
 
         for (const record of items) {
