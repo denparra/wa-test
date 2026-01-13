@@ -782,3 +782,173 @@ export function bulkImportContactsAndVehicles(records) {
 
     return transaction(records);
 }
+
+// ============================================================
+// Phase 1: Campaign Follow-Up Tracking Functions
+// ============================================================
+
+/**
+ * Get aggregated KPIs for campaign follow-up tracking
+ * @param {number} campaignId - Campaign ID
+ * @returns {object} Stats including sent_ok, failed, recipients_with_replies, total_replies, etc.
+ */
+export function getCampaignFollowUpStats(campaignId) {
+    const stats = db.prepare(`
+        SELECT 
+            c.id AS campaign_id,
+            c.name AS campaign_name,
+            c.total_recipients,
+            c.sent_count,
+            
+            -- Enviados exitosos
+            (SELECT COUNT(*) 
+             FROM campaign_recipients 
+             WHERE campaign_id = c.id 
+               AND status IN ('sent', 'delivered')) AS sent_ok,
+            
+            -- Fallidos
+            (SELECT COUNT(*) 
+             FROM campaign_recipients 
+             WHERE campaign_id = c.id 
+               AND status = 'failed') AS failed,
+            
+            -- Recipients con al menos 1 reply (7 días)
+            (SELECT COUNT(DISTINCT cr.id)
+             FROM campaign_recipients cr
+             INNER JOIN messages m ON (
+                 m.phone = cr.phone
+                 AND m.direction = 'inbound'
+                 AND m.created_at >= cr.sent_at
+                 AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
+             )
+             WHERE cr.campaign_id = c.id
+               AND cr.status IN ('sent', 'delivered')) AS recipients_with_replies,
+            
+            -- Total de replies recibidos (7 días)
+            (SELECT COUNT(m.id)
+             FROM campaign_recipients cr
+             INNER JOIN messages m ON (
+                 m.phone = cr.phone
+                 AND m.direction = 'inbound'
+                 AND m.created_at >= cr.sent_at
+                 AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
+             )
+             WHERE cr.campaign_id = c.id
+               AND cr.status IN ('sent', 'delivered')) AS total_replies,
+            
+            -- Tasa de respuesta 24h
+            (SELECT COUNT(DISTINCT cr.id)
+             FROM campaign_recipients cr
+             INNER JOIN messages m ON (
+                 m.phone = cr.phone
+                 AND m.direction = 'inbound'
+                 AND datetime(m.created_at) BETWEEN cr.sent_at AND datetime(cr.sent_at, '+1 day')
+             )
+             WHERE cr.campaign_id = c.id
+               AND cr.status IN ('sent', 'delivered')) AS replies_24h,
+            
+            -- Último reply recibido
+            (SELECT MAX(m.created_at)
+             FROM campaign_recipients cr
+             INNER JOIN messages m ON (
+                 m.phone = cr.phone
+                 AND m.direction = 'inbound'
+                 AND m.created_at >= cr.sent_at
+             )
+             WHERE cr.campaign_id = c.id) AS last_reply_at
+            
+        FROM campaigns c
+        WHERE c.id = ?
+    `).get(campaignId);
+
+    return stats || null;
+}
+
+/**
+ * List campaign recipients with reply counts and details
+ * @param {number} campaignId - Campaign ID
+ * @param {object} options - { limit, offset, filters }
+ * @returns {array} Recipients with reply counts
+ */
+export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offset = 0, filters = {} } = {}) {
+    const recipients = db.prepare(`
+        SELECT 
+            cr.id AS recipient_id,
+            cr.phone,
+            c.name AS contact_name,
+            cr.status AS send_status,
+            cr.sent_at,
+            cr.error_message,
+            COUNT(DISTINCT m.id) AS total_replies,
+            COUNT(DISTINCT CASE 
+                WHEN datetime(m.created_at) <= datetime(cr.sent_at, '+1 day') 
+                THEN m.id 
+            END) AS replies_24h,
+            COUNT(DISTINCT CASE 
+                WHEN datetime(m.created_at) <= datetime(cr.sent_at, '+7 days') 
+                THEN m.id 
+            END) AS replies_7d,
+            MAX(m.created_at) AS last_reply_at,
+            (
+                SELECT body 
+                FROM messages 
+                WHERE phone = cr.phone 
+                  AND direction = 'inbound'
+                  AND created_at >= cr.sent_at
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ) AS last_reply_preview
+        FROM campaign_recipients cr
+        LEFT JOIN contacts c ON c.id = cr.contact_id
+        LEFT JOIN messages m ON (
+            m.phone = cr.phone
+            AND m.direction = 'inbound'
+            AND m.created_at >= cr.sent_at
+            AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
+        )
+        WHERE cr.campaign_id = ?
+        GROUP BY cr.id, cr.phone, c.name, cr.status, cr.sent_at, cr.error_message
+        ORDER BY cr.sent_at DESC
+        LIMIT ? OFFSET ?
+    `).all(campaignId, limit, offset);
+
+    return recipients;
+}
+
+/**
+ * Get full conversation history for a recipient in a campaign
+ * @param {string} phone - Phone number (E.164)
+ * @param {number} campaignId - Campaign ID
+ * @returns {array} All messages (outbound + inbound) in chronological order
+ */
+export function getRecipientConversationHistory(phone, campaignId) {
+    const messages = db.prepare(`
+        SELECT 
+            m.id,
+            m.direction,
+            m.body,
+            m.status,
+            m.created_at,
+            m.message_sid,
+            CASE 
+                WHEN m.direction = 'outbound' THEN 'Sistema'
+                WHEN m.direction = 'inbound' THEN 'Contacto'
+            END AS sender
+        FROM messages m
+        WHERE m.phone = ?
+          AND (
+              m.campaign_id = ?  -- Mensajes outbound de esta campaña
+              OR (
+                  m.direction = 'inbound' 
+                  AND m.created_at >= (
+                      SELECT MIN(sent_at) 
+                      FROM campaign_recipients 
+                      WHERE campaign_id = ? AND phone = ?
+                  )
+              )
+          )
+        ORDER BY m.created_at ASC
+    `).all(phone, campaignId, campaignId, phone);
+
+    return messages;
+}

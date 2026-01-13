@@ -76,6 +76,10 @@ app.get('/health', async (_, res) => {
 ```
 
 **Uso:** Configure Uptime Monitor (UptimeRobot, Pingdom, etc.) apuntando a `/health`
+**Verification / Evidence:**
+- `server.js` implements `/health` with metrics payload (`app.get('/health', ...)`).
+- `server.js` uses `getAdminStats()` plus uptime/memory in the health JSON.
+
 
 ---
 
@@ -187,15 +191,18 @@ db.pragma('synchronous = NORMAL'); // Opcional: mejora performance
 ```
 
 **Beneficio:** Permite lecturas concurrentes durante escrituras (mejor performance del Dashboard).
+**Verification / Evidence:**
+- `db/index.js` enables WAL via `db.pragma('journal_mode = WAL')` and `db.pragma('synchronous = NORMAL')`.
+
 
 ---
 
 ### 🗓️ 1 Semana (Refuerzo)
 
-#### 7. Dashboard: Exportación de Datos ✅ COMPLETADO
+#### 7. Dashboard: Exportación de Datos ✅ PARCIAL
 **Impacto**: 🟢 Medio - Análisis externo
 **Esfuerzo**: 🔧 Moderado (nuevo endpoint)
-**Estado**: Implementado en v0.2.0 (Quick Win implementado)
+**Estado**: Parcial (endpoints listos; UI export incompleta)
 
 **Implementación:**
 ```javascript
@@ -217,6 +224,10 @@ app.get('/admin/export/contacts', adminAuth, (req, res) => {
 ```
 
 **UI:** Agregar botón "Exportar CSV" en cada sección del Dashboard.
+**Verification / Evidence:**
+- `server.js` exposes `/admin/export/contacts`, `/admin/export/messages`, `/admin/export/campaigns`, `/admin/export/opt-outs`.
+- UI export button is only present for opt-outs (`admin/pages.js`), so UI coverage is partial.
+
 
 ---
 
@@ -237,6 +248,9 @@ if (isBaja) {
   // ... resto lógica existente
 }
 ```
+**Verification / Evidence:**
+- `server.js` `/twilio/inbound` expands `OPTOUT_KEYWORDS` and persists opt-outs + contact status updates.
+
 
 ---
 
@@ -251,6 +265,13 @@ if (isBaja) {
 - ✅ Empty states con CTAs
 - ✅ Help text contextual en cada vista
 - ✅ Badges de estado con colores semánticos
+**Verification / Evidence:**
+- Client-side search/sort: `admin/render.js` `renderTable()` scripts; enabled in `admin/pages.js` tables.
+- Copy buttons: `admin/render.js` `renderCopyButton()` used in contacts/messages tables.
+- Empty states + CTAs: `admin/render.js` `renderEmptyState()` used across admin pages.
+- Help text: `admin/render.js` `renderHelpText()` used in dashboard views.
+- Status badges: `admin/render.js` `renderBadge()` + `.badge-*` styles used in tables.
+
 
 **Pendientes (opcional):**
 - Filtros avanzados (rango de fechas, múltiples estados)
@@ -268,10 +289,17 @@ if (isBaja) {
 **Logros:**
 - ✅ Webhook inbound con TwiML responses
 - ✅ Dashboard admin con 5 vistas (Resumen, Contactos, Mensajes, Campañas, Opt-outs)
-- ✅ SQLite con volumen persistente en VPS
+- ✅ SQLite con volumen persistente en VPS (PARCIAL - no verificable en repo)
 - ✅ Opt-out básico (BAJA/3)
 - ✅ Script outbound (send-test.js)
-- ✅ Deployment en Easypanel
+- ✅ Deployment en Easypanel (PARCIAL - no verificable en repo)
+**Verification / Evidence:**
+- Inbound TwiML: `server.js` `/twilio/inbound` returns `text/xml` and uses `escapeXml()`.
+- Admin views: `server.js` routes `/admin`, `/admin/contacts`, `/admin/messages`, `/admin/campaigns`, `/admin/opt-outs`; `admin/render.js` `NAV_ITEMS`.
+- Opt-out basico (BAJA/3): `server.js` inbound uses `OPTOUT_KEYWORDS` with `BAJA` and `3`.
+- Outbound script: `send-test.js` exists and uses Twilio client.
+- SQLite path is configurable via `DB_PATH` in `db/index.js`; VPS volume/Easypanel deployment is not verifiable in repo.
+
 
 ---
 
@@ -287,7 +315,18 @@ if (isBaja) {
 - [x] Preview de mensajes con variables (nombre, marca, modelo, etc.)
 - [x] Programación de envío (fecha/hora específica)
 - [x] Asignación automática de recipients por filtros
+- [x] Asignacion de destinatarios en formulario de creacion (panel + filtros + preview)
+- [x] Advertencia al programar sin destinatarios y envio de recipientIds
 - [x] Progress bar de envío en tiempo real (SSE o polling)
+**Verification / Evidence:**
+- CRUD: `server.js` `/admin/api/campaigns` POST/PATCH/DELETE + `admin/pages.js` actions.
+- Preview with variables: `server.js` `/admin/api/campaigns/preview` + `/preview-samples`; `db/index.js` `renderMessageTemplate()`; `admin/pages.js` `runPreview()`.
+- Scheduling: `server.js` `normalizeScheduledAt()` + `processCampaignQueue()`; `db/index.js` `listScheduledCampaignsDue()`.
+- Auto-assign by filters: `server.js` `/admin/api/campaigns/:id/assign-recipients` uses `listContactsForCampaign()`/`listVehicleContactsByFilters()`.
+- Assign on create: `admin/pages.js` recipient panel + `loadRecipientsBtn`; `server.js` accepts `recipientIds` + `assignRecipientsToCampaign()`.
+- Warning for scheduled without recipients: `admin/pages.js` submit confirmation.
+- Progress bar polling: `admin/pages.js` `refreshProgress()` polls `/admin/api/campaigns/:id/progress`; `server.js` `getCampaignProgress()`.
+
 
 #### 2.2 Templates de Mensajes (2-3 días)
 - [ ] Gestor de templates en Dashboard
@@ -414,7 +453,7 @@ if (isBaja) {
 **Probabilidad**: 🟡 Media (sin backups automáticos)
 
 **Mitigaciones:**
-- ✅ **Implementado**: Volumen persistente `/app/data` en Easypanel
+- ✅ **Implementado**: Volumen persistente `/app/data` en Easypanel (PARCIAL - no verificable en repo)
 - 🚧 **Pendiente**: Backups automáticos diarios (Quick Win #1)
 - 🔜 **Futuro**: Replicación a S3 o Google Drive
 
@@ -435,7 +474,7 @@ if (isBaja) {
 **Probabilidad**: 🟢 Baja (con buenas prácticas)
 
 **Mitigaciones:**
-- ✅ **Implementado**: `.env` en `.gitignore`, credenciales solo en Easypanel
+- ✅ **Implementado**: `.env` en `.gitignore`, credenciales solo en Easypanel (PARCIAL - solo .gitignore verificable)
 - 🔜 **Refuerzo**: Rotar credenciales Twilio cada 6 meses
 - 🔜 **Futuro**: Vault (HashiCorp) o Secrets Manager (AWS/GCP)
 
@@ -461,6 +500,13 @@ if (isBaja) {
 - ✅ **Implementado**: Filtrado automático de `opted_out` en queries
 - 🔜 **Refuerzo**: Keywords adicionales (Quick Win #8)
 - 🔜 **Futuro**: Audit trail completo (Fase 3)
+**Verification / Evidence (Riesgos implementados):**
+- WAL mode: `db/index.js` pragmas for `journal_mode = WAL` and `synchronous = NORMAL`.
+- `.env` ignored: `.gitignore` includes `.env` (Easypanel credential handling is not verifiable in repo).
+- Opt-out basico + filtering: `server.js` `/twilio/inbound` inserts opt-outs; `db/index.js` filters `contacts` with `status = 'active'` and `phone NOT IN (SELECT phone FROM opt_outs)`.
+- VPS volume persistence is a deploy setting and is not verifiable in repo.
+- Runtime checks not executed (static code inspection only to avoid local DB writes).
+
 
 ---
 

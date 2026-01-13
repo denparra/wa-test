@@ -44,7 +44,10 @@ import {
     bulkImportContactsAndVehicles,
     updateOptOut,
     deleteOptOut,
-    getOptOutByPhone
+    getOptOutByPhone,
+    getCampaignFollowUpStats,
+    listCampaignRecipientsWithReplies,
+    getRecipientConversationHistory
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -56,7 +59,9 @@ import {
     renderCampaignFormPage,
     renderImportPage,
     renderContactEditPage,
-    renderOptOutEditPage
+    renderOptOutEditPage,
+    renderCampaignFollowUpPage,
+    renderConversationPage
 } from './admin/pages.js';
 
 const app = express();
@@ -376,6 +381,58 @@ app.get('/admin/campaigns/:id', (req, res) => {
         recipients,
         offset,
         limit
+    }));
+});
+
+// ============================================================
+// Phase 1: Campaign Follow-Up Tracking Routes
+// ============================================================
+
+app.get('/admin/campaigns/:id/seguimiento', (req, res) => {
+    const campaignId = Number(req.params.id);
+    if (!Number.isInteger(campaignId)) {
+        return res.status(400).send('Invalid campaign id');
+    }
+
+    const campaign = getCampaignById(campaignId);
+    if (!campaign) {
+        return res.status(404).send('Campaign not found');
+    }
+
+    const stats = getCampaignFollowUpStats(campaignId);
+    const { limit, offset } = getPaging(req);
+    const recipients = listCampaignRecipientsWithReplies(campaignId, { limit, offset });
+
+    res.status(200).type('text/html').send(renderCampaignFollowUpPage({
+        campaign,
+        stats,
+        recipients,
+        offset,
+        limit
+    }));
+});
+
+app.get('/admin/campaigns/:id/conversation/:phone', (req, res) => {
+    const campaignId = Number(req.params.id);
+    const phone = decodeURIComponent(req.params.phone);
+
+    if (!Number.isInteger(campaignId)) {
+        return res.status(400).send('Invalid campaign id');
+    }
+
+    const campaign = getCampaignById(campaignId);
+    if (!campaign) {
+        return res.status(404).send('Campaign not found');
+    }
+
+    const messages = getRecipientConversationHistory(phone, campaignId);
+    const contact = upsertContact(phone, null); // Get contact info if exists
+
+    res.status(200).type('text/html').send(renderConversationPage({
+        campaign,
+        phone,
+        contactName: contact?.name || null,
+        messages
     }));
 });
 
@@ -872,7 +929,52 @@ app.get('/admin/api/campaigns/:id/progress', adminAuth, (req, res) => {
     }
 });
 
-app.get('/admin/api/contacts', adminAuth, (req, res) => {
+// ============================================================
+// Phase 1: Campaign Follow-Up Tracking API Endpoints
+// ============================================================
+
+app.get('/admin/api/campaigns/:id/follow-up-stats', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const stats = getCampaignFollowUpStats(id);
+        if (!stats) {
+            return res.status(404).json({ error: 'Campaign not found' });
+        }
+        res.json(stats);
+    } catch (error) {
+        console.error('Follow-up stats error:', error);
+        res.status(500).json({ error: 'Failed to get follow-up stats' });
+    }
+});
+
+app.get('/admin/api/campaigns/:id/recipients-with-replies', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 100));
+        const offset = Math.max(0, Number(req.query.offset) || 0);
+
+        const recipients = listCampaignRecipientsWithReplies(id, { limit, offset });
+        res.json({ recipients, limit, offset });
+    } catch (error) {
+        console.error('Recipients with replies error:', error);
+        res.status(500).json({ error: 'Failed to get recipients' });
+    }
+});
+
+app.get('/admin/api/campaigns/:id/conversation/:phone', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const phone = decodeURIComponent(req.params.phone);
+
+        const messages = getRecipientConversationHistory(phone, id);
+        res.json({ messages, phone, campaign_id: id });
+    } catch (error) {
+        console.error('Conversation history error:', error);
+        res.status(500).json({ error: 'Failed to get conversation history' });
+    }
+});
+
+app.get('/admin/contacts', adminAuth, (req, res) => {
     try {
         const query = String(req.query.q || '').trim();
         const limitRaw = Number(req.query.limit || 200);

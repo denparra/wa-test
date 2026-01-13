@@ -119,8 +119,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_contact_id ON messages(contact_id);
 CREATE INDEX IF NOT EXISTS idx_messages_campaign_id ON messages(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_message_sid ON messages(message_sid);
--- Phase 1: Composite index for inbound message association
-CREATE INDEX IF NOT EXISTS idx_messages_phone_direction_created ON messages(phone, direction, created_at);
 
 -- ============================================================
 -- TRIGGERS: Auto-update timestamps

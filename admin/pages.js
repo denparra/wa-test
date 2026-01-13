@@ -500,6 +500,9 @@ export function renderCampaignDetailPage({ campaign, recipients, offset, limit }
       <div class="muted"><strong>Programada:</strong> ${escapeHtml(formatDate(campaign.scheduled_at || '')) || 'N/A'}</div>
       <div class="muted"><strong>Mensaje:</strong> ${escapeHtml(campaign.message_template || 'N/A')}</div>
       ${progressBar}
+      <div style="margin-top: 15px;">
+        <a href="/admin/campaigns/${campaign.id}/seguimiento" class="action-btn" style="background:var(--accent); color:white; border-color:var(--accent)">📊 Ver Seguimiento</a>
+      </div>
       ${primaryActions}
       ${pausedActions}
       ${pauseCancel}
@@ -1491,9 +1494,127 @@ export function renderImportPage({ preview = null, result = null }) {
   return renderLayout({ title: 'Importar', content, active: 'import' });
 }
 
+// ============================================================
+// Phase 1: Campaign Follow-Up Tracking Pages
+// ============================================================
 
+export function renderCampaignFollowUpPage({ campaign, stats, recipients, offset, limit }) {
+  const kpisHtml = `
+    <div class="panel">
+      <div class="panel-header">
+        <h1>📊 Seguimiento: ${escapeHtml(campaign.name)}</h1>
+        <a href="/admin/campaigns/${campaign.id}" class="action-btn">← Volver a Campaña</a>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+          <div style="font-size: 0.875rem; color: #6c757d;">Total Recipients</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.total_recipients || 0}</div>
+        </div>
+        <div style="background: #d4edda; padding: 1rem; border-radius: 4px;">
+          <div style="font-size: 0.875rem; color: #155724;">✅ Enviados OK</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.sent_ok || 0} (${stats.sent_ok ? ((stats.sent_ok / stats.total_recipients) * 100).toFixed(1) : 0}%)</div>
+        </div>
+        <div style="background: #f8d7da; padding: 1rem; border-radius: 4px;">
+          <div style="font-size: 0.875rem; color: #721c24;">❌ Fallidos</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.failed || 0} (${stats.failed ? ((stats.failed / stats.total_recipients) * 100).toFixed(1) : 0}%)</div>
+        </div>
+        <div style="background: #d1ecf1; padding: 1rem; border-radius: 4px;">
+          <div style="font-size: 0.875rem; color: #0c5460;">💬 Replies Recibidos</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.total_replies || 0}</div>
+        </div>
+        <div style="background: #fff3cd; padding: 1rem; border-radius: 4px;">
+          <div style="font-size: 0.875rem; color: #856404;">⏱️ Respuesta 24h</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.replies_24h || 0} (${stats.sent_ok ? ((stats.replies_24h / stats.sent_ok) * 100).toFixed(1) : 0}%)</div>
+        </div>
+        <div style="background: #e2e3e5; padding: 1rem; border-radius: 4px;">
+          <div style="font-size: 0.875rem; color: #383d41;">📈 Respuesta 7d</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.recipients_with_replies || 0} (${stats.sent_ok ? ((stats.recipients_with_replies / stats.sent_ok) * 100).toFixed(1) : 0}%)</div>
+        </div>
+      </div>
+      ${stats.last_reply_at ? `<p style="margin: 0.5rem 0; color: #6c757d; font-size: 0.875rem;">Último reply: ${formatDate(stats.last_reply_at)}</p>` : ''}
+    </div>
+  `;
 
+  const recipientsTable = recipients.length > 0
+    ? renderTable({
+      columns: [
+        { key: 'phone', label: 'Teléfono' },
+        { key: 'contact_name', label: 'Nombre', render: (row) => escapeHtml(row.contact_name || '-') },
+        { key: 'send_status', label: 'Estado Envío', render: (row) => renderBadge(row.send_status, statusTone(row.send_status)) },
+        { key: 'sent_at', label: 'Fecha Envío', render: (row) => escapeHtml(formatDate(row.sent_at)) },
+        { key: 'total_replies', label: '# Replies', render: (row) => `<strong>${row.total_replies || 0}</strong>` },
+        { key: 'last_reply_at', label: 'Último Reply', render: (row) => escapeHtml(row.last_reply_at ? formatDate(row.last_reply_at) : '-') },
+        { key: 'last_reply_preview', label: 'Preview', render: (row) => escapeHtml(truncate(row.last_reply_preview || '', 40)) },
+        { key: 'actions', label: 'Acciones', render: (row) => `<a href="/admin/campaigns/${campaign.id}/conversation/${encodeURIComponent(row.phone)}" class="action-btn">💬 Ver</a>` }
+      ],
+      rows: recipients,
+      searchable: true,
+      sortable: true,
+      tableId: 'follow-up-table'
+    })
+    : renderEmptyState({
+      title: 'Sin destinatarios',
+      message: 'Esta campaña aún no tiene destinatarios asignados.'
+    });
 
+  const content = kpisHtml + `
+    <section class="panel">
+      <h3>Destinatarios y Respuestas</h3>
+      ${recipientsTable}
+      ${recipients.length > 0 ? renderPager({
+    basePath: `/admin/campaigns/${campaign.id}/seguimiento`,
+    query: {},
+    offset,
+    limit,
+    hasNext: recipients.length === limit
+  }) : ''}
+    </section>
+  `;
+
+  return renderLayout({ title: `Seguimiento - ${campaign.name}`, content, active: 'campaigns' });
+}
+
+export function renderConversationPage({ campaign, phone, contactName, messages }) {
+  const messagesHtml = messages.length > 0
+    ? messages.map(msg => {
+      const isOutbound = msg.direction === 'outbound';
+      const alignment = isOutbound ? 'left' : 'right';
+      const bgColor = isOutbound ? '#e3f2fd' : '#f1f8e9';
+      const label = isOutbound ? '📤 ENVIADO POR SISTEMA' : '💬 RECIBIDO DEL CONTACTO';
+
+      return `
+        <div style="margin: 1.5rem 0; text-align: ${alignment};">
+          <div style="font-size: 0.75rem; color: #6c757d; margin-bottom: 0.25rem;">${label}</div>
+          <div style="font-size: 0.75rem; color: #6c757d; margin-bottom: 0.5rem;">${formatDate(msg.created_at)}</div>
+          <div style="display: inline-block; max-width: 70%; text-align: left; background: ${bgColor}; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+            <div style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(msg.body || '')}</div>
+          </div>
+          ${isOutbound && msg.status ? `<div style="font-size: 0.75rem; color: #6c757d; margin-top: 0.25rem;">Estado: ${renderBadge(msg.status, statusTone(msg.status))} ${msg.message_sid ? `| SID: ${escapeHtml(msg.message_sid.substring(0, 15))}...` : ''}</div>` : ''}
+        </div>
+      `;
+    }).join('')
+    : renderEmptyState({
+      title: 'Sin mensajes',
+      message: 'No hay mensajes en esta conversación.'
+    });
+
+  const content = `
+    <div class="panel">
+      <div class="panel-header">
+        <h1>💬 Conversación con ${escapeHtml(phone)} ${contactName ? `(${escapeHtml(contactName)})` : ''}</h1>
+        <a href="/admin/campaigns/${campaign.id}/seguimiento" class="action-btn">← Volver a Seguimiento</a>
+      </div>
+      <div style="background: #f8f9fa; padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 1rem;">
+        <strong>Campaña:</strong> ${escapeHtml(campaign.name)}
+      </div>
+      <div style="background: white; padding: 1rem; border-radius: 4px; min-height: 300px;">
+        ${messagesHtml}
+      </div>
+    </div>
+  `;
+
+  return renderLayout({ title: `Conversación - ${phone}`, content, active: 'campaigns' });
+}
 
 
 
