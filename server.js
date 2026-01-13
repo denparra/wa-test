@@ -41,7 +41,10 @@ import {
     assignRecipientsToCampaign,
     listCampaignRecipientsByContacts,
     renderMessageTemplate,
-    bulkImportContactsAndVehicles
+    bulkImportContactsAndVehicles,
+    updateOptOut,
+    deleteOptOut,
+    getOptOutByPhone
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -52,7 +55,8 @@ import {
     renderOptOutsPage,
     renderCampaignFormPage,
     renderImportPage,
-    renderContactEditPage
+    renderContactEditPage,
+    renderOptOutEditPage
 } from './admin/pages.js';
 
 const app = express();
@@ -467,6 +471,50 @@ app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
     } catch (error) {
         console.error('Export opt-outs error:', error);
         res.status(500).send('Error exporting opt-outs');
+    }
+});
+
+// GET /admin/opt-outs/:phone/edit - Edit opt-out reason
+app.get('/admin/opt-outs/:phone/edit', adminAuth, (req, res) => {
+    const phone = req.params.phone; // Express decodes URL, so +56... comes as +56...
+    const optOut = getOptOutByPhone(phone);
+
+    if (!optOut) {
+        // Try adding + if missing, sometimes browsers/proxies strip it or user typed without it
+        // logic: if it doesn't start with +, try prepending it? 
+        // Better: just strict match.
+        return res.status(404).send('Opt-out not found');
+    }
+
+    res.status(200).type('text/html').send(renderOptOutEditPage({ optOut }));
+});
+
+// POST /admin/opt-outs/:phone - Update opt-out
+app.post('/admin/opt-outs/:phone', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const phone = req.params.phone;
+    const { reason } = req.body;
+
+    try {
+        updateOptOut(phone, reason);
+        res.redirect('/admin/opt-outs');
+    } catch (error) {
+        console.error('Opt-out update error:', error);
+        const optOut = getOptOutByPhone(phone);
+        res.status(500).type('text/html').send(renderOptOutEditPage({ optOut, error: error.message }));
+    }
+});
+
+// DELETE /admin/api/opt-outs/:phone - Delete opt-out (Restores user to active technically if they were only blocked by this table)
+// Note: Contacts table also has 'opted_out' status. We might want to ask if we should sync that?
+// For now, this just deletes the record from opt_outs table. 
+app.delete('/admin/api/opt-outs/:phone', adminAuth, (req, res) => {
+    const phone = req.params.phone;
+    try {
+        deleteOptOut(phone);
+        res.status(200).send('Opt-out deleted');
+    } catch (error) {
+        console.error('Opt-out delete error:', error);
+        res.status(500).send('Failed to delete opt-out: ' + error.message);
     }
 });
 

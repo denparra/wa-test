@@ -127,6 +127,20 @@ const statements = {
         INSERT OR IGNORE INTO opt_outs (phone, reason, opted_out_at)
         VALUES (?, ?, datetime('now', 'localtime'))
     `),
+    updateOptOut: db.prepare(`
+        UPDATE opt_outs
+        SET reason = ?
+        WHERE phone = ?
+    `),
+    deleteOptOut: db.prepare(`
+        DELETE FROM opt_outs
+        WHERE phone = ?
+    `),
+    getOptOutByPhone: db.prepare(`
+        SELECT phone, reason, opted_out_at
+        FROM opt_outs
+        WHERE phone = ?
+    `),
     isOptedOut: db.prepare(`
         SELECT 1
         FROM opt_outs
@@ -680,6 +694,18 @@ export function renderMessageTemplate(template, variables = {}) {
         const value = variables[varName];
         return value !== undefined && value !== null ? String(value) : match;
     });
+}
+
+export function updateOptOut(phone, reason) {
+    return statements.updateOptOut.run(reason || 'user_request', normalizePhone(phone));
+}
+
+export function deleteOptOut(phone) {
+    return statements.deleteOptOut.run(normalizePhone(phone));
+}
+
+export function getOptOutByPhone(phone) {
+    return statements.getOptOutByPhone.get(normalizePhone(phone));
 }
 
 // ============================================================

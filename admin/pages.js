@@ -222,6 +222,48 @@ export function renderContactEditPage({ contact = null, error = null }) {
   return renderLayout({ title, content: form, active: 'contacts' });
 }
 
+export function renderOptOutEditPage({ optOut = null, error = null }) {
+  const title = 'Editar Opt-Out';
+  const action = 'Guardar';
+  const phone = optOut?.phone || '';
+
+  const helpText = renderHelpText(
+    `<strong>Editar Opt-Out:</strong> Modifica la razón de la baja para el número <strong>${escapeHtml(phone)}</strong>.`
+  );
+
+  const errorMessage = error ? `<div class="muted" style="color:var(--bad); margin-bottom:10px;">${escapeHtml(error)}</div>` : '';
+
+  const form = `
+    <form class="panel" method="POST" action="/admin/opt-outs/${encodeURIComponent(phone)}">
+      <div class="panel-header"><h1>${title}</h1></div>
+      ${helpText}
+      ${errorMessage}
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Teléfono</label>
+        <input type="text" value="${escapeHtml(phone)}" disabled style="width:100%; background:#eee; cursor:not-allowed;" />
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Razón</label>
+        <select name="reason" style="width:100%;">
+            <option value="user_request" ${optOut?.reason === 'user_request' ? 'selected' : ''}>Solicitud de usuario (STOP/BAJA)</option>
+            <option value="manual" ${optOut?.reason === 'manual' ? 'selected' : ''}>Manual (Admin)</option>
+            <option value="complaint" ${optOut?.reason === 'complaint' ? 'selected' : ''}>Queja / Spam</option>
+            <option value="invalid" ${optOut?.reason === 'invalid' ? 'selected' : ''}>Número inválido / Reciclado</option>
+        </select>
+      </div>
+
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button type="submit">${action}</button>
+        <a href="/admin/opt-outs" class="action-btn">Cancelar</a>
+      </div>
+    </form>
+  `;
+
+  return renderLayout({ title, content: form, active: 'home' }); // 'home' or 'contacts' depending on where we want to highlight
+}
+
 export function renderMessagesPage({ messages, direction, offset, limit }) {
   const helpText = renderHelpText(
     `<strong>Registro de mensajes:</strong> Todos los mensajes inbound (recibidos) y outbound (enviados).
@@ -1118,7 +1160,7 @@ export function renderCampaignFormPage({ campaign = {} }) {
 
 export function renderOptOutsPage({ optOuts, offset, limit }) {
   const helpText = renderHelpText(
-    `<strong>Gestión de BAJA (Opt-outs):</strong> Usuarios que solicitaron no recibir más mensajes.
+    `<strong>Gestión de Bajas (Opt-outs):</strong> Usuarios que solicitaron no recibir más mensajes.
     Estos contactos están excluidos de futuras campañas automáticamente. Los motivos son:
     <strong>user_request</strong> (usuario pidió BAJA) o <strong>manual</strong> (añadido manualmente).`
   );
@@ -1130,7 +1172,11 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
         { key: 'contact_name', label: 'Nombre' },
         { key: 'reason', label: 'Motivo', render: (row) => renderBadge(row.reason || 'user_request', 'warn') },
         { key: 'created_at', label: 'Fecha', render: (row) => escapeHtml(formatDate(row.created_at)) },
-        { key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">${renderCopyButton(row.phone, '📋')}</div>` }
+        {
+          key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
+            <a href="/admin/opt-outs/${encodeURIComponent(row.phone)}/edit" class="action-btn" title="Editar razón">✏️</a>
+            <button onclick="deleteOptOut('${escapeHtml(row.phone)}')" class="action-btn" title="Eliminar (Reactivar)">🗑️</button>
+        </div>` }
       ],
       rows: optOuts,
       searchable: true,
@@ -1144,9 +1190,33 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
       ctaLink: '/admin/contacts'
     });
 
+  const script = `
+    <script>
+      async function deleteOptOut(phone) {
+        if (!confirm('¿Eliminar BAJA para ' + phone + '?\\n\\nEl contacto volverá a quedar habilitado para recibir mensajes si su estado en Contactos es activo.')) {
+          return;
+        }
+        try {
+          // Encode phone properly for URL
+          const encodedPhone = encodeURIComponent(phone);
+          const res = await fetch('/admin/api/opt-outs/' + encodedPhone, { method: 'DELETE' });
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            const error = await res.text();
+            alert('Error al eliminar: ' + error);
+          }
+        } catch (error) {
+          alert('Error al eliminar: ' + error.message);
+        }
+      }
+    </script>
+  `;
+
   const content = `<section class="panel">
       <div class="panel-header">
         <h1>Opt-outs</h1>
+        <a href="/admin/export/opt-outs" class="action-btn">Exportar CSV</a>
       </div>
       ${helpText}
       ${tableContent}
@@ -1157,7 +1227,7 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
     limit,
     hasNext: optOuts.length === limit
   }) : ''}
-    </section>`;
+    </section>${script}`;
 
   return renderLayout({ title: 'Opt-outs', content, active: 'opt-outs' });
 }
