@@ -789,6 +789,42 @@ export function renderCampaignFormPage({ campaign = {} }) {
             </div>
         </div>
 
+        <div style="margin-bottom:15px; padding:15px; border:2px solid var(--accent); border-radius:10px; background:#f8f5f1;">
+            <h3 style="margin-top:0;">Destinatarios para campaña programada</h3>
+            <div class="muted" style="margin-bottom:10px;">
+                ⚠️ <strong>Importante:</strong> Si programas el envío, debes asignar destinatarios AHORA.
+                De lo contrario, la campaña se completará sin enviar mensajes.
+            </div>
+
+            <div class="inline" style="margin-bottom:10px;">
+                <label for="recipientSource" class="muted">Fuente:</label>
+                <select id="recipientSource">
+                    <option value="">No asignar ahora (crear como draft)</option>
+                    <option value="vehicles">Por vehiculos</option>
+                    <option value="contacts">Por contactos</option>
+                </select>
+                <button type="button" id="loadRecipientsBtn">Cargar destinatarios</button>
+            </div>
+
+            <div id="recipientVehicleFilters" class="hidden" style="margin-top:10px;">
+                <div class="inline">
+                    <input type="text" id="filterMake" placeholder="Marca (opcional)" />
+                    <input type="text" id="filterModel" placeholder="Modelo (opcional)" />
+                    <input type="number" id="filterYearMin" placeholder="Ano min" />
+                    <input type="number" id="filterYearMax" placeholder="Ano max" />
+                </div>
+            </div>
+
+            <div id="recipientContactFilters" class="hidden" style="margin-top:10px;">
+                <div class="inline">
+                    <input type="text" id="filterQuery" placeholder="Telefono o nombre" />
+                </div>
+            </div>
+
+            <div id="recipientCount" class="muted" style="margin-top:10px;"></div>
+            <div id="recipientPreview" style="margin-top:10px; max-height:200px; overflow-y:auto;"></div>
+        </div>
+
         <div style="margin-top:20px;">
             <button type="submit">${action}</button>
             <a href="/admin/campaigns" style="margin-left:10px; color:var(--muted); text-decoration:none;">Cancelar</a>
@@ -1088,6 +1124,20 @@ export function renderCampaignFormPage({ campaign = {} }) {
                     return;
                 }
 
+                // Validate recipients for scheduled campaigns
+                if (data.scheduledAt && (!window.selectedRecipients || window.selectedRecipients.length === 0)) {
+                    if (!confirm('⚠️ ADVERTENCIA: Estás programando una campaña SIN destinatarios.\\n\\n' +
+                                 'La campaña se completará automáticamente sin enviar mensajes.\\n\\n' +
+                                 '¿Deseas continuar de todos modos?')) {
+                        return;
+                    }
+                }
+
+                // Include recipient IDs in payload
+                if (window.selectedRecipients && window.selectedRecipients.length > 0) {
+                    data.recipientIds = window.selectedRecipients.map(r => r.id);
+                }
+
                 let url, method;
                 if (${isNew ? 'true' : 'false'}) {
                     url = '/admin/api/campaigns';
@@ -1121,6 +1171,88 @@ export function renderCampaignFormPage({ campaign = {} }) {
         // Preview button
         const previewBtn = document.getElementById('previewBtn');
         if (previewBtn) previewBtn.addEventListener('click', runPreview);
+
+        // Recipient assignment handlers
+        const recipientSourceEl = document.getElementById('recipientSource');
+        if (recipientSourceEl) {
+            recipientSourceEl.addEventListener('change', () => {
+                const source = recipientSourceEl.value;
+                const vehicleFilters = document.getElementById('recipientVehicleFilters');
+                const contactFilters = document.getElementById('recipientContactFilters');
+
+                if (source === 'vehicles') {
+                    vehicleFilters?.classList.remove('hidden');
+                    contactFilters?.classList.add('hidden');
+                } else if (source === 'contacts') {
+                    vehicleFilters?.classList.add('hidden');
+                    contactFilters?.classList.remove('hidden');
+                } else {
+                    vehicleFilters?.classList.add('hidden');
+                    contactFilters?.classList.add('hidden');
+                }
+
+                // Clear preview
+                document.getElementById('recipientCount').textContent = '';
+                document.getElementById('recipientPreview').innerHTML = '';
+            });
+        }
+
+        const loadRecipientsBtn = document.getElementById('loadRecipientsBtn');
+        if (loadRecipientsBtn) {
+            loadRecipientsBtn.addEventListener('click', async () => {
+                const source = document.getElementById('recipientSource')?.value;
+                if (!source) {
+                    alert('Selecciona una fuente de destinatarios');
+                    return;
+                }
+
+                const filters = {};
+                if (source === 'contacts') {
+                    filters.query = document.getElementById('filterQuery')?.value?.trim() || '';
+                } else {
+                    filters.make = document.getElementById('filterMake')?.value?.trim() || null;
+                    filters.model = document.getElementById('filterModel')?.value?.trim() || null;
+                    filters.yearMin = document.getElementById('filterYearMin')?.value || null;
+                    filters.yearMax = document.getElementById('filterYearMax')?.value || null;
+                }
+
+                try {
+                    const res = await fetch('/admin/api/campaigns/preview-samples', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ source, filters, limit: 100 })
+                    });
+
+                    if (!res.ok) {
+                        alert('Error al cargar destinatarios');
+                        return;
+                    }
+
+                    const data = await res.json();
+                    const recipients = data.samples || [];
+
+                    document.getElementById('recipientCount').textContent =
+                        recipients.length + ' destinatarios encontrados';
+
+                    // Show preview
+                    const previewHtml = recipients.slice(0, 10).map(r =>
+                        '<div style="padding:4px; border-bottom:1px solid #eee;">' +
+                            maskPhone(r.phone) + ' - ' + escapeHtml(r.name || 'Sin nombre') +
+                        '</div>'
+                    ).join('');
+
+                    document.getElementById('recipientPreview').innerHTML =
+                        previewHtml +
+                        (recipients.length > 10 ? '<div class="muted" style="padding:8px;">...y ' + (recipients.length - 10) + ' más</div>' : '');
+
+                    // Save recipients to global variable for submit
+                    window.selectedRecipients = recipients;
+
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+            });
+        }
 
         // Test mode toggle
         const testToggle = document.getElementById('testModeToggle');

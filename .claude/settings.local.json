@@ -8,7 +8,16 @@
       "Bash(sqlite3:*)",
       "Bash(node test-js-gen.js:*)",
       "Bash(node test-gen.js)",
-      "Bash(node test-render.js:*)"
+      "Bash(node test-render.js:*)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_navigate",
+      "Bash(timeout 5 node:*)",
+      "Bash(timeout 3 bash:*)",
+      "Bash(curl:*)",
+      "Bash(timeout 3 node:*)",
+      "mcp__playwright__browser_console_messages",
+      "Bash(pkill:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

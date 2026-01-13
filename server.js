@@ -699,12 +699,17 @@ app.post('/admin/import/confirm', adminAuth, express.urlencoded({ extended: fals
 
 app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
     try {
-        const { name, messageTemplate, type, scheduledAt, contentSid, filters } = req.body;
+        const { name, messageTemplate, type, scheduledAt, contentSid, filters, recipientIds } = req.body;
         const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
         const status = normalizedScheduledAt ? 'scheduled' : 'draft';
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required' });
+        }
+
+        // Warn if scheduled without recipients
+        if (status === 'scheduled' && (!recipientIds || recipientIds.length === 0)) {
+            console.warn(`Campaign "${name}" scheduled without recipients`);
         }
 
         const campaign = createCampaign({
@@ -716,6 +721,11 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
             filters,
             status
         });
+
+        // Assign recipients if provided
+        if (recipientIds && Array.isArray(recipientIds) && recipientIds.length > 0) {
+            assignRecipientsToCampaign(campaign.id, recipientIds);
+        }
 
         res.status(201).json(campaign);
     } catch (error) {
