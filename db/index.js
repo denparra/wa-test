@@ -344,6 +344,69 @@ export function deleteContact(id) {
     return info.changes > 0;
 }
 
+/**
+ * Create a new contact with optional vehicle
+ * @param {Object} contactData - Contact data {phone, name, status}
+ * @param {Object|null} vehicleData - Optional vehicle data {make, model, year, price, link}
+ * @returns {Object} Created contact with id
+ */
+export function createContactWithVehicle(contactData, vehicleData = null) {
+    const { phone, name = null, status = 'active' } = contactData;
+
+    // Validate phone format
+    if (!phone || !phone.match(/^\+[1-9]\d{1,14}$/)) {
+        throw new Error('Invalid phone format. Must be E.164 format (e.g., +56975400946)');
+    }
+
+    // Validate status
+    if (!['active', 'opted_out', 'invalid'].includes(status)) {
+        throw new Error('Invalid status. Must be: active, opted_out, or invalid');
+    }
+
+    // Check if phone already exists
+    const existing = statements.getContactByPhone.get(phone);
+    if (existing) {
+        throw new Error('Phone number already exists');
+    }
+
+    // Validate vehicle data if provided
+    if (vehicleData) {
+        const { make, model, year } = vehicleData;
+        if (!make || !model || !year) {
+            throw new Error('Vehicle requires make, model, and year');
+        }
+        if (!Number.isInteger(year) || year < 1900 || year > new Date().getFullYear() + 1) {
+            throw new Error('Invalid vehicle year');
+        }
+    }
+
+    // Transaction: insert contact and vehicle
+    const transaction = db.transaction((contactData, vehicleData) => {
+        // Insert contact
+        statements.upsertContact.run(phone, name);
+        const contact = statements.getContactByPhone.get(phone);
+
+        if (!contact) {
+            throw new Error('Failed to create contact');
+        }
+
+        // Update status if not active (upsertContact always sets active)
+        if (status !== 'active') {
+            statements.updateContactStatus.run(status, phone);
+        }
+
+        // Insert vehicle if provided
+        if (vehicleData) {
+            const { make, model, year, price = null, link = null } = vehicleData;
+            statements.insertVehicle.run(contact.id, make, model, year, price, link);
+        }
+
+        return statements.getContactById.get(contact.id);
+    });
+
+    return transaction(contactData, vehicleData);
+}
+
 export function updateContactStatus(phone, status) {
     statements.updateContactStatus.run(status, phone);
 }

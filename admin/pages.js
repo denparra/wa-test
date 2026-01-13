@@ -129,8 +129,11 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
 
   const content = `<section class="panel">
       <div class="panel-header">
-        <h1>Contactos</h1>
-        <form class="inline" method="get" action="/admin/contacts">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <h1>Contactos</h1>
+          <a href="/admin/contacts/new" class="action-btn" style="background:var(--accent); color:white; border-color:var(--accent); padding:10px 20px; text-decoration:none;">+ Agregar Contacto</a>
+        </div>
+        <form class="inline" method="get" action="/admin/contacts" style="margin-top:10px;">
           <input type="text" name="q" placeholder="Buscar telefono o nombre" value="${escapeHtml(query || '')}" />
           <button type="submit">Buscar</button>
         </form>
@@ -214,6 +217,131 @@ export function renderContactEditPage({ contact = null, error = null }) {
 
       <div style="margin-top:20px; display:flex; gap:10px;">
         <button type="submit">${action}</button>
+        <a href="/admin/contacts" class="action-btn">Cancelar</a>
+      </div>
+    </form>
+  `;
+
+  return renderLayout({ title, content: form, active: 'contacts' });
+}
+
+export function renderContactCreatePage({ error = null, formData = {} }) {
+  const title = 'Crear Contacto';
+
+  const helpText = renderHelpText(
+    `<strong>Crear nuevo contacto:</strong> Ingresa los datos del contacto.
+    El teléfono debe estar en formato E.164 (+56...).
+    Opcionalmente puedes asociar un vehículo al contacto durante la creación.`
+  );
+
+  const errorMessage = error ? `<div class="muted" style="color:var(--bad); margin-bottom:10px;">${escapeHtml(error)}</div>` : '';
+
+  const vehicleSection = `
+    <div style="margin-bottom:15px; padding:15px; background:#f8f5f1; border-radius:8px;">
+      <div style="margin-bottom:10px;">
+        <label style="display:flex; align-items:center; cursor:pointer;">
+          <input type="checkbox" id="has_vehicle" name="has_vehicle" ${formData.has_vehicle ? 'checked' : ''}
+                 onchange="document.getElementById('vehicle-fields').style.display = this.checked ? 'block' : 'none';" />
+          <span style="margin-left:8px; font-weight:600;">¿Tiene vehículo asociado?</span>
+        </label>
+      </div>
+
+      <div id="vehicle-fields" style="display:${formData.has_vehicle ? 'block' : 'none'}; margin-top:15px; padding-left:10px; border-left:3px solid var(--accent);">
+        <h3 style="margin-bottom:10px;">Datos del Vehículo</h3>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; font-weight:600; margin-bottom:5px;">Marca *</label>
+          <input type="text" name="make" value="${escapeHtml(formData.make || '')}"
+                 placeholder="Toyota"
+                 style="width:100%;" />
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; font-weight:600; margin-bottom:5px;">Modelo *</label>
+          <input type="text" name="model" value="${escapeHtml(formData.model || '')}"
+                 placeholder="Corolla"
+                 style="width:100%;" />
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; font-weight:600; margin-bottom:5px;">Año *</label>
+          <input type="number" name="year" value="${escapeHtml(formData.year || '')}"
+                 placeholder="2020" min="1900" max="${new Date().getFullYear() + 1}"
+                 style="width:100%;" />
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; font-weight:600; margin-bottom:5px;">Precio (CLP)</label>
+          <input type="number" name="price" value="${escapeHtml(formData.price || '')}"
+                 placeholder="10000000" step="100000"
+                 style="width:100%;" />
+          <div class="muted" style="font-size:12px; margin-top:5px;">
+            Opcional. Precio en pesos chilenos.
+          </div>
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; font-weight:600; margin-bottom:5px;">Link de Publicación</label>
+          <input type="url" name="link" value="${escapeHtml(formData.link || '')}"
+                 placeholder="https://example.com/auto"
+                 style="width:100%;" />
+          <div class="muted" style="font-size:12px; margin-top:5px;">
+            Opcional. URL de la publicación del vehículo.
+          </div>
+        </div>
+
+        <div class="muted" style="font-size:12px; margin-top:10px;">
+          * Si activas la opción de vehículo, marca, modelo y año son obligatorios.
+        </div>
+      </div>
+    </div>
+  `;
+
+  const form = `
+    <form id="contactForm" class="panel" method="POST" action="/admin/contacts">
+      <div class="panel-header"><h1>${title}</h1></div>
+      ${helpText}
+      ${errorMessage}
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Teléfono (E.164) *</label>
+        <input type="text" name="phone" value="${escapeHtml(formData.phone || '')}" required
+               pattern="^\\+[1-9]\\d{1,14}$"
+               placeholder="+56975400946"
+               style="width:100%;" />
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Formato E.164: +[código país][número]. Ejemplo: +56975400946
+        </div>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Nombre</label>
+        <input type="text" name="name" value="${escapeHtml(formData.name || '')}"
+               placeholder="Juan Perez"
+               style="width:100%;" />
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Opcional. Nombre del contacto.
+        </div>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Estado *</label>
+        <select name="status" required style="width:100%;">
+          <option value="active" ${!formData.status || formData.status === 'active' ? 'selected' : ''}>Active (Activo)</option>
+          <option value="opted_out" ${formData.status === 'opted_out' ? 'selected' : ''}>Opted Out (BAJA)</option>
+          <option value="invalid" ${formData.status === 'invalid' ? 'selected' : ''}>Invalid (Inválido)</option>
+        </select>
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          <strong>active</strong>: Recibe mensajes normalmente<br/>
+          <strong>opted_out</strong>: No recibirá más mensajes (BAJA)<br/>
+          <strong>invalid</strong>: Teléfono inválido, no se usará
+        </div>
+      </div>
+
+      ${vehicleSection}
+
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button type="submit">Crear Contacto</button>
         <a href="/admin/contacts" class="action-btn">Cancelar</a>
       </div>
     </form>

@@ -21,6 +21,7 @@ import {
     getContactById,
     updateContact,
     deleteContact as dbDeleteContact,
+    createContactWithVehicle,
     updateContactStatus,
     updateCampaignFull,
     pauseCampaign,
@@ -59,6 +60,7 @@ import {
     renderCampaignFormPage,
     renderImportPage,
     renderContactEditPage,
+    renderContactCreatePage,
     renderOptOutEditPage,
     renderCampaignFollowUpPage,
     renderConversationPage
@@ -321,6 +323,57 @@ app.delete('/admin/api/contacts/:id', adminAuth, (req, res) => {
     } catch (error) {
         console.error('Contact delete error:', error);
         res.status(500).send('Failed to delete contact: ' + error.message);
+    }
+});
+
+// GET /admin/contacts/new - Show contact creation form
+app.get('/admin/contacts/new', adminAuth, (req, res) => {
+    res.status(200).type('text/html').send(renderContactCreatePage({ error: null }));
+});
+
+// POST /admin/contacts - Create new contact
+app.post('/admin/contacts', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const { phone, name, status, has_vehicle, make, model, year, price, link } = req.body;
+
+    // Prepare contact data
+    const contactData = {
+        phone: phone?.trim(),
+        name: name?.trim() || null,
+        status: status || 'active'
+    };
+
+    // Prepare vehicle data if checkbox is checked
+    let vehicleData = null;
+    if (has_vehicle === 'on' || has_vehicle === 'true') {
+        const trimmedMake = make?.trim();
+        const trimmedModel = model?.trim();
+        const parsedYear = parseInt(year);
+
+        if (trimmedMake && trimmedModel && parsedYear) {
+            vehicleData = {
+                make: trimmedMake,
+                model: trimmedModel,
+                year: parsedYear,
+                price: price ? parseFloat(price) : null,
+                link: link?.trim() || null
+            };
+        }
+    }
+
+    try {
+        const newContact = createContactWithVehicle(contactData, vehicleData);
+        console.log('Contact created:', newContact);
+
+        // Redirect to contacts list
+        res.redirect('/admin/contacts');
+    } catch (error) {
+        console.error('Contact creation error:', error);
+        res.status(400).type('text/html').send(
+            renderContactCreatePage({
+                error: error.message,
+                formData: { phone, name, status, has_vehicle, make, model, year, price, link }
+            })
+        );
     }
 });
 
