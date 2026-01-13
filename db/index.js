@@ -979,13 +979,37 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
 }
 
 /**
- * Get full conversation history for a recipient in a campaign
+ * Get full conversation history for a phone number
  * @param {string} phone - Phone number (E.164)
- * @param {number} campaignId - Campaign ID
+ * @param {number} campaignId - Campaign ID (kept for caller compatibility)
  * @returns {array} All messages (outbound + inbound) in chronological order
  */
 export function getRecipientConversationHistory(phone, campaignId) {
-    const messages = db.prepare(`
+    const normalizedPhone = normalizePhone(phone);
+    const rawPhone = String(phone || '').trim();
+    const lookupPhone = normalizedPhone || rawPhone;
+    if (!lookupPhone) {
+        return [];
+    }
+    const whatsappPhone = normalizedPhone ? `whatsapp:${normalizedPhone}` : null;
+    const query = whatsappPhone
+        ? `
+        SELECT 
+            m.id,
+            m.direction,
+            m.body,
+            m.status,
+            m.created_at,
+            m.message_sid,
+            CASE 
+                WHEN m.direction = 'outbound' THEN 'Sistema'
+                WHEN m.direction = 'inbound' THEN 'Contacto'
+            END AS sender
+        FROM messages m
+        WHERE m.phone IN (?, ?)
+        ORDER BY m.created_at ASC
+    `
+        : `
         SELECT 
             m.id,
             m.direction,
@@ -999,19 +1023,11 @@ export function getRecipientConversationHistory(phone, campaignId) {
             END AS sender
         FROM messages m
         WHERE m.phone = ?
-          AND (
-              m.campaign_id = ?  -- Mensajes outbound de esta campaña
-              OR (
-                  m.direction = 'inbound'
-                  AND datetime(m.created_at) >= (
-                      SELECT datetime(MIN(sent_at))
-                      FROM campaign_recipients
-                      WHERE campaign_id = ? AND phone = ?
-                  )
-              )
-          )
         ORDER BY m.created_at ASC
-    `).all(phone, campaignId, campaignId, phone);
+    `;
+
+    const params = whatsappPhone ? [lookupPhone, whatsappPhone] : [lookupPhone];
+    const messages = db.prepare(query).all(...params);
 
     return messages;
 }

@@ -467,7 +467,9 @@ app.get('/admin/campaigns/:id/seguimiento', (req, res) => {
 
 app.get('/admin/campaigns/:id/conversation/:phone', (req, res) => {
     const campaignId = Number(req.params.id);
-    const phone = decodeURIComponent(req.params.phone);
+    const rawPhone = decodeURIComponent(req.params.phone);
+    const normalizedPhone = normalizePhone(rawPhone);
+    const phone = normalizedPhone || rawPhone;
 
     if (!Number.isInteger(campaignId)) {
         return res.status(400).send('Invalid campaign id');
@@ -479,7 +481,9 @@ app.get('/admin/campaigns/:id/conversation/:phone', (req, res) => {
     }
 
     const messages = getRecipientConversationHistory(phone, campaignId);
-    const contact = upsertContact(phone, null); // Get contact info if exists
+    const contact = normalizedPhone
+        ? upsertContact(normalizedPhone, null)
+        : upsertContact(phone, null); // Get contact info if exists
 
     res.status(200).type('text/html').send(renderConversationPage({
         campaign,
@@ -1017,7 +1021,9 @@ app.get('/admin/api/campaigns/:id/recipients-with-replies', adminAuth, (req, res
 app.get('/admin/api/campaigns/:id/conversation/:phone', adminAuth, (req, res) => {
     try {
         const id = Number(req.params.id);
-        const phone = decodeURIComponent(req.params.phone);
+        const rawPhone = decodeURIComponent(req.params.phone);
+        const normalizedPhone = normalizePhone(rawPhone);
+        const phone = normalizedPhone || rawPhone;
 
         const messages = getRecipientConversationHistory(phone, id);
         res.json({ messages, phone, campaign_id: id });
@@ -1400,5 +1406,3 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => console.log('Listening on', PORT));
-
-
