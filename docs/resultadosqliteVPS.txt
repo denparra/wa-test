@@ -1,0 +1,237 @@
+sqlite> .databases
+main: /app/data/watest.db r/w
+sqlite> .tables
+campaign_recipients  contacts             opt_outs           
+campaigns            messages             vehicles           
+sqlite> .schema
+CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL UNIQUE, -- E.164: +56975400946
+    name TEXT,
+    status TEXT NOT NULL DEFAULT 'active', -- active|opted_out|invalid
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_contacts_phone ON contacts(phone);
+CREATE INDEX idx_contacts_status ON contacts(status);
+CREATE INDEX idx_contacts_created_at ON contacts(created_at);
+CREATE TABLE vehicles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_id INTEGER NOT NULL,
+    make TEXT NOT NULL,   -- Marca: "Toyota"
+    model TEXT NOT NULL,  -- Modelo: "Corolla"
+    year INTEGER NOT NULL, -- Año: 2015
+    price REAL,           -- Precio (CLP)
+    link TEXT,            -- URL publicación
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_vehicles_contact_id ON vehicles(contact_id);
+CREATE INDEX idx_vehicles_make ON vehicles(make);
+CREATE INDEX idx_vehicles_year ON vehicles(year);
+CREATE TABLE opt_outs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL UNIQUE, -- E.164
+    opted_out_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reason TEXT -- "user_request" | "manual"
+);
+CREATE INDEX idx_opt_outs_phone ON opt_outs(phone);
+CREATE TABLE campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft', -- draft|active|completed|cancelled
+    message_template TEXT, -- Plantilla del mensaje
+    started_at TEXT,
+    completed_at TEXT,
+    total_recipients INTEGER DEFAULT 0,
+    sent_count INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+, type TEXT NOT NULL DEFAULT 'twilio_template', scheduled_at TEXT, updated_at TEXT NOT NULL DEFAULT '2026-01-11 00:11:04', content_sid TEXT, filters TEXT, paused_at TEXT, failed_at TEXT, error_message TEXT);
+CREATE INDEX idx_campaigns_status ON campaigns(status);
+CREATE INDEX idx_campaigns_created_at ON campaigns(created_at);
+CREATE TABLE campaign_recipients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    phone TEXT NOT NULL, -- Redundante pero útil
+    status TEXT NOT NULL DEFAULT 'pending', -- pending|sent|delivered|failed|skipped
+    message_sid TEXT, -- Twilio message SID
+    sent_at TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_campaign_recipients_campaign_id ON campaign_recipients(campaign_id);
+CREATE INDEX idx_campaign_recipients_status ON campaign_recipients(status);
+CREATE INDEX idx_campaign_recipients_contact_id ON campaign_recipients(contact_id);
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    direction TEXT NOT NULL, -- "inbound" | "outbound"
+    contact_id INTEGER,
+    campaign_id INTEGER,
+    phone TEXT NOT NULL,
+    body TEXT,
+    message_sid TEXT UNIQUE, -- Twilio SID
+    status TEXT, -- queued|sent|delivered|failed
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_messages_direction ON messages(direction);
+CREATE INDEX idx_messages_contact_id ON messages(contact_id);
+CREATE INDEX idx_messages_campaign_id ON messages(campaign_id);
+CREATE INDEX idx_messages_created_at ON messages(created_at);
+CREATE INDEX idx_messages_message_sid ON messages(message_sid);
+CREATE INDEX idx_campaigns_type ON campaigns(type);
+CREATE INDEX idx_campaigns_scheduled_at ON campaigns(scheduled_at);
+CREATE INDEX idx_messages_phone_direction_created ON messages(phone, direction, created_at);
+CREATE TRIGGER trg_contacts_updated_at
+AFTER UPDATE ON contacts
+FOR EACH ROW
+BEGIN
+    UPDATE contacts SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+END;
+CREATE TRIGGER trg_vehicles_updated_at
+AFTER UPDATE ON vehicles
+FOR EACH ROW
+BEGIN
+    UPDATE vehicles SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+END;
+CREATE TRIGGER trg_campaigns_updated_at
+AFTER UPDATE ON campaigns
+FOR EACH ROW
+BEGIN
+    UPDATE campaigns SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+END;
+sqlite> 
+
+
+
+/app # sqlite3 -header -column /app/data/watest.db "select phone from messages 
+where direction='inbound' limit 5;"
+phone       
+------------
++56990080338
++56990080338
++56990080338
++56975400946
++56972990756
+
+
+
+/app # sqlite3 -header -column /app/data/watest.db "select phone from campaign_
+recipients limit 5;"
+phone       
+------------
++56990080338
++56990080338
++56944818520
++56948697923
++56989573774
+
+/app # sqlite3 -header -column /app/data/watest.db "select sent_at from campaig
+n_recipients where sent_at is not null limit 5;"
+sent_at                 
+------------------------
+2026-01-13T00:39:34.703Z
+2026-01-13T02:03:17.105Z
+2026-01-13T16:00:25.717Z
+2026-01-13T16:00:25.951Z
+2026-01-13T16:00:26.186Z
+
+/app # sqlite3 -header -column /app/data/watest.db "select created_at from mess
+ages limit 5;"
+created_at         
+-------------------
+2026-01-10 21:18:40
+2026-01-10 21:19:36
+2026-01-10 21:30:30
+2026-01-11 02:37:08
+2026-01-11 03:06:28
+/app # 
+/app # 
+/app # 
+/app # 
+/app # 
+/app # 
+
+/app # sqlite3 -header -column /app/data/watest.db "select sent_at, datetime(se
+nt_at) as parsed
+> from campaign_recipients
+> where campaign_id = 14
+> limit 5;"
+sent_at                   parsed             
+------------------------  -------------------
+2026-01-13T16:00:25.717Z  2026-01-13 16:00:25
+2026-01-13T16:00:25.951Z  2026-01-13 16:00:25
+2026-01-13T16:00:26.186Z  2026-01-13 16:00:26
+2026-01-13T16:00:26.409Z  2026-01-13 16:00:26
+
+/app # sqlite3 -header -column /app/data/watest.db "select cr.phone, cr.sent_at
+, m.created_at, m.body
+> from campaign_recipients cr
+> join messages m
+>   on REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'wha
+tsapp:', '')
+>  and m.direction = 'inbound'
+> where cr.campaign_id = 14
+> order by m.created_at desc
+> limit 20;"
+phone         sent_at                   created_at           body       
+------------  ------------------------  -------------------  -----------
++56990080338  2026-01-13T16:00:26.409Z  2026-01-13 14:33:35  Me interesa
++56990080338  2026-01-13T16:00:26.409Z  2026-01-13 13:02:44  Contáctame!
++56948697923  2026-01-13T16:00:25.951Z  2026-01-13 13:01:19  Contáctame!
++56989573774  2026-01-13T16:00:26.186Z  2026-01-13 13:01:06  Contáctame!
++56990080338  2026-01-13T16:00:26.409Z  2026-01-12 22:48:51  Baja       
++56990080338  2026-01-13T16:00:26.409Z  2026-01-11 02:37:08  Me interesa
++56990080338  2026-01-13T16:00:26.409Z  2026-01-10 21:19:36  BAJA       
++56990080338  2026-01-13T16:00:26.409Z  2026-01-10 21:18:40  Test 123  
+
+/app # sqlite3 -header -column /app/data/watest.db "select status, count(*) as 
+total
+> from campaign_recipients
+> where campaign_id = 14
+> group by status;"
+status  total
+------  -----
+sent    4    
+
+#1
+/app #  sqlite3 -header -column /app/data/watest.db "select cr.phone, count(m.i
+d) as
+>   inbound_total, max(m.created_at) as last_inbound from campaign_recipients c
+r left
+>   join messages m on REPLACE(LOWER(m.phone), 'whatsapp:', '') =
+>   REPLACE(LOWER(cr.phone), 'whatsapp:', '') and m.direction='inbound' where
+>   cr.campaign_id=14 group by cr.phone order by inbound_total desc limit 10;"
+phone         inbound_total  last_inbound       
+------------  -------------  -------------------
++56990080338  6              2026-01-13 14:33:35
++56989573774  1              2026-01-13 13:01:06
++56948697923  1              2026-01-13 13:01:19
++56944818520  0   
+
+#2
+/app # sqlite3 -header -column /app/data/watest.db "select cr.phone, cr.sent_at
+,
+>   m.created_at from campaign_recipients cr join messages m on REPLACE(LOWER(m
+.phone),
+>   'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '') and
+>   m.direction='inbound' where cr.campaign_id=14 and datetime(m.created_at) >=
+>   datetime(cr.sent_at) and datetime(m.created_at) <= datetime(cr.sent_at, '+7
+ days')
+>   order by m.created_at desc limit 20;"
+/app # 
+
+#3
+/app # sqlite3 -header -column /app/data/watest.db "select status, count(*) as 
+total from
+>   campaign_recipients where campaign_id=14 group by status;"
+status  total
+------  -----
+sent    4    
+/app # 

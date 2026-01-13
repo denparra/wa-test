@@ -95,3 +95,9 @@ AND datetime(scheduled_at) <= datetime('now', 'localtime')
 
 1.  **Si tienes acceso root al VPS:** Usa la **Opción 1**. Es la solución definitiva y correcta.
 2.  **Si no tienes root o prefieres no tocar el OS:** Usa la **Opción 2**. Es la más segura para asegurar que la consulta SQL haga exactamente lo que esperas (-3 horas) sin depender de configuraciones externas complejas.
+
+---
+
+## Nota: Seguimiento de campanas (replies 24h/7d)
+
+El tracking de replies compara `messages.created_at` con `campaign_recipients.sent_at`. Si `sent_at` esta en UTC (ISO con `Z`) y `created_at` esta en hora local, las ventanas 24h/7d pueden quedar vacias en VPS. La correccion mas segura es normalizar en las consultas usando `datetime(sent_at, 'localtime')` o estandarizar ambos timestamps al mismo huso horario.

@@ -881,8 +881,8 @@ export function getCampaignFollowUpStats(campaignId) {
              INNER JOIN messages m ON (
                  REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
-                 AND datetime(m.created_at) >= datetime(cr.sent_at)
-                 AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
+                 AND datetime(m.created_at) >= datetime(cr.sent_at, 'localtime')
+                 AND datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+7 days')
              )
              WHERE cr.campaign_id = c.id
                AND cr.status IN ('sent', 'delivered')) AS recipients_with_replies,
@@ -893,8 +893,8 @@ export function getCampaignFollowUpStats(campaignId) {
              INNER JOIN messages m ON (
                  REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
-                 AND datetime(m.created_at) >= datetime(cr.sent_at)
-                 AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
+                 AND datetime(m.created_at) >= datetime(cr.sent_at, 'localtime')
+                 AND datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+7 days')
              )
              WHERE cr.campaign_id = c.id
                AND cr.status IN ('sent', 'delivered')) AS total_replies,
@@ -905,7 +905,7 @@ export function getCampaignFollowUpStats(campaignId) {
              INNER JOIN messages m ON (
                  REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
-                 AND datetime(m.created_at) BETWEEN datetime(cr.sent_at) AND datetime(cr.sent_at, '+1 day')
+                 AND datetime(m.created_at) BETWEEN datetime(cr.sent_at, 'localtime') AND datetime(cr.sent_at, 'localtime', '+1 day')
              )
              WHERE cr.campaign_id = c.id
                AND cr.status IN ('sent', 'delivered')) AS replies_24h,
@@ -916,7 +916,7 @@ export function getCampaignFollowUpStats(campaignId) {
              INNER JOIN messages m ON (
                  REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
-                 AND datetime(m.created_at) >= datetime(cr.sent_at)
+                 AND datetime(m.created_at) >= datetime(cr.sent_at, 'localtime')
              )
              WHERE cr.campaign_id = c.id) AS last_reply_at
             
@@ -944,11 +944,11 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
             cr.error_message,
             COUNT(DISTINCT m.id) AS total_replies,
             COUNT(DISTINCT CASE 
-                WHEN datetime(m.created_at) <= datetime(cr.sent_at, '+1 day') 
+                WHEN datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+1 day') 
                 THEN m.id 
             END) AS replies_24h,
             COUNT(DISTINCT CASE 
-                WHEN datetime(m.created_at) <= datetime(cr.sent_at, '+7 days') 
+                WHEN datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+7 days') 
                 THEN m.id 
             END) AS replies_7d,
             MAX(m.created_at) AS last_reply_at,
@@ -957,7 +957,7 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
                 FROM messages
                 WHERE REPLACE(LOWER(phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                   AND direction = 'inbound'
-                  AND datetime(created_at) >= datetime(cr.sent_at)
+                  AND datetime(created_at) >= datetime(cr.sent_at, 'localtime')
                 ORDER BY created_at DESC
                 LIMIT 1
             ) AS last_reply_preview
@@ -966,8 +966,8 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
         LEFT JOIN messages m ON (
             REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
             AND m.direction = 'inbound'
-            AND datetime(m.created_at) >= datetime(cr.sent_at)
-            AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
+            AND datetime(m.created_at) >= datetime(cr.sent_at, 'localtime')
+            AND datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+7 days')
         )
         WHERE cr.campaign_id = ?
         GROUP BY cr.id, cr.phone, c.name, cr.status, cr.sent_at, cr.error_message
