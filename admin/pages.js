@@ -87,7 +87,8 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
         { key: 'status', label: 'Status', render: (row) => renderBadge(row.status, statusTone(row.status)) },
         { key: 'created_at', label: 'Creado', render: (row) => escapeHtml(formatDate(row.created_at)) },
         { key: 'updated_at', label: 'Actualizado', render: (row) => escapeHtml(formatDate(row.updated_at)) },
-        { key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
+        {
+          key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
           <a href="/admin/contacts/${row.id}/edit" class="action-btn" title="Editar contacto">✏️</a>
           <button onclick="deleteContact(${row.id}, '${escapeHtml(row.phone)}')" class="action-btn" title="Eliminar contacto">🗑️</button>
           ${renderCopyButton(row.phone, '📋')}
@@ -339,9 +340,12 @@ export function renderCampaignsPage({ campaigns, offset, limit }) {
     });
 
   const content = `<section class="panel">
-      <div class="panel-header">
-        <h1>Campañas</h1>
-        <div class="muted">Total: ${campaigns.length}</div>
+      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <h1>Campañas</h1>
+            <div class="muted">Total: ${campaigns.length}</div>
+        </div>
+        <div id="campaign-clock" style="font-family:monospace; font-size:1.2rem; font-weight:bold; color:var(--accent);">--:--:--</div>
       </div>
       ${helpText}
       ${tableContent}
@@ -378,6 +382,18 @@ export function renderCampaignsPage({ campaigns, offset, limit }) {
         if(res.ok) window.location.reload();
         else alert('Error al eliminar');
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        function updateClock() {
+            const clock = document.getElementById('campaign-clock');
+            if (clock) {
+                const now = new Date();
+                clock.textContent = now.toLocaleTimeString('es-CL');
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+    });
     </script>
     `;
 
@@ -1152,20 +1168,20 @@ export function renderImportPage({ preview = null, result = null }) {
         <div style="margin-bottom:15px;">
           <strong>Registros válidos que serán importados:</strong>
           ${renderTable({
-            columns: [
-              { key: 'phone', label: 'Teléfono (E.164)' },
-              { key: 'name', label: 'Nombre' },
-              { key: 'make', label: 'Marca' },
-              { key: 'model', label: 'Modelo' },
-              { key: 'year', label: 'Año' },
-              { key: 'price', label: 'Precio' },
-              { key: 'link', label: 'Link', render: (row) => row.link ? `<span title="${escapeHtml(row.link)}">${escapeHtml(truncate(row.link, 30))}</span>` : '' }
-            ],
-            rows: preview.valid.slice(0, 100),
-            searchable: true,
-            sortable: true,
-            tableId: 'preview-valid-table'
-          })}
+    columns: [
+      { key: 'phone', label: 'Teléfono (E.164)' },
+      { key: 'name', label: 'Nombre' },
+      { key: 'make', label: 'Marca' },
+      { key: 'model', label: 'Modelo' },
+      { key: 'year', label: 'Año' },
+      { key: 'price', label: 'Precio' },
+      { key: 'link', label: 'Link', render: (row) => row.link ? `<span title="${escapeHtml(row.link)}">${escapeHtml(truncate(row.link, 30))}</span>` : '' }
+    ],
+    rows: preview.valid.slice(0, 100),
+    searchable: true,
+    sortable: true,
+    tableId: 'preview-valid-table'
+  })}
           ${preview.valid.length > 100 ? `<div class="muted" style="margin-top:8px;">Mostrando primeros 100 de ${preview.valid.length} registros válidos.</div>` : ''}
         </div>
       ` : ''}
@@ -1174,17 +1190,17 @@ export function renderImportPage({ preview = null, result = null }) {
         <div style="margin-bottom:15px;">
           <strong>Registros inválidos (NO se importarán):</strong>
           ${renderTable({
-            columns: [
-              { key: 'row', label: 'Fila' },
-              { key: 'phone', label: 'Teléfono' },
-              { key: 'name', label: 'Nombre' },
-              { key: 'error', label: 'Motivo del error' }
-            ],
-            rows: preview.invalid.slice(0, 50),
-            searchable: false,
-            sortable: false,
-            tableId: 'preview-invalid-table'
-          })}
+    columns: [
+      { key: 'row', label: 'Fila' },
+      { key: 'phone', label: 'Teléfono' },
+      { key: 'name', label: 'Nombre' },
+      { key: 'error', label: 'Motivo del error' }
+    ],
+    rows: preview.invalid.slice(0, 50),
+    searchable: false,
+    sortable: false,
+    tableId: 'preview-invalid-table'
+  })}
           ${preview.invalid.length > 50 ? `<div class="muted" style="margin-top:8px;">Mostrando primeros 50 de ${preview.invalid.length} registros inválidos.</div>` : ''}
         </div>
       ` : ''}
@@ -1214,16 +1230,16 @@ export function renderImportPage({ preview = null, result = null }) {
         <div style="margin-bottom:15px;">
           <strong>Errores durante la importación:</strong>
           ${renderTable({
-            columns: [
-              { key: 'row', label: 'Fila' },
-              { key: 'phone', label: 'Teléfono' },
-              { key: 'error', label: 'Error' }
-            ],
-            rows: result.errors.slice(0, 50),
-            searchable: false,
-            sortable: false,
-            tableId: 'result-errors-table'
-          })}
+    columns: [
+      { key: 'row', label: 'Fila' },
+      { key: 'phone', label: 'Teléfono' },
+      { key: 'error', label: 'Error' }
+    ],
+    rows: result.errors.slice(0, 50),
+    searchable: false,
+    sortable: false,
+    tableId: 'result-errors-table'
+  })}
         </div>
       ` : ''}
 
