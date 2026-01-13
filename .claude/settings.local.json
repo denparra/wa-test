@@ -23,7 +23,11 @@
       "mcp__playwright__browser_close",
       "mcp__playwright__browser_type",
       "Bash(node -e:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm start)",
+      "mcp__playwright__browser_run_code",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

@@ -881,42 +881,42 @@ export function getCampaignFollowUpStats(campaignId) {
              INNER JOIN messages m ON (
                  m.phone = cr.phone
                  AND m.direction = 'inbound'
-                 AND m.created_at >= cr.sent_at
+                 AND datetime(m.created_at) >= datetime(cr.sent_at)
                  AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
              )
              WHERE cr.campaign_id = c.id
                AND cr.status IN ('sent', 'delivered')) AS recipients_with_replies,
-            
+
             -- Total de replies recibidos (7 días)
             (SELECT COUNT(m.id)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
                  m.phone = cr.phone
                  AND m.direction = 'inbound'
-                 AND m.created_at >= cr.sent_at
+                 AND datetime(m.created_at) >= datetime(cr.sent_at)
                  AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
              )
              WHERE cr.campaign_id = c.id
                AND cr.status IN ('sent', 'delivered')) AS total_replies,
-            
+
             -- Tasa de respuesta 24h
             (SELECT COUNT(DISTINCT cr.id)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
                  m.phone = cr.phone
                  AND m.direction = 'inbound'
-                 AND datetime(m.created_at) BETWEEN cr.sent_at AND datetime(cr.sent_at, '+1 day')
+                 AND datetime(m.created_at) BETWEEN datetime(cr.sent_at) AND datetime(cr.sent_at, '+1 day')
              )
              WHERE cr.campaign_id = c.id
                AND cr.status IN ('sent', 'delivered')) AS replies_24h,
-            
+
             -- Último reply recibido
             (SELECT MAX(m.created_at)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
                  m.phone = cr.phone
                  AND m.direction = 'inbound'
-                 AND m.created_at >= cr.sent_at
+                 AND datetime(m.created_at) >= datetime(cr.sent_at)
              )
              WHERE cr.campaign_id = c.id) AS last_reply_at
             
@@ -953,12 +953,12 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
             END) AS replies_7d,
             MAX(m.created_at) AS last_reply_at,
             (
-                SELECT body 
-                FROM messages 
-                WHERE phone = cr.phone 
+                SELECT body
+                FROM messages
+                WHERE phone = cr.phone
                   AND direction = 'inbound'
-                  AND created_at >= cr.sent_at
-                ORDER BY created_at DESC 
+                  AND datetime(created_at) >= datetime(cr.sent_at)
+                ORDER BY created_at DESC
                 LIMIT 1
             ) AS last_reply_preview
         FROM campaign_recipients cr
@@ -966,7 +966,7 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
         LEFT JOIN messages m ON (
             m.phone = cr.phone
             AND m.direction = 'inbound'
-            AND m.created_at >= cr.sent_at
+            AND datetime(m.created_at) >= datetime(cr.sent_at)
             AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
         )
         WHERE cr.campaign_id = ?
@@ -1002,10 +1002,10 @@ export function getRecipientConversationHistory(phone, campaignId) {
           AND (
               m.campaign_id = ?  -- Mensajes outbound de esta campaña
               OR (
-                  m.direction = 'inbound' 
-                  AND m.created_at >= (
-                      SELECT MIN(sent_at) 
-                      FROM campaign_recipients 
+                  m.direction = 'inbound'
+                  AND datetime(m.created_at) >= (
+                      SELECT datetime(MIN(sent_at))
+                      FROM campaign_recipients
                       WHERE campaign_id = ? AND phone = ?
                   )
               )
