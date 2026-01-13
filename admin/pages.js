@@ -447,9 +447,12 @@ export function renderCampaignDetailPage({ campaign, recipients, offset, limit }
     ` : '';
 
   const header = `<section class="panel">
-      <div class="panel-header">
-        <h1>${escapeHtml(campaign.name)}</h1>
-        ${renderBadge(campaign.status, statusTone(campaign.status))}
+      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <h1>${escapeHtml(campaign.name)}</h1>
+            ${renderBadge(campaign.status, statusTone(campaign.status))}
+        </div>
+        <div id="campaign-clock" style="font-family:monospace; font-size:1.2rem; font-weight:bold; color:var(--accent);">--:--:--</div>
       </div>
       <div class="muted"><strong>Tipo:</strong> ${escapeHtml(campaign.type || 'N/A')}</div>
       <div class="muted"><strong>Programada:</strong> ${escapeHtml(formatDate(campaign.scheduled_at || '')) || 'N/A'}</div>
@@ -634,6 +637,16 @@ export function renderCampaignDetailPage({ campaign, recipients, offset, limit }
               refreshProgress();
               setInterval(refreshProgress, 10000);
           }
+
+          function updateClock() {
+              const clock = document.getElementById('campaign-clock');
+              if (clock) {
+                  const now = new Date();
+                  clock.textContent = now.toLocaleTimeString('es-CL');
+              }
+          }
+          setInterval(updateClock, 1000);
+          updateClock();
       });
     </script>
     `;
@@ -654,7 +667,10 @@ export function renderCampaignFormPage({ campaign = {} }) {
 
   const form = `
     <form id="campaignForm" class="panel">
-        <div class="panel-header"><h1>${title}</h1></div>
+        <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+             <h1>${title}</h1>
+             <div id="campaign-clock" style="font-family:monospace; font-size:1.2rem; font-weight:bold; color:var(--accent);">--:--:--</div>
+        </div>
         <div id="campaignFormError" class="muted" style="color:var(--bad); margin-bottom:10px;"></div>
         
         <div style="margin-bottom:15px;">
@@ -738,6 +754,16 @@ export function renderCampaignFormPage({ campaign = {} }) {
     </form>
     <script>
     console.log('Campaign form script loaded');
+
+    function updateClock() {
+        const clock = document.getElementById('campaign-clock');
+        if (clock) {
+            const now = new Date();
+            clock.textContent = now.toLocaleTimeString('es-CL');
+        }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
 
     function escapeHtml(value) {
         return String(value || '')
