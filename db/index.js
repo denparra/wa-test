@@ -879,7 +879,7 @@ export function getCampaignFollowUpStats(campaignId) {
             (SELECT COUNT(DISTINCT cr.id)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
-                 m.phone = cr.phone
+                 REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
                  AND datetime(m.created_at) >= datetime(cr.sent_at)
                  AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
@@ -891,7 +891,7 @@ export function getCampaignFollowUpStats(campaignId) {
             (SELECT COUNT(m.id)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
-                 m.phone = cr.phone
+                 REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
                  AND datetime(m.created_at) >= datetime(cr.sent_at)
                  AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
@@ -903,7 +903,7 @@ export function getCampaignFollowUpStats(campaignId) {
             (SELECT COUNT(DISTINCT cr.id)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
-                 m.phone = cr.phone
+                 REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
                  AND datetime(m.created_at) BETWEEN datetime(cr.sent_at) AND datetime(cr.sent_at, '+1 day')
              )
@@ -914,7 +914,7 @@ export function getCampaignFollowUpStats(campaignId) {
             (SELECT MAX(m.created_at)
              FROM campaign_recipients cr
              INNER JOIN messages m ON (
-                 m.phone = cr.phone
+                 REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                  AND m.direction = 'inbound'
                  AND datetime(m.created_at) >= datetime(cr.sent_at)
              )
@@ -955,7 +955,7 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
             (
                 SELECT body
                 FROM messages
-                WHERE phone = cr.phone
+                WHERE REPLACE(LOWER(phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
                   AND direction = 'inbound'
                   AND datetime(created_at) >= datetime(cr.sent_at)
                 ORDER BY created_at DESC
@@ -964,7 +964,7 @@ export function listCampaignRecipientsWithReplies(campaignId, { limit = 50, offs
         FROM campaign_recipients cr
         LEFT JOIN contacts c ON c.id = cr.contact_id
         LEFT JOIN messages m ON (
-            m.phone = cr.phone
+            REPLACE(LOWER(m.phone), 'whatsapp:', '') = REPLACE(LOWER(cr.phone), 'whatsapp:', '')
             AND m.direction = 'inbound'
             AND datetime(m.created_at) >= datetime(cr.sent_at)
             AND datetime(m.created_at) <= datetime(cr.sent_at, '+7 days')
