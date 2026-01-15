@@ -149,3 +149,27 @@ BEGIN
     UPDATE campaigns SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
 END;
 
+-- ============================================================
+-- MESSAGE_TEMPLATES: Plantillas reutilizables de mensajes
+-- Phase 2.2: Templates de Mensajes
+-- ============================================================
+CREATE TABLE IF NOT EXISTS message_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    body TEXT NOT NULL,              -- Texto con variables {{nombre}}, {{marca}}, etc.
+    content_sid TEXT,                -- Twilio Content API SID (opcional)
+    is_active INTEGER DEFAULT 1,     -- 1=activo, 0=archivado
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_templates_name ON message_templates(name);
+CREATE INDEX IF NOT EXISTS idx_message_templates_is_active ON message_templates(is_active);
+
+DROP TRIGGER IF EXISTS trg_message_templates_updated_at;
+CREATE TRIGGER IF NOT EXISTS trg_message_templates_updated_at
+AFTER UPDATE ON message_templates
+FOR EACH ROW
+BEGIN
+    UPDATE message_templates SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+END;

@@ -1,48 +1,49 @@
 const NAV_ITEMS = [
-    { key: 'home', label: 'Resumen', href: '/admin' },
-    { key: 'contacts', label: 'Contactos', href: '/admin/contacts' },
-    { key: 'messages', label: 'Mensajes', href: '/admin/messages' },
-    { key: 'campaigns', label: 'Campanas', href: '/admin/campaigns' },
-    { key: 'opt-outs', label: 'Opt-outs', href: '/admin/opt-outs' },
-    { key: 'import', label: 'Importar', href: '/admin/import' }
+  { key: 'home', label: 'Resumen', href: '/admin' },
+  { key: 'contacts', label: 'Contactos', href: '/admin/contacts' },
+  { key: 'messages', label: 'Mensajes', href: '/admin/messages' },
+  { key: 'campaigns', label: 'Campanas', href: '/admin/campaigns' },
+  { key: 'templates', label: 'Templates', href: '/admin/templates' },
+  { key: 'opt-outs', label: 'Opt-outs', href: '/admin/opt-outs' },
+  { key: 'import', label: 'Importar', href: '/admin/import' }
 ];
 
 export function escapeHtml(value = '') {
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function truncate(value = '', max = 80) {
-    const text = String(value || '');
-    if (text.length <= max) {
-        return text;
-    }
-    return `${text.slice(0, Math.max(0, max - 3))}...`;
+  const text = String(value || '');
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, max - 3))}...`;
 }
 
 export function formatDate(value) {
-    if (!value) {
-        return '';
-    }
-    return String(value).replace('T', ' ');
+  if (!value) {
+    return '';
+  }
+  return String(value).replace('T', ' ');
 }
 
 export function renderBadge(value, tone = 'muted') {
-    const safe = escapeHtml(value || '');
-    return `<span class="badge badge-${tone}">${safe}</span>`;
+  const safe = escapeHtml(value || '');
+  return `<span class="badge badge-${tone}">${safe}</span>`;
 }
 
 export function renderLayout({ title, content, active }) {
-    const nav = NAV_ITEMS.map((item) => {
-        const isActive = item.key === active ? 'active' : '';
-        return `<a class="nav-link ${isActive}" href="${item.href}">${item.label}</a>`;
-    }).join('');
+  const nav = NAV_ITEMS.map((item) => {
+    const isActive = item.key === active ? 'active' : '';
+    return `<a class="nav-link ${isActive}" href="${item.href}">${item.label}</a>`;
+  }).join('');
 
-    return `<!doctype html>
+  return `<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -380,14 +381,14 @@ export function renderLayout({ title, content, active }) {
 }
 
 export function renderHelpText(text) {
-    return `<div class="help-text">${text}</div>`;
+  return `<div class="help-text">${text}</div>`;
 }
 
 export function renderEmptyState({ title, message, ctaText, ctaLink }) {
-    const cta = ctaText && ctaLink
-        ? `<a href="${ctaLink}" class="empty-cta">${escapeHtml(ctaText)}</a>`
-        : '';
-    return `<div class="empty">
+  const cta = ctaText && ctaLink
+    ? `<a href="${ctaLink}" class="empty-cta">${escapeHtml(ctaText)}</a>`
+    : '';
+  return `<div class="empty">
       <div class="empty-title">${escapeHtml(title)}</div>
       <div>${escapeHtml(message)}</div>
       ${cta}
@@ -395,34 +396,34 @@ export function renderEmptyState({ title, message, ctaText, ctaLink }) {
 }
 
 export function renderTable({ columns, rows, searchable = false, sortable = false, tableId = 'data-table' }) {
-    if (!rows.length) {
-        return '<div class="empty">Sin datos para mostrar.</div>';
-    }
+  if (!rows.length) {
+    return '<div class="empty">Sin datos para mostrar.</div>';
+  }
 
-    const header = columns.map((col) => {
-        const sortClass = sortable ? 'sortable' : '';
-        const sortIcon = sortable ? '<span class="sort-icon">↕</span>' : '';
-        return `<th class="${sortClass}" data-key="${col.key}">${escapeHtml(col.label)}${sortIcon}</th>`;
+  const header = columns.map((col) => {
+    const sortClass = sortable ? 'sortable' : '';
+    const sortIcon = sortable ? '<span class="sort-icon">↕</span>' : '';
+    return `<th class="${sortClass}" data-key="${col.key}">${escapeHtml(col.label)}${sortIcon}</th>`;
+  }).join('');
+
+  const body = rows.map((row, idx) => {
+    const cells = columns.map((col) => {
+      if (col.render) {
+        return `<td>${col.render(row)}</td>`;
+      }
+      const value = row[col.key];
+      return `<td>${escapeHtml(value ?? '')}</td>`;
     }).join('');
+    return `<tr data-row-index="${idx}">${cells}</tr>`;
+  }).join('');
 
-    const body = rows.map((row, idx) => {
-        const cells = columns.map((col) => {
-            if (col.render) {
-                return `<td>${col.render(row)}</td>`;
-            }
-            const value = row[col.key];
-            return `<td>${escapeHtml(value ?? '')}</td>`;
-        }).join('');
-        return `<tr data-row-index="${idx}">${cells}</tr>`;
-    }).join('');
-
-    const searchBox = searchable
-        ? `<div class="search-box" style="margin-bottom: 12px;">
+  const searchBox = searchable
+    ? `<div class="search-box" style="margin-bottom: 12px;">
              <input type="text" id="${tableId}-search" placeholder="Buscar en tabla..." />
            </div>`
-        : '';
+    : '';
 
-    const script = (searchable || sortable) ? `
+  const script = (searchable || sortable) ? `
       <script>
       (function() {
         const table = document.getElementById('${tableId}');
@@ -470,36 +471,36 @@ export function renderTable({ columns, rows, searchable = false, sortable = fals
       </script>
     ` : '';
 
-    return `${searchBox}<table id="${tableId}">
+  return `${searchBox}<table id="${tableId}">
       <thead><tr>${header}</tr></thead>
       <tbody>${body}</tbody>
     </table>${script}`;
 }
 
 export function renderPager({ basePath, query, offset, limit, hasNext }) {
-    const prevOffset = Math.max(0, offset - limit);
-    const nextOffset = offset + limit;
-    const prevLink = offset > 0 ? `${basePath}?${buildQuery({ ...query, offset: prevOffset, limit })}` : '';
-    const nextLink = hasNext ? `${basePath}?${buildQuery({ ...query, offset: nextOffset, limit })}` : '';
+  const prevOffset = Math.max(0, offset - limit);
+  const nextOffset = offset + limit;
+  const prevLink = offset > 0 ? `${basePath}?${buildQuery({ ...query, offset: prevOffset, limit })}` : '';
+  const nextLink = hasNext ? `${basePath}?${buildQuery({ ...query, offset: nextOffset, limit })}` : '';
 
-    return `<div class="pager">
+  return `<div class="pager">
       <div>${prevLink ? `<a href="${prevLink}">← Anterior</a>` : ''}</div>
       <div>${nextLink ? `<a href="${nextLink}">Siguiente →</a>` : ''}</div>
     </div>`;
 }
 
 export function buildQuery(params) {
-    const search = new URLSearchParams();
-    Object.entries(params || {}).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === '') {
-            return;
-        }
-        search.set(key, String(value));
-    });
-    return search.toString();
+  const search = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return;
+    }
+    search.set(key, String(value));
+  });
+  return search.toString();
 }
 
 export function renderCopyButton(text, label = 'Copiar') {
-    const encoded = escapeHtml(text).replace(/'/g, '&apos;');
-    return `<button type="button" class="action-btn" onclick="navigator.clipboard.writeText('${encoded}').then(() => { this.textContent='✓ Copiado'; setTimeout(() => this.textContent='${label}', 1500); })">${label}</button>`;
+  const encoded = escapeHtml(text).replace(/'/g, '&apos;');
+  return `<button type="button" class="action-btn" onclick="navigator.clipboard.writeText('${encoded}').then(() => { this.textContent='✓ Copiado'; setTimeout(() => this.textContent='${label}', 1500); })">${label}</button>`;
 }

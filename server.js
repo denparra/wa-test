@@ -48,7 +48,12 @@ import {
     getOptOutByPhone,
     getCampaignFollowUpStats,
     listCampaignRecipientsWithReplies,
-    getRecipientConversationHistory
+    getRecipientConversationHistory,
+    createTemplate,
+    listTemplates,
+    getTemplateById,
+    updateTemplate,
+    deleteTemplate as dbDeleteTemplate
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -63,7 +68,9 @@ import {
     renderContactCreatePage,
     renderOptOutEditPage,
     renderCampaignFollowUpPage,
-    renderConversationPage
+    renderConversationPage,
+    renderTemplatesPage,
+    renderTemplateFormPage
 } from './admin/pages.js';
 
 const app = express();
@@ -629,6 +636,116 @@ app.delete('/admin/api/opt-outs/:phone', adminAuth, (req, res) => {
     } catch (error) {
         console.error('Opt-out delete error:', error);
         res.status(500).send('Failed to delete opt-out: ' + error.message);
+    }
+});
+
+// ============================================================
+// Phase 2.2: Message Templates Routes
+// ============================================================
+
+// GET /admin/templates - List templates
+app.get('/admin/templates', adminAuth, (req, res) => {
+    const { limit, offset } = getPaging(req);
+    const templates = listTemplates({ limit, offset });
+    res.status(200).type('text/html').send(renderTemplatesPage({ templates, offset, limit }));
+});
+
+// GET /admin/templates/new - New template form
+app.get('/admin/templates/new', adminAuth, (req, res) => {
+    res.status(200).type('text/html').send(renderTemplateFormPage({}));
+});
+
+// GET /admin/templates/:id/edit - Edit template form
+app.get('/admin/templates/:id/edit', adminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Invalid template ID');
+    }
+    const template = getTemplateById(id);
+    if (!template) {
+        return res.status(404).send('Template not found');
+    }
+    res.status(200).type('text/html').send(renderTemplateFormPage({ template }));
+});
+
+// POST /admin/templates - Create template
+app.post('/admin/templates', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const { name, body, contentSid } = req.body;
+    if (!name?.trim() || !body?.trim()) {
+        return res.status(400).type('text/html').send(
+            renderTemplateFormPage({ error: 'Nombre y mensaje son requeridos' })
+        );
+    }
+    try {
+        createTemplate({ name: name.trim(), body: body.trim(), contentSid: contentSid?.trim() || null });
+        res.redirect('/admin/templates');
+    } catch (error) {
+        console.error('Template create error:', error);
+        res.status(500).type('text/html').send(
+            renderTemplateFormPage({ error: error.message })
+        );
+    }
+});
+
+// POST /admin/templates/:id - Update template
+app.post('/admin/templates/:id', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Invalid template ID');
+    }
+    const { name, body, contentSid, isActive } = req.body;
+    if (!name?.trim() || !body?.trim()) {
+        const template = getTemplateById(id);
+        return res.status(400).type('text/html').send(
+            renderTemplateFormPage({ template, error: 'Nombre y mensaje son requeridos' })
+        );
+    }
+    try {
+        const updated = updateTemplate(id, {
+            name: name.trim(),
+            body: body.trim(),
+            contentSid: contentSid?.trim() || null,
+            isActive: isActive === '1' || isActive === 'on'
+        });
+        if (!updated) {
+            return res.status(404).send('Template not found');
+        }
+        res.redirect('/admin/templates');
+    } catch (error) {
+        console.error('Template update error:', error);
+        const template = getTemplateById(id);
+        res.status(500).type('text/html').send(
+            renderTemplateFormPage({ template, error: error.message })
+        );
+    }
+});
+
+// DELETE /admin/api/templates/:id - Delete template
+app.delete('/admin/api/templates/:id', adminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Invalid template ID');
+    }
+    try {
+        const deleted = dbDeleteTemplate(id);
+        if (!deleted) {
+            return res.status(404).send('Template not found');
+        }
+        res.status(200).send('Template deleted');
+    } catch (error) {
+        console.error('Template delete error:', error);
+        res.status(500).send('Failed to delete template: ' + error.message);
+    }
+});
+
+// GET /admin/api/templates - JSON list for campaign form dropdown
+app.get('/admin/api/templates', adminAuth, (req, res) => {
+    try {
+        const templates = listTemplates({ limit: 100, offset: 0 });
+        res.json({ templates });
+    } catch (error) {
+        console.error('API templates error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 

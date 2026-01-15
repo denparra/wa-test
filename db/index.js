@@ -1031,3 +1031,59 @@ export function getRecipientConversationHistory(phone, campaignId) {
 
     return messages;
 }
+
+// ============================================================
+// Phase 2.2: Message Templates CRUD Functions
+// ============================================================
+
+const templateStatements = {
+    insert: db.prepare(`
+        INSERT INTO message_templates (name, body, content_sid, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, 1, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    `),
+    getById: db.prepare(`
+        SELECT id, name, body, content_sid, is_active, created_at, updated_at
+        FROM message_templates
+        WHERE id = ?
+    `),
+    update: db.prepare(`
+        UPDATE message_templates
+        SET name = ?, body = ?, content_sid = ?, is_active = ?
+        WHERE id = ?
+    `),
+    delete: db.prepare(`
+        DELETE FROM message_templates
+        WHERE id = ?
+    `)
+};
+
+export function createTemplate({ name, body, contentSid = null }) {
+    const result = templateStatements.insert.run(name, body, contentSid);
+    return templateStatements.getById.get(result.lastInsertRowid);
+}
+
+export function listTemplates({ limit = 50, offset = 0, includeArchived = false } = {}) {
+    const whereClause = includeArchived ? '' : 'WHERE is_active = 1';
+    return db.prepare(`
+        SELECT id, name, body, content_sid, is_active, created_at, updated_at
+        FROM message_templates
+        ${whereClause}
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+    `).all(limit, offset);
+}
+
+export function getTemplateById(id) {
+    return templateStatements.getById.get(id) || null;
+}
+
+export function updateTemplate(id, { name, body, contentSid = null, isActive = 1 }) {
+    const info = templateStatements.update.run(name, body, contentSid, isActive ? 1 : 0, id);
+    return info.changes > 0 ? templateStatements.getById.get(id) : null;
+}
+
+export function deleteTemplate(id) {
+    const info = templateStatements.delete.run(id);
+    return info.changes > 0;
+}
+

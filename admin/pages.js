@@ -1744,9 +1744,221 @@ export function renderConversationPage({ campaign, phone, contactName, messages 
   return renderLayout({ title: `Conversación - ${phone}`, content, active: 'campaigns' });
 }
 
+// ============================================================
+// Phase 2.2: Message Templates Pages
+// ============================================================
 
+export function renderTemplatesPage({ templates, offset, limit }) {
+  const helpText = renderHelpText(
+    `<strong>Plantillas de mensajes:</strong> Crea y gestiona mensajes reutilizables con variables dinámicas.
+    Variables disponibles: <code>{{nombre}}</code>, <code>{{marca}}</code>, <code>{{modelo}}</code>, <code>{{year}}</code>.`
+  );
 
+  const tableContent = templates.length > 0
+    ? renderTable({
+      columns: [
+        { key: 'name', label: 'Nombre', render: (row) => `<a href="/admin/templates/${row.id}/edit" style="color: var(--accent); font-weight: 600;">${escapeHtml(row.name)}</a>` },
+        { key: 'body', label: 'Mensaje', render: (row) => `<span title="${escapeHtml(row.body || '')}">${escapeHtml(truncate(row.body || '', 50))}</span>` },
+        { key: 'content_sid', label: 'Content SID', render: (row) => escapeHtml(row.content_sid ? truncate(row.content_sid, 20) : '-') },
+        { key: 'is_active', label: 'Estado', render: (row) => row.is_active ? renderBadge('activo', 'good') : renderBadge('archivado', 'muted') },
+        { key: 'updated_at', label: 'Actualizado', render: (row) => escapeHtml(formatDate(row.updated_at)) },
+        {
+          key: 'actions',
+          label: 'Acciones',
+          render: (row) => `<div class="row-actions">
+            <a href="/admin/templates/${row.id}/edit" class="action-btn">Editar</a>
+            <button onclick="deleteTemplate(${row.id})" class="action-btn">Eliminar</button>
+          </div>`
+        }
+      ],
+      rows: templates,
+      searchable: true,
+      sortable: true,
+      tableId: 'templates-table'
+    })
+    : renderEmptyState({
+      title: 'Sin plantillas',
+      message: 'Aún no hay plantillas creadas. Crea tu primera plantilla para agilizar las campañas.',
+      ctaText: 'Crear Plantilla',
+      ctaLink: '/admin/templates/new'
+    });
 
+  const script = `
+    <script>
+      async function deleteTemplate(id) {
+        if (!confirm('¿Eliminar esta plantilla?')) return;
+        const res = await fetch('/admin/api/templates/' + id, { method: 'DELETE' });
+        if (res.ok) window.location.reload();
+        else alert('Error al eliminar');
+      }
+    </script>
+  `;
+
+  const content = `<section class="panel">
+      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h1>Plantillas de Mensajes</h1>
+          <div class="muted">Total: ${templates.length}</div>
+        </div>
+        <a href="/admin/templates/new" class="action-btn" style="background:var(--accent); color:white; border-color:var(--accent); padding:10px 20px; text-decoration:none;">+ Nueva Plantilla</a>
+      </div>
+      ${helpText}
+      ${tableContent}
+      ${templates.length > 0 ? renderPager({
+    basePath: '/admin/templates',
+    query: {},
+    offset,
+    limit,
+    hasNext: templates.length === limit
+  }) : ''}
+    </section>${script}`;
+
+  return renderLayout({ title: 'Templates', content, active: 'templates' });
+}
+
+export function renderTemplateFormPage({ template = null, error = null }) {
+  const isNew = !template?.id;
+  const title = isNew ? 'Nueva Plantilla' : 'Editar Plantilla';
+  const action = isNew ? 'Crear' : 'Guardar';
+
+  const helpText = renderHelpText(
+    `<strong>Variables disponibles:</strong> Usa estas variables para personalizar el mensaje:<br/>
+    <code>{{nombre}}</code> - Nombre del contacto<br/>
+    <code>{{marca}}</code> - Marca del vehículo<br/>
+    <code>{{modelo}}</code> - Modelo del vehículo<br/>
+    <code>{{year}}</code> - Año del vehículo`
+  );
+
+  const errorMessage = error ? `<div class="muted" style="color:var(--bad); margin-bottom:10px;">${escapeHtml(error)}</div>` : '';
+
+  const form = `
+    <form id="templateForm" class="panel" method="POST" action="/admin/templates${isNew ? '' : '/' + template.id}">
+      <div class="panel-header"><h1>${title}</h1></div>
+      ${helpText}
+      ${errorMessage}
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Nombre de la plantilla *</label>
+        <input type="text" name="name" value="${escapeHtml(template?.name || '')}" required
+               placeholder="Ej: Oferta Toyota 2024"
+               style="width:100%;" />
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Mensaje *</label>
+        <textarea id="templateBody" name="body" rows="5" required
+                  style="width:100%; border-radius:10px; border:1px solid var(--line); padding:10px;"
+                  placeholder="Hola {{nombre}}, tenemos ofertas especiales para tu {{marca}} {{modelo}} {{year}}!">${escapeHtml(template?.body || '')}</textarea>
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Usa las variables entre dobles llaves. Ejemplo: <code>{{nombre}}</code>
+        </div>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <button type="button" id="insertVarBtn" class="action-btn" style="margin-right:5px;" data-var="{{nombre}}">+ nombre</button>
+        <button type="button" id="insertVarBtn2" class="action-btn" style="margin-right:5px;" data-var="{{marca}}">+ marca</button>
+        <button type="button" id="insertVarBtn3" class="action-btn" style="margin-right:5px;" data-var="{{modelo}}">+ modelo</button>
+        <button type="button" id="insertVarBtn4" class="action-btn" data-var="{{year}}">+ year</button>
+      </div>
+
+      <div style="margin-bottom:15px; padding:15px; background:#f8f5f1; border-radius:10px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Vista previa en vivo</label>
+        <div id="livePreview" style="padding:10px; background:white; border-radius:8px; border:1px solid var(--line); min-height:60px;">
+          <span class="muted">Escribe un mensaje para ver la vista previa...</span>
+        </div>
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Datos de ejemplo: nombre=Juan, marca=Toyota, modelo=Corolla, year=2020
+        </div>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <label style="display:block; font-weight:600; margin-bottom:5px;">Content SID (Twilio - opcional)</label>
+        <input type="text" name="contentSid" value="${escapeHtml(template?.content_sid || '')}"
+               placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+               style="width:100%;" />
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Si usas Twilio Content API, pega aquí el SID de la plantilla aprobada.
+        </div>
+      </div>
+
+      ${!isNew ? `
+      <div style="margin-bottom:15px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" name="isActive" value="1" ${template?.is_active ? 'checked' : ''} />
+          <span>Plantilla activa</span>
+        </label>
+        <div class="muted" style="font-size:12px; margin-top:5px;">
+          Desactiva para archivar sin eliminar.
+        </div>
+      </div>
+      ` : ''}
+
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button type="submit">${action}</button>
+        <a href="/admin/templates" class="action-btn">Cancelar</a>
+      </div>
+    </form>
+
+    <script>
+      function escapeHtml(text) {
+        return String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function renderPreview(template) {
+        const sampleVars = {
+          nombre: 'Juan',
+          marca: 'Toyota',
+          modelo: 'Corolla',
+          year: '2020'
+        };
+        return String(template || '').replace(/\\{\\{(\\w+)\\}\\}/g, (match, varName) => {
+          return sampleVars[varName] !== undefined ? sampleVars[varName] : match;
+        });
+      }
+
+      function updatePreview() {
+        const body = document.getElementById('templateBody')?.value || '';
+        const preview = document.getElementById('livePreview');
+        if (!preview) return;
+        if (!body.trim()) {
+          preview.innerHTML = '<span class="muted">Escribe un mensaje para ver la vista previa...</span>';
+        } else {
+          preview.textContent = renderPreview(body);
+        }
+      }
+
+      function insertVariable(varText) {
+        const textarea = document.getElementById('templateBody');
+        if (!textarea) return;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        textarea.value = text.substring(0, start) + varText + text.substring(end);
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + varText.length;
+        updatePreview();
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const bodyEl = document.getElementById('templateBody');
+        if (bodyEl) {
+          bodyEl.addEventListener('input', updatePreview);
+          updatePreview();
+        }
+
+        document.querySelectorAll('[data-var]').forEach(btn => {
+          btn.addEventListener('click', () => insertVariable(btn.dataset.var));
+        });
+      });
+    </script>
+  `;
+
+  return renderLayout({ title, content: form, active: 'templates' });
+}
 
 
 
