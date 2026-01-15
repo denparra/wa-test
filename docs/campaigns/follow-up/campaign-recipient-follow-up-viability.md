@@ -818,7 +818,7 @@ ORDER BY m.created_at ASC;
 > - ✅ Integración con vista de campaña existente
 > - ✅ Servidor probado y funcionando
 > 
-> Ver detalles completos en: `/docs/phase1-implementation-summary.md`
+> Ver detalles completos en: `./phase1-implementation-summary.md`
 
 ### Fase 1.1: Enriquecimiento de Datos ✅ **COMPLETADA**
 

@@ -200,7 +200,6 @@ status  total
 ------  -----
 sent    4    
 
-
 #1
 /app #  sqlite3 -header -column /app/data/watest.db "select cr.phone, count(m.i
 d) as

@@ -2,7 +2,7 @@
 
 **Proyecto**: WhatsApp Campaign System (Queirolo Autos)
 **Versión**: v0.2 (Dashboard + SQLite + Inbound + Outbound)
-**Fecha**: 2026-01-10
+**Fecha**: 2026-01-13
 **Estado**: MVP en producción (VPS Hostinger + Easypanel)
 
 ---
@@ -280,6 +280,24 @@ if (isBaja) {
 
 ---
 
+
+#### 10. Importacion CSV de contactos y vehiculos (COMPLETADO)
+**Impacto**: Alto - Carga rapida de datos
+**Esfuerzo**: Moderado (UI + validaciones)
+**Estado**: Implementado en dashboard
+
+**Resumen:**
+- Flujo de 3 pasos (upload, preview, confirmacion)
+- Validacion de telefono y datos de vehiculo
+- Persistencia transaccional con reporte de errores
+
+**Referencias:**
+- `../imports/csv-import-feature.md`
+- `../imports/CSV-IMPORT-GUIDE.md`
+
+---
+
+
 ## 🗺️ Roadmap por Etapas
 
 ### Fase 1: MVP Estable ✅ (Completada)
@@ -293,12 +311,17 @@ if (isBaja) {
 - ✅ Opt-out básico (BAJA/3)
 - ✅ Script outbound (send-test.js)
 - ✅ Deployment en Easypanel (PARCIAL - no verificable en repo)
+- Implementado: Importacion CSV de contactos y vehiculos en Dashboard
+- Implementado: Seguimiento de campanas (seguimiento + conversacion) para replies
 **Verification / Evidence:**
 - Inbound TwiML: `server.js` `/twilio/inbound` returns `text/xml` and uses `escapeXml()`.
 - Admin views: `server.js` routes `/admin`, `/admin/contacts`, `/admin/messages`, `/admin/campaigns`, `/admin/opt-outs`; `admin/render.js` `NAV_ITEMS`.
 - Opt-out basico (BAJA/3): `server.js` inbound uses `OPTOUT_KEYWORDS` with `BAJA` and `3`.
 - Outbound script: `send-test.js` exists and uses Twilio client.
 - SQLite path is configurable via `DB_PATH` in `db/index.js`; VPS volume/Easypanel deployment is not verifiable in repo.
+- Docs (seguimiento): `../campaigns/follow-up/campaign-recipient-follow-up-viability.md`, `../campaigns/follow-up/phase1-implementation-summary.md`
+- Docs (fix/troubleshoot): `../campaigns/follow-up/fix-campaign-reply-tracking.md`, `../campaigns/follow-up/phase1-troubleshooting-report.md`
+- Docs (CSV import): `../imports/csv-import-feature.md`, `../imports/CSV-IMPORT-GUIDE.md`
 
 
 ---
@@ -326,6 +349,7 @@ if (isBaja) {
 - Assign on create: `admin/pages.js` recipient panel + `loadRecipientsBtn`; `server.js` accepts `recipientIds` + `assignRecipientsToCampaign()`.
 - Warning for scheduled without recipients: `admin/pages.js` submit confirmation.
 - Progress bar polling: `admin/pages.js` `refreshProgress()` polls `/admin/api/campaigns/:id/progress`; `server.js` `getCampaignProgress()`.
+- Referencias: `../campaigns/scheduling/campaigns-scheduling-and-preview-analysis.md`
 
 
 #### 2.2 Templates de Mensajes (2-3 días)
@@ -341,10 +365,17 @@ if (isBaja) {
 - [ ] Test envíos (mandar a 5 números de prueba antes de campaña completa)
 
 #### 2.4 Tracking Mejorado (2-3 días)
+- Base de seguimiento MVP ya implementada (KPIs + conversacion). Ver: `../campaigns/follow-up/phase1-implementation-summary.md`.
 - [ ] Status callbacks de Twilio (delivered, failed, undelivered)
 - [ ] Dashboard de campaña en tiempo real
 - [ ] Métricas: tasa de entrega, tasa de apertura (si usa links), conversiones
 - [ ] Alertas automáticas si tasa de fallo >10%
+
+
+**Pendientes (seguimiento MVP):**
+- Export CSV de seguimiento
+- Filtros por estado/fecha/replies en vista seguimiento
+- Performance/monitoring de queries (ver `../campaigns/follow-up/campaign-recipient-follow-up-viability.md`)
 
 **Estimación total Fase 2**: 10-15 días de desarrollo
 
@@ -558,19 +589,20 @@ Antes de desplegar cambios a producción:
 
 ### 🔴 Urgente (Esta Semana)
 1. **Backups automáticos** (Quick Win #1) - CRÍTICO
-2. **Monitoring mejorado** (Quick Win #2)
-3. **Logging estructurado** (Quick Win #3)
+2. **Monitoring mejorado** (Quick Win #2) - COMPLETADO
+3. **Logging estructurado** (Quick Win #3) - PENDIENTE
 
 ### 🟡 Importante (Este Mes)
-4. **Rate limiting** (Quick Win #4)
+4. **Rate limiting** (Quick Win #4) - PENDIENTE
 5. **Validación de webhooks** (Quick Win #5)
-6. **WAL mode SQLite** (Quick Win #6)
-7. **Opt-out keywords adicionales** (Quick Win #8)
+6. **WAL mode SQLite** (Quick Win #6) - COMPLETADO
+7. **Opt-out keywords adicionales** (Quick Win #8) - COMPLETADO
+8. **Importacion CSV de contactos y vehiculos** (Quick Win #10) - COMPLETADO
 
 ### 🟢 Planificado (Próximos 2-3 Meses)
 8. **Gestión de campañas desde Dashboard** (Fase 2.1)
-9. **Templates de mensajes** (Fase 2.2)
-10. **Tracking mejorado con callbacks** (Fase 2.4)
+9. **Templates de mensajes** (Fase 2.2) - PENDIENTE
+10. **Tracking mejorado con callbacks** (Fase 2.4) - PENDIENTE
 
 ---
 
