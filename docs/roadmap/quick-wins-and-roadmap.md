@@ -351,26 +351,46 @@ if (isBaja) {
 - Progress bar polling: `admin/pages.js` `refreshProgress()` polls `/admin/api/campaigns/:id/progress`; `server.js` `getCampaignProgress()`.
 - Referencias: `../campaigns/scheduling/campaigns-scheduling-and-preview-analysis.md`
 
+> **📘 Reseña Funcional (Fase 2.1)**
+> *   **¿Para qué sirve?**: Permite organizar, programar y lanzar envíos masivos a tus contactos, asegurando que lleguen a la hora correcta y a las personas indicadas.
+> *   **¿Cómo se usa?**: Ve a Dashboard > Campañas > Nueva. Elige un nombre, define cuándo quieres que salga (o envíalo ya) y selecciona tu audiencia.
+> *   **Relacionados**: `admin/pages.js` (Lógica UI), `server.js` (Scheduler).
 
-#### 2.2 Templates de Mensajes (2-3 días)
-- [ ] Gestor de templates en Dashboard
-- [ ] Variables dinámicas: `{{nombre}}`, `{{marca}}`, `{{modelo}}`, etc.
-- [ ] Preview en vivo antes de enviar
-- [ ] Integración con Twilio Content API
 
-#### 2.3 Segmentación Avanzada (3-4 días)
-- [ ] Filtros combinados (marca AND modelo AND año >=2015)
-- [ ] Segmentos guardados (ej: "Toyota 2015+", "Leads activos mes pasado")
-- [ ] Exclusión de opt-outs automática (ya implementado parcialmente)
-- [ ] Test envíos (mandar a 5 números de prueba antes de campaña completa)
+#### 2.2 Templates de Mensajes (2-3 días) ✅ COMPLETADO
+- [x] Gestor de templates en Dashboard
+- [x] Variables dinámicas: `{{nombre}}`, `{{marca}}`, `{{modelo}}`, etc.
+- [x] Preview en vivo antes de enviar
+- [x] Integración con Twilio Content API
 
-#### 2.4 Tracking Mejorado (2-3 días)
+> **📘 Reseña Funcional (Fase 2.2)**
+> *   **¿Para qué sirve?**: Crea mensajes reutilizables que se personalizan automáticamente para cada cliente (ej: "Hola Juan, tu Toyota..."). Evita escribir lo mismo mil veces.
+> *   **¿Cómo se usa?**: Ve a Dashboard > Templates > Nuevo. Escribe tu mensaje usando variables como `{{nombre}}` o `{{marca}}`. Al crear una campaña, elige "Usar Template".
+> *   **Relacionados**: `admin/templates` (Gestor), `db/index.js` (`renderMessageTemplate`).
+
+#### 2.3 Segmentación Avanzada (3-4 días) ✅ COMPLETADO
+- [x] Filtros combinados (marca AND modelo AND año >=2015)
+- [x] Segmentos guardados (ej: 'Toyota 2015+', 'Leads activos mes pasado')
+- [x] Exclusión automática de opt-outs
+- [x] Test envíos antes de campaña completa (selección manual)
+
+> **📘 Reseña Funcional (Fase 2.3)**
+> *   **¿Para qué sirve?**: Ahorra tiempo guardando tus filtros favoritos (ej: "Toyotas 2015+") y te da seguridad total al permitirte probar la campaña enviándote un mensaje solo a ti mismo antes de lanzarla.
+> *   **¿Cómo se usa?**: **Para Segmentos:** En Nueva Campaña, filtra contactos y dale a "Guardar Filtros". Luego cárgalo con un click. **Para Tests:** Activa "Modo Test", búscate en la lista, marca tu casilla y pulsa enviar.
+> *   **Relacionados**: Tabla `segments`, `admin/api/segments`, `testMode` en `admin/pages.js`.
+
+#### 2.4 Tracking Mejorado (2-3 dias)
 - Base de seguimiento MVP ya implementada (KPIs + conversacion). Ver: `../campaigns/follow-up/phase1-implementation-summary.md`.
-- [ ] Status callbacks de Twilio (delivered, failed, undelivered)
-- [ ] Dashboard de campaña en tiempo real
-- [ ] Métricas: tasa de entrega, tasa de apertura (si usa links), conversiones
-- [ ] Alertas automáticas si tasa de fallo >10%
+- [x] Status callbacks de Twilio (delivered, failed, undelivered, read)
+- [x] Dashboard de campana en tiempo real (polling de KPIs y alertas)
+- [x] Metricas: tasa de entrega, tasa de apertura (read), conversiones (replies 7d)
+- [x] Alertas automaticas si tasa de fallo >10%
+- [x] Nota: Resena funcional detallada abajo.
 
+> **Resena funcional (Fase 2.4)**
+> * **Para que sirve?**: Monitorea entregas, replies y fallos por campana con KPIs en vivo para actuar rapido.
+> * **Como se usa?**: Abre una campana y entra a Seguimiento. Los KPIs se actualizan en tiempo real.
+> * **Notas**: Configura `STATUS_CALLBACK_URL` o `PUBLIC_BASE_URL` para activar `/twilio/status-callback`.
 
 **Pendientes (seguimiento MVP):**
 - Export CSV de seguimiento
@@ -392,24 +412,28 @@ if (isBaja) {
 - [ ] Campo `consented_at` en tabla `contacts`
 - [ ] Doble opt-in (enviar confirmación antes de agregar a campañas)
 - [ ] Renovación de consentimiento (cada 6 meses o 1 año)
+- [ ] **Nota:** Una vez completado, agregar reseña funcional detallada aquí.
 
 #### 3.2 Opt-Out Completo (2-3 días)
 - [ ] Keywords múltiples: STOP, BAJA, UNSUBSCRIBE, CANCELAR (ya implementado parcialmente)
 - [ ] Confirmación inmediata (ya implementado)
 - [ ] Opt-in reverso (permitir re-suscripción con keyword START o REANUDAR)
 - [ ] Dashboard de opt-outs con filtro por motivo y fecha
+- [ ] **Nota:** Una vez completado, agregar reseña funcional detallada aquí.
 
 #### 3.3 Audit Trail (3-4 días)
 - [ ] Tabla `audit_log` para rastrear cambios críticos
 - [ ] Quién cambió qué y cuándo (requiere autenticación por usuario en admin)
 - [ ] Registro de opt-out/opt-in con timestamp y origen
 - [ ] Exportación de audit log para compliance
+- [ ] **Nota:** Una vez completado, agregar reseña funcional detallada aquí.
 
 #### 3.4 Compliance Automático (2-3 días)
 - [ ] Límite de mensajes por contacto/día (ej: max 2 mensajes/día)
 - [ ] Horario permitido (no enviar fuera de 9 AM - 8 PM)
 - [ ] Quiet hours (no enviar fines de semana si el contacto no ha respondido)
 - [ ] Auto-throttling si tasa de opt-out >5%
+- [ ] **Nota:** Una vez completado, agregar reseña funcional detallada aquí.
 
 **Estimación total Fase 3**: 10-14 días de desarrollo
 
@@ -602,7 +626,7 @@ Antes de desplegar cambios a producción:
 ### 🟢 Planificado (Próximos 2-3 Meses)
 8. **Gestión de campañas desde Dashboard** (Fase 2.1)
 9. **Templates de mensajes** (Fase 2.2) - PENDIENTE
-10. **Tracking mejorado con callbacks** (Fase 2.4) - PENDIENTE
+10. **Tracking mejorado con callbacks** (Fase 2.4) - COMPLETADO
 
 ---
 

@@ -173,3 +173,14 @@ FOR EACH ROW
 BEGIN
     UPDATE message_templates SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
 END;
+
+-- ============================================================
+-- SEGMENTS: Filtros guardados para campañas
+-- Phase 2.3: Segmentación Avanzada
+-- ============================================================
+CREATE TABLE IF NOT EXISTS segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    filters TEXT NOT NULL,           -- JSON: {"make":"Toyota", "yearMin":2015}
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);

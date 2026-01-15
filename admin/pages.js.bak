@@ -13,7 +13,7 @@ import {
 
 function statusTone(value) {
   const text = String(value || '').toLowerCase();
-  if (text === 'active' || text === 'sent' || text === 'delivered' || text === 'read' || text === 'completed') {
+  if (text === 'active' || text === 'sent' || text === 'delivered' || text === 'completed') {
     return 'good';
   }
   if (text.includes('skip') || text === 'pending' || text === 'draft' || text === 'scheduled' || text === 'paused') {
@@ -1139,6 +1139,150 @@ export function renderCampaignFormPage({ campaign = {} }) {
         }).join('');
     }
 
+    // Phase 1: Campaign Follow-Up Page
+export function renderCampaignFollowUpPage(data) {
+    const { campaign, stats, recipients, limit, offset } = data;
+
+    // Helper to calculate percentages
+    const calcPct = (val, total) => {
+        if (!total) return '0%';
+        return Math.round((val / total) * 100) + '%';
+    };
+
+    // Calculate failure rate for alert
+    const failRate = stats.total_recipients > 0 ? (stats.failed / stats.total_recipients) * 100 : 0;
+    const isHighFailure = failRate > 10;
+
+    const rows = recipients.map(r => {
+        const replyCount = r.reply_count || 0;
+        const lastReply = r.last_reply_at ? new Date(r.last_reply_at).toLocaleString('es-CL') : '-';
+        const sentAt = r.sent_at ? new Date(r.sent_at).toLocaleString('es-CL') : (r.status === 'pending' ? 'Pendiente' : '-');
+        
+        let statusBadge = `< span class="badge badge-secondary" > ${ r.status }</span > `;
+        if (r.status === 'sent') statusBadge = `< span class="badge badge-primary" > Enviado</span > `;
+        if (r.status === 'delivered') statusBadge = `< span class="badge badge-success" > Entregado</span > `;
+        if (r.status === 'failed') statusBadge = `< span class="badge badge-danger" > Fallido</span > `;
+        if (r.status === 'skipped') statusBadge = `< span class="badge badge-warning" > Omitido</span > `;
+
+        return `
+    < tr >
+            <td>${r.phone}</td>
+            <td>${r.name || '-'}</td>
+            <td>${statusBadge}</td>
+            <td>${sentAt}</td>
+            <td style="text-align:center;">${replyCount > 0 ? `<span class="badge badge-success">${replyCount}</span>` : '0'}</td>
+            <td>${lastReply}</td>
+            <td>
+                <a href="/admin/campaigns/${campaign.id}/conversation/${encodeURIComponent(r.phone)}" class="action-btn">💬 Ver</a>
+            </td>
+        </tr >
+    `;
+    }).join('');
+
+    // Pagination logic
+    const prevOffset = Math.max(0, offset - limit);
+    const nextOffset = offset + limit;
+    const hasMore = recipients.length === limit; 
+
+    return renderLayout('Seguimiento: ' + campaign.name, `
+    < div class="header-actions" >
+            <h1>📊 Seguimiento: ${campaign.name}</h1>
+            <a href="/admin/campaigns/${campaign.id}" class="action-btn">← Volver a Campaña</a>
+        </div >
+
+        <div id="failureAlert" style="display: ${isHighFailure ? 'block' : 'none'}; background: #ffebee; color: #c62828; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ef9a9a;">
+            <strong>⚠️ Alerta: Tasa de fallo alta detectada (${failRate.toFixed(1)}%)</strong>. Revisa los mensajes fallidos para diagnosticar problemas.
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Destinatarios</h3>
+                <div class="stat-value" id="kpi-total">${stats.total_recipients}</div>
+            </div>
+            <div class="stat-card success">
+                <h3>Enviados OK</h3>
+                <div class="stat-value" id="kpi-sent-ok">${stats.sent_ok}</div>
+                <div class="stat-sub" id="kpi-sent-pct">${calcPct(stats.sent_ok, stats.total_recipients)}</div>
+            </div>
+            <div class="stat-card danger">
+                <h3>Fallidos</h3>
+                <div class="stat-value" id="kpi-failed">${stats.failed}</div>
+                <div class="stat-sub" id="kpi-failed-pct">${calcPct(stats.failed, stats.total_recipients)}</div>
+            </div>
+            <div class="stat-card info">
+                <h3>Replies Recibidos</h3>
+                <div class="stat-value" id="kpi-replies">${stats.replies_received}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Respuesta 24h</h3>
+                 <div class="stat-value" id="kpi-response-24h">${stats.response_rate_24h}</div>
+                 <div class="stat-sub" id="kpi-response-24h-pct">${calcPct(stats.response_rate_24h, stats.sent_ok)}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Destinatarios</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Teléfono</th>
+                        <th>Nombre</th>
+                        <th>Estado Envío</th>
+                        <th>Fecha Envío</th>
+                        <th># Replies</th>
+                        <th>Último Reply</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+            
+            <div class="pagination" style="margin-top:20px;">
+                ${offset > 0 ? `<a href="?offset=${prevOffset}&limit=${limit}" class="action-btn">← Anterior</a>` : ''}
+                ${hasMore ? `<a href="?offset=${nextOffset}&limit=${limit}" class="action-btn">Siguiente →</a>` : ''}
+            </div>
+        </div>
+
+        <script>
+            const campaignId = ${campaign.id};
+            
+            async function updateStats() {
+                try {
+                    const res = await fetch('/admin/api/campaigns/' + campaignId + '/follow-up-stats');
+                    if (!res.ok) return;
+                    const stats = await res.json();
+                    
+                    document.getElementById('kpi-total').textContent = stats.total_recipients;
+                    document.getElementById('kpi-sent-ok').textContent = stats.sent_ok;
+                    document.getElementById('kpi-failed').textContent = stats.failed;
+                    document.getElementById('kpi-replies').textContent = stats.replies_received;
+                    document.getElementById('kpi-response-24h').textContent = stats.response_rate_24h;
+
+                    const total = stats.total_recipients || 1;
+                    const sentOk = stats.sent_ok || 1;
+                    
+                    document.getElementById('kpi-sent-pct').textContent = Math.round((stats.sent_ok/total)*100) + '%';
+                    document.getElementById('kpi-failed-pct').textContent = Math.round((stats.failed/total)*100) + '%';
+                    document.getElementById('kpi-response-24h-pct').textContent = Math.round((stats.response_rate_24h/sentOk)*100) + '%';
+
+                    const failRate = (stats.failed / total) * 100;
+                    const alertDiv = document.getElementById('failureAlert');
+                    if (failRate > 10 && stats.failed > 0) {
+                        alertDiv.style.display = 'block';
+                        alertDiv.querySelector('strong').textContent = '⚠️ Alerta: Tasa de fallo alta detectada (' + failRate.toFixed(1) + '%)';
+                    } else {
+                        alertDiv.style.display = 'none';
+                    }
+
+                } catch (e) { console.error('Error polling stats:', e); }
+            }
+
+            setInterval(updateStats, 5000);
+        </script>
+  `);
+}
     function toggleTestMode() {
         console.log('toggleTestMode called');
         const panel = document.getElementById('testModePanel');
@@ -1702,85 +1846,53 @@ export function renderImportPage({ preview = null, result = null }) {
 // ============================================================
 
 export function renderCampaignFollowUpPage({ campaign, stats, recipients, offset, limit }) {
-  const totalRecipients = stats?.total_recipients || 0;
-  const sentOk = stats?.sent_ok || 0;
-  const delivered = stats?.delivered || 0;
-  const read = stats?.read || 0;
-  const failed = stats?.failed || 0;
-  const totalReplies = stats?.total_replies || 0;
-  const replies24h = stats?.replies_24h || 0;
-  const replies7d = stats?.recipients_with_replies || 0;
-
-  const formatPct = (value, total) => total ? ((value / total) * 100).toFixed(1) : '0.0';
-  const failureRate = totalRecipients ? (failed / totalRecipients) * 100 : 0;
-  const deliveryRate = formatPct(delivered, totalRecipients);
-  const openRate = delivered ? formatPct(read, delivered) : '0.0';
-  const conversionRate = formatPct(replies7d, sentOk || totalRecipients);
-
-  const alertHtml = `
-      <div id="failure-alert" style="display: ${failureRate > 10 && failed > 0 ? 'block' : 'none'}; background: #f8d7da; color: #721c24; padding: 0.75rem 1rem; border-radius: 4px; margin: 0.75rem 0; border: 1px solid #f5c6cb;">
-        <strong>Alerta: Tasa de fallo alta (<span id="failure-rate">${failureRate.toFixed(1)}</span>%)</strong>. Revisa los mensajes fallidos.
-      </div>
-  `;
-
   const kpisHtml = `
     <div class="panel">
       <div class="panel-header">
-        <h1>Seguimiento: ${escapeHtml(campaign.name)}</h1>
-        <a href="/admin/campaigns/${campaign.id}" class="action-btn">Volver a Campana</a>
+        <h1>📊 Seguimiento: ${escapeHtml(campaign.name)}</h1>
+        <a href="/admin/campaigns/${campaign.id}" class="action-btn">← Volver a Campaña</a>
       </div>
-      ${alertHtml}
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
         <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
           <div style="font-size: 0.875rem; color: #6c757d;">Total Recipients</div>
-          <div style="font-size: 1.5rem; font-weight: bold;" id="kpi-total">${totalRecipients}</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.total_recipients || 0}</div>
         </div>
         <div style="background: #d4edda; padding: 1rem; border-radius: 4px;">
-          <div style="font-size: 0.875rem; color: #155724;">Enviados OK</div>
-          <div style="font-size: 1.5rem; font-weight: bold;"><span id="kpi-sent-ok">${sentOk}</span> (<span id="kpi-sent-ok-pct">${formatPct(sentOk, totalRecipients)}</span>%)</div>
-        </div>
-        <div style="background: #cce5ff; padding: 1rem; border-radius: 4px;">
-          <div style="font-size: 0.875rem; color: #004085;">Entregados</div>
-          <div style="font-size: 1.5rem; font-weight: bold;"><span id="kpi-delivered">${delivered}</span> (<span id="kpi-delivered-pct">${formatPct(delivered, totalRecipients)}</span>%)</div>
+          <div style="font-size: 0.875rem; color: #155724;">✅ Enviados OK</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.sent_ok || 0} (${stats.sent_ok ? ((stats.sent_ok / stats.total_recipients) * 100).toFixed(1) : 0}%)</div>
         </div>
         <div style="background: #f8d7da; padding: 1rem; border-radius: 4px;">
-          <div style="font-size: 0.875rem; color: #721c24;">Fallidos</div>
-          <div style="font-size: 1.5rem; font-weight: bold;"><span id="kpi-failed">${failed}</span> (<span id="kpi-failed-pct">${formatPct(failed, totalRecipients)}</span>%)</div>
+          <div style="font-size: 0.875rem; color: #721c24;">❌ Fallidos</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.failed || 0} (${stats.failed ? ((stats.failed / stats.total_recipients) * 100).toFixed(1) : 0}%)</div>
         </div>
         <div style="background: #d1ecf1; padding: 1rem; border-radius: 4px;">
-          <div style="font-size: 0.875rem; color: #0c5460;">Replies Recibidos</div>
-          <div style="font-size: 1.5rem; font-weight: bold;" id="kpi-replies-total">${totalReplies}</div>
+          <div style="font-size: 0.875rem; color: #0c5460;">💬 Replies Recibidos</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.total_replies || 0}</div>
         </div>
         <div style="background: #fff3cd; padding: 1rem; border-radius: 4px;">
-          <div style="font-size: 0.875rem; color: #856404;">Respuesta 24h</div>
-          <div style="font-size: 1.5rem; font-weight: bold;"><span id="kpi-replies-24h">${replies24h}</span> (<span id="kpi-replies-24h-pct">${formatPct(replies24h, sentOk)}</span>%)</div>
+          <div style="font-size: 0.875rem; color: #856404;">⏱️ Respuesta 24h</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.replies_24h || 0} (${stats.sent_ok ? ((stats.replies_24h / stats.sent_ok) * 100).toFixed(1) : 0}%)</div>
         </div>
         <div style="background: #e2e3e5; padding: 1rem; border-radius: 4px;">
-          <div style="font-size: 0.875rem; color: #383d41;">Conversiones 7d</div>
-          <div style="font-size: 1.5rem; font-weight: bold;"><span id="kpi-replies-7d">${replies7d}</span> (<span id="kpi-replies-7d-pct">${formatPct(replies7d, sentOk)}</span>%)</div>
+          <div style="font-size: 0.875rem; color: #383d41;">📈 Respuesta 7d</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">${stats.recipients_with_replies || 0} (${stats.sent_ok ? ((stats.recipients_with_replies / stats.sent_ok) * 100).toFixed(1) : 0}%)</div>
         </div>
       </div>
-      <div style="margin: 0.75rem 0; color: #6c757d; font-size: 0.875rem;">
-        <strong>Metricas:</strong>
-        <span style="margin-left: 0.5rem;">Tasa entrega <span id="kpi-delivery-rate">${deliveryRate}</span>%</span>
-        <span style="margin-left: 0.75rem;">Apertura (read) <span id="kpi-open-rate">${openRate}</span>%</span>
-        <span style="margin-left: 0.75rem;">Conversiones <span id="kpi-conversion-rate">${conversionRate}</span>%</span>
-      </div>
-      <p style="margin: 0.5rem 0; color: #6c757d; font-size: 0.875rem;">Ultimo reply: <span id="kpi-last-reply">${stats?.last_reply_at ? formatDate(stats.last_reply_at) : '-'}</span></p>
+      ${stats.last_reply_at ? `<p style="margin: 0.5rem 0; color: #6c757d; font-size: 0.875rem;">Último reply: ${formatDate(stats.last_reply_at)}</p>` : ''}
     </div>
   `;
 
   const recipientsTable = recipients.length > 0
     ? renderTable({
       columns: [
-        { key: 'phone', label: 'Telefono' },
+        { key: 'phone', label: 'Teléfono' },
         { key: 'contact_name', label: 'Nombre', render: (row) => escapeHtml(row.contact_name || '-') },
-        { key: 'send_status', label: 'Estado Envio', render: (row) => renderBadge(row.send_status, statusTone(row.send_status)) },
-        { key: 'sent_at', label: 'Fecha Envio', render: (row) => escapeHtml(formatDate(row.sent_at)) },
+        { key: 'send_status', label: 'Estado Envío', render: (row) => renderBadge(row.send_status, statusTone(row.send_status)) },
+        { key: 'sent_at', label: 'Fecha Envío', render: (row) => escapeHtml(formatDate(row.sent_at)) },
         { key: 'total_replies', label: '# Replies', render: (row) => `<strong>${row.total_replies || 0}</strong>` },
-        { key: 'last_reply_at', label: 'Ultimo Reply', render: (row) => escapeHtml(row.last_reply_at ? formatDate(row.last_reply_at) : '-') },
+        { key: 'last_reply_at', label: 'Último Reply', render: (row) => escapeHtml(row.last_reply_at ? formatDate(row.last_reply_at) : '-') },
         { key: 'last_reply_preview', label: 'Preview', render: (row) => escapeHtml(truncate(row.last_reply_preview || '', 40)) },
-        { key: 'actions', label: 'Acciones', render: (row) => `<a href="/admin/campaigns/${campaign.id}/conversation/${encodeURIComponent(row.phone)}" class="action-btn">Ver</a>` }
+        { key: 'actions', label: 'Acciones', render: (row) => `<a href="/admin/campaigns/${campaign.id}/conversation/${encodeURIComponent(row.phone)}" class="action-btn">💬 Ver</a>` }
       ],
       rows: recipients,
       searchable: true,
@@ -1789,78 +1901,8 @@ export function renderCampaignFollowUpPage({ campaign, stats, recipients, offset
     })
     : renderEmptyState({
       title: 'Sin destinatarios',
-      message: 'Esta campana aun no tiene destinatarios asignados.'
+      message: 'Esta campaña aún no tiene destinatarios asignados.'
     });
-
-  const realtimeScript = `
-    <script>
-      const campaignId = ${campaign.id};
-
-      const formatPct = (value, total) => {
-        if (!total) return '0.0';
-        return ((value / total) * 100).toFixed(1);
-      };
-
-      const formatTimestamp = (value) => {
-        if (!value) return '-';
-        return String(value).replace('T', ' ');
-      };
-
-      const setText = (id, value) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = value;
-      };
-
-      async function refreshFollowUpStats() {
-        try {
-          const res = await fetch('/admin/api/campaigns/' + campaignId + '/follow-up-stats');
-          if (!res.ok) return;
-          const stats = await res.json();
-
-          const totalRecipients = stats.total_recipients || 0;
-          const sentOk = stats.sent_ok || 0;
-          const delivered = stats.delivered || 0;
-          const read = stats.read || 0;
-          const failed = stats.failed || 0;
-          const totalReplies = stats.total_replies || 0;
-          const replies24h = stats.replies_24h || 0;
-          const replies7d = stats.recipients_with_replies || 0;
-
-          setText('kpi-total', totalRecipients);
-          setText('kpi-sent-ok', sentOk);
-          setText('kpi-sent-ok-pct', formatPct(sentOk, totalRecipients));
-          setText('kpi-delivered', delivered);
-          setText('kpi-delivered-pct', formatPct(delivered, totalRecipients));
-          setText('kpi-failed', failed);
-          setText('kpi-failed-pct', formatPct(failed, totalRecipients));
-          setText('kpi-replies-total', totalReplies);
-          setText('kpi-replies-24h', replies24h);
-          setText('kpi-replies-24h-pct', formatPct(replies24h, sentOk));
-          setText('kpi-replies-7d', replies7d);
-          setText('kpi-replies-7d-pct', formatPct(replies7d, sentOk));
-          setText('kpi-delivery-rate', formatPct(delivered, totalRecipients));
-          setText('kpi-open-rate', delivered ? formatPct(read, delivered) : '0.0');
-          setText('kpi-conversion-rate', formatPct(replies7d, sentOk || totalRecipients));
-          setText('kpi-last-reply', formatTimestamp(stats.last_reply_at));
-
-          const failureRate = totalRecipients ? (failed / totalRecipients) * 100 : 0;
-          const alertEl = document.getElementById('failure-alert');
-          if (alertEl) {
-            if (failureRate > 10 && failed > 0) {
-              alertEl.style.display = 'block';
-              setText('failure-rate', failureRate.toFixed(1));
-            } else {
-              alertEl.style.display = 'none';
-            }
-          }
-        } catch (error) {
-          console.error('Error polling follow-up stats:', error);
-        }
-      }
-
-      setInterval(refreshFollowUpStats, 5000);
-    </script>
-  `;
 
   const content = kpisHtml + `
     <section class="panel">
@@ -1874,11 +1916,10 @@ export function renderCampaignFollowUpPage({ campaign, stats, recipients, offset
     hasNext: recipients.length === limit
   }) : ''}
     </section>
-  ` + realtimeScript;
+  `;
 
   return renderLayout({ title: `Seguimiento - ${campaign.name}`, content, active: 'campaigns' });
 }
-
 
 export function renderConversationPage({ campaign, phone, contactName, messages }) {
   const messagesHtml = messages.length > 0
@@ -2137,3 +2178,6 @@ export function renderTemplateFormPage({ template = null, error = null }) {
 
   return renderLayout({ title, content: form, active: 'templates' });
 }
+
+
+

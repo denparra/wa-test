@@ -53,7 +53,11 @@ import {
     listTemplates,
     getTemplateById,
     updateTemplate,
-    deleteTemplate as dbDeleteTemplate
+    deleteTemplate as dbDeleteTemplate,
+    createSegment,
+    listSegments,
+    deleteSegment as dbDeleteSegment,
+    updateMessageStatus
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -82,6 +86,8 @@ const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_T
 const SCHEDULER_INTERVAL_MS = Number(process.env.CAMPAIGN_SCHEDULER_INTERVAL_MS || 30000);
 const SCHEDULER_BATCH_SIZE = Number(process.env.CAMPAIGN_SEND_BATCH_SIZE || 20);
 const schedulerState = { running: false };
+const STATUS_CALLBACK_URL = process.env.STATUS_CALLBACK_URL
+    || (process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/twilio/status-callback` : null);
 
 function normalizeScheduledAt(value) {
     if (!value) {
@@ -189,6 +195,10 @@ async function processCampaignSendBatch(campaign) {
                 to: toTwilioRecipient(phone),
                 messagingServiceSid: process.env.MESSAGING_SERVICE_SID
             };
+
+            if (STATUS_CALLBACK_URL) {
+                payload.statusCallback = STATUS_CALLBACK_URL;
+            }
 
             if (rendered) {
                 payload.body = rendered;
@@ -595,6 +605,18 @@ app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
     }
 });
 
+// POST /twilio/status-callback - Twilio status updates
+app.post('/twilio/status-callback', express.urlencoded({ extended: true }), (req, res) => {
+    const { MessageSid, MessageStatus, ErrorCode } = req.body;
+    console.log(`STATUS-CALLBACK: ${MessageSid} -> ${MessageStatus} (Error: ${ErrorCode || 'none'})`);
+
+    if (MessageSid) {
+        updateMessageStatus(MessageSid, MessageStatus, ErrorCode);
+    }
+
+    res.status(200).send('OK');
+});
+
 // GET /admin/opt-outs/:phone/edit - Edit opt-out reason
 app.get('/admin/opt-outs/:phone/edit', adminAuth, (req, res) => {
     const phone = req.params.phone; // Express decodes URL, so +56... comes as +56...
@@ -636,6 +658,19 @@ app.delete('/admin/api/opt-outs/:phone', adminAuth, (req, res) => {
     } catch (error) {
         console.error('Opt-out delete error:', error);
         res.status(500).send('Failed to delete opt-out: ' + error.message);
+    }
+});
+
+// GET /admin/api/contacts - JSON search
+app.get('/admin/api/contacts', adminAuth, (req, res) => {
+    try {
+        const query = req.query.q || '';
+        const limit = Math.min(Number(req.query.limit) || 20, 100);
+        const contacts = listContacts({ query, limit });
+        res.json({ contacts });
+    } catch (error) {
+        console.error('API contacts error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -748,6 +783,55 @@ app.get('/admin/api/templates', adminAuth, (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ============================================================
+// Phase 2.3: Segments Routes
+// ============================================================
+
+// GET /admin/api/segments - JSON list for dropdown
+app.get('/admin/api/segments', adminAuth, (req, res) => {
+    try {
+        const segments = listSegments();
+        res.json({ segments });
+    } catch (error) {
+        console.error('API segments error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /admin/api/segments - Create segment
+app.post('/admin/api/segments', adminAuth, express.json(), (req, res) => {
+    const { name, filters } = req.body;
+    if (!name?.trim()) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+    try {
+        const segment = createSegment(name.trim(), filters);
+        res.json({ segment });
+    } catch (error) {
+        console.error('Segment create error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// DELETE /admin/api/segments/:id - Delete segment
+app.delete('/admin/api/segments/:id', adminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).json({ error: 'Invalid segment ID' });
+    }
+    try {
+        const deleted = dbDeleteSegment(id);
+        if (!deleted) {
+            return res.status(404).json({ error: 'Segment not found' });
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Segment delete error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 
 // ============================================================
 // CSV Import Routes
@@ -1290,6 +1374,10 @@ app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async 
                     to: toTwilioRecipient(phone),
                     messagingServiceSid: process.env.MESSAGING_SERVICE_SID
                 };
+
+                if (STATUS_CALLBACK_URL) {
+                    payload.statusCallback = STATUS_CALLBACK_URL;
+                }
 
                 if (rendered) {
                     payload.body = rendered;

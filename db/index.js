@@ -244,7 +244,7 @@ const statements = {
     getCampaignProgress: db.prepare(`
         SELECT
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ?) AS total,
-            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'sent') AS sent,
+            (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status IN ('sent', 'delivered', 'read')) AS sent,
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'delivered') AS delivered,
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status = 'failed') AS failed,
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status LIKE 'skipped%') AS skipped
@@ -863,11 +863,23 @@ export function getCampaignFollowUpStats(campaignId) {
             c.total_recipients,
             c.sent_count,
             
-            -- Enviados exitosos
-            (SELECT COUNT(*) 
-             FROM campaign_recipients 
-             WHERE campaign_id = c.id 
-               AND status IN ('sent', 'delivered')) AS sent_ok,
+            -- Enviados exitosos (sent + delivered + read)
+            (SELECT COUNT(*)
+             FROM campaign_recipients
+             WHERE campaign_id = c.id
+               AND status IN ('sent', 'delivered', 'read')) AS sent_ok,
+
+            -- Entregados
+            (SELECT COUNT(*)
+             FROM campaign_recipients
+             WHERE campaign_id = c.id
+               AND status = 'delivered') AS delivered,
+
+            -- Leidos (WhatsApp read)
+            (SELECT COUNT(*)
+             FROM campaign_recipients
+             WHERE campaign_id = c.id
+               AND status = 'read') AS read,
             
             -- Fallidos
             (SELECT COUNT(*) 
@@ -885,7 +897,7 @@ export function getCampaignFollowUpStats(campaignId) {
                  AND datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+7 days')
              )
              WHERE cr.campaign_id = c.id
-               AND cr.status IN ('sent', 'delivered')) AS recipients_with_replies,
+               AND cr.status IN ('sent', 'delivered', 'read')) AS recipients_with_replies,
 
             -- Total de replies recibidos (7 días)
             (SELECT COUNT(m.id)
@@ -897,7 +909,7 @@ export function getCampaignFollowUpStats(campaignId) {
                  AND datetime(m.created_at) <= datetime(cr.sent_at, 'localtime', '+7 days')
              )
              WHERE cr.campaign_id = c.id
-               AND cr.status IN ('sent', 'delivered')) AS total_replies,
+               AND cr.status IN ('sent', 'delivered', 'read')) AS total_replies,
 
             -- Tasa de respuesta 24h
             (SELECT COUNT(DISTINCT cr.id)
@@ -908,7 +920,7 @@ export function getCampaignFollowUpStats(campaignId) {
                  AND datetime(m.created_at) BETWEEN datetime(cr.sent_at, 'localtime') AND datetime(cr.sent_at, 'localtime', '+1 day')
              )
              WHERE cr.campaign_id = c.id
-               AND cr.status IN ('sent', 'delivered')) AS replies_24h,
+               AND cr.status IN ('sent', 'delivered', 'read')) AS replies_24h,
 
             -- Último reply recibido
             (SELECT MAX(m.created_at)
@@ -1086,4 +1098,96 @@ export function deleteTemplate(id) {
     const info = templateStatements.delete.run(id);
     return info.changes > 0;
 }
+
+// Phase 2.4: Update Message Status from Callback
+export function updateMessageStatus(messageSid, status, errorCode = null) {
+    if (!messageSid) return false;
+
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    if (!normalizedStatus) {
+        return false;
+    }
+
+    // 1. Update messages table
+    // We only update if status is 'newer' roughly, but here we just blindly update to latest callback
+    const sqlMsg = `
+    UPDATE messages 
+    SET status = ?, 
+        updated_at = datetime('now', 'localtime')
+    WHERE message_sid = ?`;
+
+    db.prepare(sqlMsg).run(normalizedStatus, messageSid);
+
+    // 2. Update campaign_recipients table
+    // Map Twilio status to our status: delivered -> delivered, undelivered/failed -> failed
+    let recipientStatus = normalizedStatus;
+    let errorMessage = null;
+
+    if (['failed', 'undelivered'].includes(normalizedStatus)) {
+        recipientStatus = 'failed';
+        errorMessage = errorCode ? `Twilio Error: ${errorCode}` : 'Delivery failed';
+    } else if (normalizedStatus === 'read') {
+        recipientStatus = 'read';
+    } else if (normalizedStatus === 'delivered') {
+        recipientStatus = 'delivered';
+    } else if (['sent', 'queued', 'accepted', 'sending'].includes(normalizedStatus)) {
+        recipientStatus = 'sent';
+    }
+
+    const sqlRecipient = `
+    UPDATE campaign_recipients 
+    SET status = ?,
+        error_message = ?, 
+        updated_at = datetime('now', 'localtime')
+    WHERE message_sid = ?`;
+
+    const result = db.prepare(sqlRecipient).run(recipientStatus, errorMessage, messageSid);
+    return result.changes > 0;
+}
+
+
+// ============================================================
+// Phase 2.3: Segments CRUD Functions
+// ============================================================
+
+const segmentStatements = {
+    insert: db.prepare(`
+        INSERT INTO segments (name, filters, created_at)
+        VALUES (?, ?, datetime('now', 'localtime'))
+    `),
+    list: db.prepare(`
+        SELECT id, name, filters, created_at
+        FROM segments
+        ORDER BY created_at DESC
+    `),
+    getById: db.prepare(`
+        SELECT id, name, filters, created_at
+        FROM segments
+        WHERE id = ?
+    `),
+    delete: db.prepare(`
+        DELETE FROM segments
+        WHERE id = ?
+    `)
+};
+
+export function createSegment(name, filters) {
+    const filtersJson = JSON.stringify(filters || {});
+    const result = segmentStatements.insert.run(name, filtersJson);
+    return segmentStatements.getById.get(result.lastInsertRowid);
+}
+
+export function listSegments() {
+    return segmentStatements.list.all();
+}
+
+export function getSegmentById(id) {
+    return segmentStatements.getById.get(id);
+}
+
+export function deleteSegment(id) {
+    const info = segmentStatements.delete.run(id);
+    return info.changes > 0;
+}
+
 

@@ -14,6 +14,8 @@ import {
 } from './db/index.js';
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const STATUS_CALLBACK_URL = process.env.STATUS_CALLBACK_URL
+    || (process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/twilio/status-callback` : null);
 
 // Cambia por tu numero de prueba (formato E.164)
 // Cambia por tus numeros de prueba (formato E.164)
@@ -194,6 +196,10 @@ async function main() {
                 to: toForTwilio,
                 messagingServiceSid: process.env.MESSAGING_SERVICE_SID
             };
+
+            if (STATUS_CALLBACK_URL) {
+                payload.statusCallback = STATUS_CALLBACK_URL;
+            }
 
             if (messageBody) {
                 payload.body = messageBody;
