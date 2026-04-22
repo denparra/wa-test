@@ -1,12 +1,21 @@
 {
   "name": "wa-test",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "WhatsApp messaging service para Queirolo Autos (Twilio + Express + SQLite)",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:schema": "node scripts/dump-schema.js",
+    "db:verify": "node scripts/verify-db.js",
+    "db:debug": "node scripts/debug-db.js",
+    "import": "node scripts/import-csv.js"
   },
-  "keywords": [],
+  "keywords": [
+    "whatsapp",
+    "twilio",
+    "messaging"
+  ],
   "author": "",
   "license": "ISC",
   "type": "module",

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { timingSafeEqual } from 'crypto';
 import express from 'express';
 import twilio from 'twilio';
 import multer from 'multer';
@@ -76,9 +77,21 @@ import {
     renderTemplatesPage,
     renderTemplateFormPage
 } from './admin/pages.js';
+import { sendOneRecipient } from './lib/twilio-sender.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Aviso temprano si faltan variables criticas (no aborta: permite levantar la UI
+// admin aunque Twilio no este configurado para diagnosticar via /health).
+const REQUIRED_ENV = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'MESSAGING_SERVICE_SID'];
+const missingEnv = REQUIRED_ENV.filter((key) => !process.env[key]);
+if (missingEnv.length) {
+    console.warn('[startup] Missing env vars (outbound messaging disabled):', missingEnv.join(', '));
+}
+if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) {
+    console.warn('[startup] ADMIN_USER/ADMIN_PASS no configurados: /admin queda SIN autenticacion');
+}
 
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -102,22 +115,6 @@ function normalizeScheduledAt(value) {
         return normalized.length === 16 ? `${normalized}:00` : normalized;
     }
     return trimmed;
-}
-
-function toTwilioRecipient(phone) {
-    if (!phone) {
-        return '';
-    }
-    return phone.toLowerCase().startsWith('whatsapp:') ? phone : `whatsapp:${phone}`;
-}
-
-function buildTemplateVariables(contact = {}) {
-    return {
-        name: contact.name || '',
-        make: contact.make || '',
-        model: contact.model || '',
-        year: contact.year || ''
-    };
 }
 
 async function processCampaignQueue() {
@@ -154,90 +151,14 @@ async function processCampaignSendBatch(campaign) {
     }
 
     for (const recipient of recipients) {
-        const contact = getContactWithVehicle(recipient.contact_id);
-        const rawPhone = recipient.phone || contact?.phone || '';
-        const phone = normalizePhone(rawPhone);
-
-        if (!phone) {
-            updateCampaignRecipientStatus({
-                id: recipient.id,
-                status: 'failed',
-                errorMessage: 'invalid_phone'
-            });
-            continue;
-        }
-
-        if (isOptedOut(phone)) {
-            updateContactStatus(phone, 'opted_out');
-            updateCampaignRecipientStatus({
-                id: recipient.id,
-                status: 'skipped_optout',
-                errorMessage: 'opted_out'
-            });
-            continue;
-        }
-
-        const variables = buildTemplateVariables(contact || {});
-        const rendered = renderMessageTemplate(campaign.message_template || '', variables).trim();
-        const contentSid = campaign.content_sid || process.env.CONTENT_SID || null;
-
-        if (!rendered && !contentSid) {
-            updateCampaignRecipientStatus({
-                id: recipient.id,
-                status: 'failed',
-                errorMessage: 'missing_template'
-            });
-            continue;
-        }
-
-        try {
-            const payload = {
-                to: toTwilioRecipient(phone),
-                messagingServiceSid: process.env.MESSAGING_SERVICE_SID
-            };
-
-            if (STATUS_CALLBACK_URL) {
-                payload.statusCallback = STATUS_CALLBACK_URL;
-            }
-
-            if (rendered) {
-                payload.body = rendered;
-            } else {
-                payload.contentSid = contentSid;
-                if (variables.name) {
-                    payload.contentVariables = JSON.stringify({ "1": variables.name });
-                }
-            }
-
-            const msg = await twilioClient.messages.create(payload);
-            const rawStatus = msg.status || 'sent';
-            const status = ['queued', 'accepted', 'sending'].includes(rawStatus) ? 'sent' : rawStatus;
-            const sentAt = new Date().toISOString();
-
-            updateCampaignRecipientStatus({
-                id: recipient.id,
-                status,
-                messageSid: msg.sid,
-                sentAt
-            });
-            incrementCampaignSentCount(campaign.id);
-
-            insertMessage({
-                contactId: recipient.contact_id || null,
-                campaignId: campaign.id,
-                direction: 'outbound',
-                phone,
-                body: rendered || null,
-                messageSid: msg.sid,
-                status
-            });
-        } catch (error) {
-            updateCampaignRecipientStatus({
-                id: recipient.id,
-                status: 'failed',
-                errorMessage: error?.message || 'send_failed'
-            });
-        }
+        await sendOneRecipient({
+            recipient,
+            campaign,
+            twilioClient,
+            messagingServiceSid: process.env.MESSAGING_SERVICE_SID,
+            statusCallbackUrl: STATUS_CALLBACK_URL,
+            contentSidFallback: process.env.CONTENT_SID
+        });
     }
 }
 
@@ -606,7 +527,7 @@ app.get('/admin/export/opt-outs', adminAuth, (req, res) => {
 });
 
 // POST /twilio/status-callback - Twilio status updates
-app.post('/twilio/status-callback', express.urlencoded({ extended: true }), (req, res) => {
+app.post('/twilio/status-callback', express.urlencoded({ extended: true }), validateTwilioSignature, (req, res) => {
     const { MessageSid, MessageStatus, ErrorCode } = req.body;
     console.log(`STATUS-CALLBACK: ${MessageSid} -> ${MessageStatus} (Error: ${ErrorCode || 'none'})`);
 
@@ -1234,7 +1155,11 @@ app.get('/admin/api/campaigns/:id/conversation/:phone', adminAuth, (req, res) =>
     }
 });
 
-app.get('/admin/contacts', adminAuth, (req, res) => {
+// JSON endpoint para selector de contactos en formulario de campana.
+// Nota: la URL anterior (GET /admin/contacts) colisionaba con la ruta HTML; ningun
+// frontend usaba esta respuesta JSON (el selector consume /admin/api/contacts).
+// Se mantiene bajo un path dedicado para callers futuros de listContactsForCampaign.
+app.get('/admin/api/contacts/for-campaign', adminAuth, (req, res) => {
     try {
         const query = String(req.query.q || '').trim();
         const limitRaw = Number(req.query.limit || 200);
@@ -1267,165 +1192,67 @@ app.post('/admin/api/campaigns/:id/assign-recipients', adminAuth, express.json()
 
 app.post('/admin/api/campaigns/:id/test-send', adminAuth, express.json(), async (req, res) => {
     try {
-        console.log('TEST-SEND: Request received for campaign', req.params.id);
-        console.log('TEST-SEND: Body:', req.body);
-
         if (!twilioClient || !process.env.MESSAGING_SERVICE_SID) {
-            console.error('TEST-SEND: Twilio not configured');
             return res.status(500).json({ error: 'Twilio not configured' });
         }
 
         const id = Number(req.params.id);
         if (!Number.isInteger(id)) {
-            console.error('TEST-SEND: Invalid campaign id:', req.params.id);
             return res.status(400).json({ error: 'Invalid campaign id' });
         }
 
         const campaign = getCampaignById(id);
         if (!campaign) {
-            console.error('TEST-SEND: Campaign not found:', id);
             return res.status(404).json({ error: 'Campaign not found' });
         }
-        console.log('TEST-SEND: Campaign found:', campaign.name);
 
         const contactIdsRaw = Array.isArray(req.body?.contactIds) ? req.body.contactIds : [];
         const contactIds = [...new Set(contactIdsRaw.map(Number).filter(Number.isInteger))];
-        console.log('TEST-SEND: Contact IDs received:', contactIds);
         if (!contactIds.length) {
-            console.error('TEST-SEND: No contacts selected');
             return res.status(400).json({ error: 'No contacts selected' });
         }
 
         const hasBody = String(campaign.message_template || '').trim();
         const hasContentSid = String(campaign.content_sid || process.env.CONTENT_SID || '').trim();
-        console.log('TEST-SEND: Template:', hasBody ? `"${hasBody.substring(0, 50)}..."` : 'none');
-        console.log('TEST-SEND: Content SID:', hasContentSid || 'none');
         if (!hasBody && !hasContentSid) {
-            console.error('TEST-SEND: Missing template or content SID');
             return res.status(400).json({ error: 'Missing template or content SID' });
         }
 
-        console.log('TEST-SEND: Assigning recipients to campaign');
         assignRecipientsToCampaign(id, contactIds);
         const recipients = listCampaignRecipientsByContacts(id, contactIds);
-        console.log('TEST-SEND: Recipients found:', recipients.length);
         if (!recipients.length) {
-            console.error('TEST-SEND: No recipients available');
             return res.status(400).json({ error: 'No recipients available' });
         }
 
         const results = { total: recipients.length, sent: 0, skipped: 0, failed: 0 };
-        console.log('TEST-SEND: Starting send loop for', recipients.length, 'recipients');
+        console.log(`TEST-SEND: campaign=${id} recipients=${recipients.length}`);
 
         for (const recipient of recipients) {
-            console.log('TEST-SEND: Processing recipient', recipient.id, 'contact', recipient.contact_id, 'status', recipient.status);
             if (recipient.status && recipient.status !== 'pending') {
-                console.log('TEST-SEND: Skipping recipient', recipient.id, 'with status', recipient.status);
                 results.skipped += 1;
                 continue;
             }
 
-            const contact = getContactWithVehicle(recipient.contact_id);
-            const rawPhone = recipient.phone || contact?.phone || '';
-            const phone = normalizePhone(rawPhone);
-            console.log('TEST-SEND: Phone for recipient', recipient.id, ':', rawPhone, '->', phone);
+            const result = await sendOneRecipient({
+                recipient,
+                campaign,
+                twilioClient,
+                messagingServiceSid: process.env.MESSAGING_SERVICE_SID,
+                statusCallbackUrl: STATUS_CALLBACK_URL,
+                contentSidFallback: process.env.CONTENT_SID
+            });
 
-            if (!phone) {
-                console.error('TEST-SEND: Invalid phone for recipient', recipient.id);
-                updateCampaignRecipientStatus({
-                    id: recipient.id,
-                    status: 'failed',
-                    errorMessage: 'invalid_phone'
-                });
-                results.failed += 1;
-                continue;
-            }
-
-            if (isOptedOut(phone)) {
-                console.log('TEST-SEND: Recipient', recipient.id, 'is opted out');
-                updateContactStatus(phone, 'opted_out');
-                updateCampaignRecipientStatus({
-                    id: recipient.id,
-                    status: 'skipped_optout',
-                    errorMessage: 'opted_out'
-                });
-                results.skipped += 1;
-                continue;
-            }
-
-            const variables = buildTemplateVariables(contact || {});
-            const rendered = renderMessageTemplate(campaign.message_template || '', variables).trim();
-            const contentSid = campaign.content_sid || process.env.CONTENT_SID || null;
-            console.log('TEST-SEND: Rendered message for', recipient.id, ':', rendered ? `"${rendered.substring(0, 50)}..."` : 'none');
-
-            if (!rendered && !contentSid) {
-                console.error('TEST-SEND: No message body or content SID for recipient', recipient.id);
-                updateCampaignRecipientStatus({
-                    id: recipient.id,
-                    status: 'failed',
-                    errorMessage: 'missing_template'
-                });
-                results.failed += 1;
-                continue;
-            }
-
-            try {
-                const payload = {
-                    to: toTwilioRecipient(phone),
-                    messagingServiceSid: process.env.MESSAGING_SERVICE_SID
-                };
-
-                if (STATUS_CALLBACK_URL) {
-                    payload.statusCallback = STATUS_CALLBACK_URL;
-                }
-
-                if (rendered) {
-                    payload.body = rendered;
-                } else {
-                    payload.contentSid = contentSid;
-                    if (variables.name) {
-                        payload.contentVariables = JSON.stringify({ "1": variables.name });
-                    }
-                }
-
-                console.log('TEST-SEND: Sending to Twilio for recipient', recipient.id, 'payload:', { to: payload.to, hasBody: !!payload.body, contentSid: payload.contentSid });
-                const msg = await twilioClient.messages.create(payload);
-                console.log('TEST-SEND: Twilio response for recipient', recipient.id, ':', msg.sid, msg.status);
-                const rawStatus = msg.status || 'sent';
-                const status = ['queued', 'accepted', 'sending'].includes(rawStatus) ? 'sent' : rawStatus;
-                const sentAt = new Date().toISOString();
-
-                updateCampaignRecipientStatus({
-                    id: recipient.id,
-                    status,
-                    messageSid: msg.sid,
-                    sentAt
-                });
-                incrementCampaignSentCount(campaign.id);
-
-                insertMessage({
-                    contactId: recipient.contact_id || null,
-                    campaignId: campaign.id,
-                    direction: 'outbound',
-                    phone,
-                    body: rendered || null,
-                    messageSid: msg.sid,
-                    status
-                });
-
+            if (result.outcome === 'sent') {
                 results.sent += 1;
-            } catch (error) {
-                console.error('TEST-SEND: Twilio error for recipient', recipient.id, ':', error.message);
-                updateCampaignRecipientStatus({
-                    id: recipient.id,
-                    status: 'failed',
-                    errorMessage: error?.message || 'send_failed'
-                });
+            } else if (result.outcome === 'skipped') {
+                results.skipped += 1;
+            } else {
                 results.failed += 1;
+                console.warn(`TEST-SEND: recipient=${recipient.id} failed reason=${result.reason}`);
             }
         }
 
-        console.log('TEST-SEND: Completed. Results:', results);
+        console.log('TEST-SEND: completed', results);
         res.json(results);
     } catch (error) {
         console.error('TEST-SEND: Fatal error:', error);
@@ -1462,7 +1289,7 @@ app.post('/admin/api/campaigns/preview-samples', adminAuth, express.json(), (req
 // ============================================================
 // Webhooks
 // ============================================================
-app.post('/twilio/inbound', (req, res) => {
+app.post('/twilio/inbound', validateTwilioSignature, (req, res) => {
     const from = req.body.From;            // "whatsapp:+569..."
     const body = (req.body.Body || '').trim(); // texto del usuario
 
@@ -1539,6 +1366,41 @@ function maskPhone(phone = '') { // RENAMED arg
     return `${phone.slice(0, Math.max(0, phone.length - 4)).replace(/\d/g, '*')}${visible}`;
 }
 
+// Valida la firma X-Twilio-Signature para prevenir POSTs falsificados al webhook.
+// OPT-IN: se activa solo con TWILIO_VALIDATE_SIGNATURE=true + PUBLIC_BASE_URL
+// definido (ambos requeridos; si faltan se deja pasar para no romper produccion).
+function validateTwilioSignature(req, res, next) {
+    if (process.env.TWILIO_VALIDATE_SIGNATURE !== 'true') {
+        return next();
+    }
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const baseUrl = process.env.PUBLIC_BASE_URL;
+    if (!authToken || !baseUrl) {
+        console.warn('[twilio] signature validation enabled pero falta PUBLIC_BASE_URL o TWILIO_AUTH_TOKEN; skip');
+        return next();
+    }
+    const signature = req.headers['x-twilio-signature'];
+    if (!signature) {
+        return res.status(403).send('Missing Twilio signature');
+    }
+    const url = `${baseUrl.replace(/\/$/, '')}${req.originalUrl}`;
+    const valid = twilio.validateRequest(authToken, signature, url, req.body || {});
+    if (!valid) {
+        console.warn('[twilio] Invalid signature for', req.originalUrl, 'from', req.ip);
+        return res.status(403).send('Invalid Twilio signature');
+    }
+    return next();
+}
+
+function safeEqual(a, b) {
+    const bufA = Buffer.from(String(a), 'utf8');
+    const bufB = Buffer.from(String(b), 'utf8');
+    if (bufA.length !== bufB.length) {
+        return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+}
+
 function adminAuth(req, res, next) {
     const user = process.env.ADMIN_USER;
     const pass = process.env.ADMIN_PASS;
@@ -1554,7 +1416,7 @@ function adminAuth(req, res, next) {
     const separatorIndex = decoded.indexOf(':');
     const providedUser = separatorIndex >= 0 ? decoded.slice(0, separatorIndex) : decoded;
     const providedPass = separatorIndex >= 0 ? decoded.slice(separatorIndex + 1) : '';
-    if (providedUser !== user || providedPass !== pass) {
+    if (!safeEqual(providedUser, user) || !safeEqual(providedPass, pass)) {
         res.set('WWW-Authenticate', 'Basic realm="Admin"');
         return res.status(401).send('Invalid credentials');
     }
