@@ -87,6 +87,18 @@ if (campaignsTableExists) {
     }
 }
 
+// Fase 1 Migration: Add origin/external_id to vehicles if they don't exist
+const vehiclesTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicles'").get();
+if (vehiclesTableExists) {
+    const vehiclesInfo = db.prepare("PRAGMA table_info(vehicles)").all();
+    if (!vehiclesInfo.some(col => col.name === 'origin')) {
+        db.exec(`ALTER TABLE vehicles ADD COLUMN origin TEXT`);
+    }
+    if (!vehiclesInfo.some(col => col.name === 'external_id')) {
+        db.exec(`ALTER TABLE vehicles ADD COLUMN external_id TEXT`);
+    }
+}
+
 // Read and execute schema
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
@@ -161,8 +173,8 @@ const statements = {
         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
     `),
     insertVehicle: db.prepare(`
-        INSERT INTO vehicles (contact_id, make, model, year, price, link, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+        INSERT INTO vehicles (contact_id, make, model, year, price, link, origin, external_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
     `),
     getCampaignById: db.prepare(`
         SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
@@ -441,13 +453,15 @@ export function insertMessage({
 
 export function insertVehicle({
     contactId,
-    make, // RENAMED from brand
+    make,
     model,
     year,
     price = null,
-    link = null
+    link = null,
+    origin = null,
+    external_id = null
 }) {
-    statements.insertVehicle.run(contactId, make, model, year, price, link);
+    statements.insertVehicle.run(contactId, make, model, year, price, link, origin, external_id);
 }
 
 export function getCampaignById(id) {
@@ -782,6 +796,7 @@ export function bulkImportContactsAndVehicles(records) {
             contactsInserted: 0,
             contactsUpdated: 0,
             vehiclesInserted: 0,
+            vehiclesUpdated: 0,
             errors: []
         };
 
@@ -793,19 +808,26 @@ export function bulkImportContactsAndVehicles(records) {
                 name = COALESCE(NULLIF(excluded.name, ''), contacts.name),
                 updated_at = datetime('now', 'localtime')
         `);
+        const getVehicleStmt = db.prepare(`
+            SELECT id FROM vehicles
+            WHERE contact_id = ? AND make = ? AND model = ? AND year = ?
+        `);
         const insertVehicleStmt = db.prepare(`
-            INSERT INTO vehicles (contact_id, make, model, year, price, link, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+            INSERT INTO vehicles (contact_id, make, model, year, price, link, origin, external_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+        `);
+        const updateVehicleStmt = db.prepare(`
+            UPDATE vehicles
+            SET price = ?, link = ?, origin = ?, external_id = ?, updated_at = datetime('now', 'localtime')
+            WHERE contact_id = ? AND make = ? AND model = ? AND year = ?
         `);
 
         for (const record of items) {
             stats.processed++;
             try {
-                // Check if contact exists before insert
                 const existingContact = getContactStmt.get(record.phone);
                 const wasExisting = Boolean(existingContact);
 
-                // Insert/Update contact
                 const contactResult = insertContactStmt.run(record.phone, record.name || null);
 
                 if (!wasExisting && contactResult.changes > 0) {
@@ -814,22 +836,35 @@ export function bulkImportContactsAndVehicles(records) {
                     stats.contactsUpdated++;
                 }
 
-                // Get contact ID (either just inserted or existing)
                 const contact = getContactStmt.get(record.phone);
                 if (!contact) {
                     throw new Error('Failed to retrieve contact after insert');
                 }
 
-                // Insert vehicle
-                insertVehicleStmt.run(
-                    contact.id,
-                    record.make,
-                    record.model,
-                    record.year,
-                    record.price || null,
-                    record.link || null
-                );
-                stats.vehiclesInserted++;
+                const existingVehicle = getVehicleStmt.get(contact.id, record.make, record.model, record.year);
+
+                if (existingVehicle) {
+                    updateVehicleStmt.run(
+                        record.price || null,
+                        record.link || null,
+                        record.origin || null,
+                        record.external_id || null,
+                        contact.id, record.make, record.model, record.year
+                    );
+                    stats.vehiclesUpdated++;
+                } else {
+                    insertVehicleStmt.run(
+                        contact.id,
+                        record.make,
+                        record.model,
+                        record.year,
+                        record.price || null,
+                        record.link || null,
+                        record.origin || null,
+                        record.external_id || null
+                    );
+                    stats.vehiclesInserted++;
+                }
 
             } catch (error) {
                 stats.errors.push({
@@ -1190,4 +1225,43 @@ export function deleteSegment(id) {
     return info.changes > 0;
 }
 
+// ============================================================
+// Fase 3: Vehicle Make Filtering Functions
+// ============================================================
+
+export function listVehicleMakes() {
+    return db.prepare(`
+        SELECT make,
+               COUNT(DISTINCT contact_id) AS contacts,
+               COUNT(*) AS vehicles
+        FROM vehicles
+        GROUP BY make
+        ORDER BY make
+    `).all();
+}
+
+export function listContactsByMake(make, { limit = 50, offset = 0 } = {}) {
+    return db.prepare(`
+        SELECT c.id, c.phone, c.name, c.status, c.created_at, c.updated_at
+        FROM contacts c
+        JOIN vehicles v ON v.contact_id = c.id
+        WHERE v.make = ?
+        GROUP BY c.id
+        ORDER BY c.updated_at DESC
+        LIMIT ? OFFSET ?
+    `).all(make, limit, offset);
+}
+
+// ============================================================
+// Fase 4: Vehicles by Contact
+// ============================================================
+
+export function getVehiclesByContactId(contactId) {
+    return db.prepare(`
+        SELECT id, make, model, year, price, link, origin, external_id, created_at, updated_at
+        FROM vehicles
+        WHERE contact_id = ?
+        ORDER BY updated_at DESC
+    `).all(contactId);
+}
 

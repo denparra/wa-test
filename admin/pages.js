@@ -106,7 +106,7 @@ export function renderDashboardPage({ stats }) {
   return renderLayout({ title: 'Resumen', content, active: 'home' });
 }
 
-export function renderContactsPage({ contacts, query, offset, limit }) {
+export function renderContactsPage({ contacts, query, offset, limit, makes = [], make = '' }) {
   const helpText = renderHelpText(
     `<strong>Gestión de contactos:</strong> Lista de todos los contactos registrados. Los estados son:
     <strong>active</strong> (activo, recibe mensajes), <strong>opted_out</strong> (BAJA solicitada),
@@ -161,22 +161,39 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
     </script>
   `;
 
+  const chipStyle = (active) => active
+    ? 'display:inline-block;padding:4px 12px;border-radius:12px;font-size:13px;text-decoration:none;margin:2px;background:var(--accent);color:#fff;font-weight:600;'
+    : 'display:inline-block;padding:4px 12px;border-radius:12px;font-size:13px;text-decoration:none;margin:2px;background:#e8e0d5;color:#555;';
+
+  const chipsHtml = makes.length > 0 ? `
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;">
+      <a href="/admin/contacts" style="${chipStyle(!make)}">Todos</a>
+      ${makes.map(m =>
+    `<a href="/admin/contacts?make=${encodeURIComponent(m.make)}" style="${chipStyle(make === m.make)}">${escapeHtml(m.make)} <span style="opacity:0.7;font-size:11px;">${m.contacts}</span></a>`
+  ).join('')}
+    </div>` : '';
+
+  const searchOrFilter = make
+    ? `<div style="margin-top:8px;font-size:13px;color:#888;">Filtrando por marca: <strong>${escapeHtml(make)}</strong> · <a href="/admin/contacts">Ver todos</a></div>`
+    : `<form class="inline" method="get" action="/admin/contacts" style="margin-top:10px;">
+        <input type="text" name="q" placeholder="Buscar telefono o nombre" value="${escapeHtml(query || '')}" />
+        <button type="submit">Buscar</button>
+       </form>`;
+
   const content = `<section class="panel">
       <div class="panel-header">
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
           <h1>Contactos</h1>
           <a href="/admin/contacts/new" class="action-btn primary" style="padding:10px 18px; text-decoration:none;">${renderIcon('plus', 14)}<span>Agregar Contacto</span></a>
         </div>
-        <form class="inline" method="get" action="/admin/contacts" style="margin-top:10px;">
-          <input type="text" name="q" placeholder="Buscar telefono o nombre" value="${escapeHtml(query || '')}" />
-          <button type="submit">Buscar</button>
-        </form>
+        ${chipsHtml}
+        ${searchOrFilter}
       </div>
       ${helpText}
       ${tableContent}
       ${contacts.length > 0 ? renderPager({
     basePath: '/admin/contacts',
-    query: { q: query || '' },
+    query: make ? { make } : { q: query || '' },
     offset,
     limit,
     hasNext: contacts.length === limit
@@ -186,7 +203,7 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
   return renderLayout({ title: 'Contactos', content, active: 'contacts' });
 }
 
-export function renderContactEditPage({ contact = null, error = null }) {
+export function renderContactEditPage({ contact = null, error = null, vehicles = [] }) {
   const isNew = !contact;
   const title = isNew ? 'Nuevo Contacto' : 'Editar Contacto';
   const action = isNew ? 'Crear' : 'Guardar';
@@ -256,7 +273,26 @@ export function renderContactEditPage({ contact = null, error = null }) {
     </form>
   `;
 
-  return renderLayout({ title, content: form, active: 'contacts' });
+  const vehiclesSection = contact ? `
+    <section class="panel" style="margin-top:20px;">
+      <div class="panel-header"><h2>Vehículos asociados</h2></div>
+      ${vehicles.length > 0 ? `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${vehicles.map(v => `
+            <div style="padding:12px;background:#f8f5f1;border-radius:8px;display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <strong>${escapeHtml(v.make)} ${escapeHtml(v.model)} ${v.year}</strong>
+                ${v.price != null ? `<div class="muted" style="font-size:13px;">$${Number(v.price).toLocaleString('es-CL')}</div>` : ''}
+                ${v.origin ? `<span style="display:inline-block;padding:2px 8px;background:#e8e0d5;border-radius:4px;font-size:11px;margin-top:4px;">${escapeHtml(v.origin)}</span>` : ''}
+                ${v.external_id ? `<span class="muted" style="font-size:11px;margin-left:6px;">${escapeHtml(v.external_id)}</span>` : ''}
+              </div>
+              ${v.link ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" style="font-size:12px;white-space:nowrap;">Ver pub.</a>` : ''}
+            </div>
+          `).join('')}
+        </div>` : '<p class="muted">Sin vehículos registrados</p>'}
+    </section>` : '';
+
+  return renderLayout({ title, content: form + vehiclesSection, active: 'contacts' });
 }
 
 export function renderContactCreatePage({ error = null, formData = {} }) {
@@ -1994,6 +2030,7 @@ export function renderImportPage({ preview = null, result = null }) {
         <p><strong>Contactos insertados:</strong> ${result.contactsInserted}</p>
         <p><strong>Contactos actualizados:</strong> ${result.contactsUpdated}</p>
         <p><strong>Vehículos insertados:</strong> ${result.vehiclesInserted}</p>
+        <p><strong>Vehículos actualizados:</strong> ${result.vehiclesUpdated ?? 0}</p>
         ${result.errors.length > 0 ? `<p><strong>Errores:</strong> ${result.errors.length}</p>` : ''}
       </div>
 

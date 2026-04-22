@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
     year INTEGER NOT NULL, -- Año: 2015
     price REAL,           -- Precio (CLP)
     link TEXT,            -- URL publicación
+    origin TEXT,          -- Origen de datos (ej: "barb")
+    external_id TEXT,     -- ID externo (ej: "barbara:8339")
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
 CREATE INDEX IF NOT EXISTS idx_vehicles_contact_id ON vehicles(contact_id);
 CREATE INDEX IF NOT EXISTS idx_vehicles_make ON vehicles(make);
 CREATE INDEX IF NOT EXISTS idx_vehicles_year ON vehicles(year);
+CREATE INDEX IF NOT EXISTS idx_vehicles_external_id ON vehicles(external_id);
 
 -- ============================================================
 -- OPT_OUTS: BAJA compliance

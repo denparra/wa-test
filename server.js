@@ -44,6 +44,9 @@ import {
     listCampaignRecipientsByContacts,
     renderMessageTemplate,
     bulkImportContactsAndVehicles,
+    listVehicleMakes,
+    listContactsByMake,
+    getVehiclesByContactId,
     updateOptOut,
     deleteOptOut,
     getOptOutByPhone,
@@ -178,9 +181,17 @@ app.get('/admin', (req, res) => {
 app.get('/admin/contacts', (req, res) => {
     const { limit, offset } = getPaging(req);
     const query = String(req.query.q || '').trim();
-    const contacts = listContacts({ limit, offset, query });
+    const make = String(req.query.make || '').trim();
+
+    const makes = listVehicleMakes();
+    const contacts = make
+        ? listContactsByMake(make, { limit, offset })
+        : listContacts({ limit, offset, query });
+
     res.status(200).type('text/html').send(renderContactsPage({
         contacts,
+        makes,
+        make,
         query,
         offset,
         limit
@@ -199,7 +210,8 @@ app.get('/admin/contacts/:id/edit', adminAuth, (req, res) => {
         return res.status(404).send('Contact not found');
     }
 
-    res.status(200).type('text/html').send(renderContactEditPage({ contact }));
+    const vehicles = getVehiclesByContactId(id);
+    res.status(200).type('text/html').send(renderContactEditPage({ contact, vehicles }));
 });
 
 // POST /admin/contacts/:id - Update contact
@@ -809,6 +821,12 @@ app.post('/admin/import/upload', adminAuth, upload.single('csvFile'), (req, res)
             headerMap[required] = Object.keys(firstRecord).find(k => k.toLowerCase() === found);
         }
 
+        // Map optional columns (no error if absent)
+        for (const opt of ['origen', 'id_origen']) {
+            const found = headers.find(h => h === opt);
+            headerMap[opt] = found ? Object.keys(firstRecord).find(k => k.toLowerCase() === found) : null;
+        }
+
         const valid = [];
         const invalid = [];
 
@@ -824,6 +842,8 @@ app.post('/admin/import/upload', adminAuth, upload.single('csvFile'), (req, res)
             const yearRaw = String(row[headerMap['año']] || row[headerMap.ano] || '').trim();
             const priceRaw = String(row[headerMap.precio] || '').trim();
             const link = String(row[headerMap.link] || '').trim();
+            const origin = headerMap.origen ? String(row[headerMap.origen] || '').trim() : '';
+            const externalId = headerMap.id_origen ? String(row[headerMap.id_origen] || '').trim() : '';
 
             // Validate phone
             if (!phone) {
@@ -885,7 +905,9 @@ app.post('/admin/import/upload', adminAuth, upload.single('csvFile'), (req, res)
                     model,
                     year,
                     price,
-                    link: link || null
+                    link: link || null,
+                    origin: origin || null,
+                    external_id: externalId || null
                 });
             }
         });
