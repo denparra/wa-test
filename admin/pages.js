@@ -5,11 +5,44 @@ import {
   renderCopyButton,
   renderEmptyState,
   renderHelpText,
+  renderIcon,
   renderLayout,
   renderPager,
   renderTable,
   truncate
 } from './render.js';
+
+function initials(name, phone) {
+  const source = String(name || '').trim();
+  if (source) {
+    const parts = source.split(/\s+/).filter(Boolean).slice(0, 2);
+    return parts.map((part) => part.charAt(0).toUpperCase()).join('') || '?';
+  }
+  const digits = String(phone || '').replace(/\D+/g, '');
+  if (digits.length >= 2) {
+    return digits.slice(-2);
+  }
+  return '?';
+}
+
+function formatShortTime(value) {
+  if (!value) return '';
+  const raw = String(value).replace('T', ' ').trim();
+  const dt = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+  if (Number.isNaN(dt.getTime())) {
+    return raw.slice(5, 16); // fallback: "MM-DD HH:MM"
+  }
+  const now = new Date();
+  const sameDay = dt.toDateString() === now.toDateString();
+  if (sameDay) {
+    return dt.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+  }
+  const thisYear = dt.getFullYear() === now.getFullYear();
+  if (thisYear) {
+    return dt.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+  }
+  return dt.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
 
 function statusTone(value) {
   const text = String(value || '').toLowerCase();
@@ -38,27 +71,28 @@ function formatDateTimeLocal(value) {
 
 export function renderDashboardPage({ stats }) {
   const cards = [
-    { label: 'Contactos', value: stats.contacts, link: '/admin/contacts', desc: 'Total de contactos en la base de datos' },
-    { label: 'Vehiculos', value: stats.vehicles, desc: 'Vehículos asociados a contactos' },
-    { label: 'Opt-outs', value: stats.optOuts, link: '/admin/opt-outs', desc: 'Usuarios que pidieron BAJA' },
-    { label: 'Campanas', value: stats.campaigns, link: '/admin/campaigns', desc: 'Campañas de mensajes creadas' },
-    { label: 'Recipients', value: stats.campaignRecipients, desc: 'Destinatarios en todas las campañas' },
-    { label: 'Mensajes', value: stats.messages, link: '/admin/messages', desc: 'Total de mensajes (inbound + outbound)' }
+    { label: 'Contactos', value: stats.contacts, link: '/admin/contacts', desc: 'Total de contactos en la base', icon: 'users', kicker: 'Base activa' },
+    { label: 'Vehiculos', value: stats.vehicles, desc: 'Vehículos asociados a contactos', icon: 'car', kicker: 'Inventario asociado' },
+    { label: 'Opt-outs', value: stats.optOuts, link: '/admin/opt-outs', desc: 'Usuarios que pidieron BAJA', icon: 'user-x', kicker: 'Excluidos de envíos' },
+    { label: 'Campañas', value: stats.campaigns, link: '/admin/campaigns', desc: 'Campañas creadas en total', icon: 'send', kicker: 'Todos los estados' },
+    { label: 'Destinatarios', value: stats.campaignRecipients, desc: 'Registros de destino en campañas', icon: 'inbox', kicker: 'Acumulado' },
+    { label: 'Mensajes', value: stats.messages, link: '/admin/messages', desc: 'Total inbound + outbound', icon: 'message-square', kicker: 'Últimos registros' }
   ];
 
   const helpText = renderHelpText(
-    `<strong>Dashboard de control:</strong> Vista general de la actividad del sistema. Haz clic en las tarjetas para navegar a cada sección.`
+    `<strong>Vista general:</strong> actividad del sistema en un vistazo.
+    Haz clic en una tarjeta para navegar a la sección correspondiente.`
   );
 
   const cardHtml = cards.map((card) => {
-    const wrapper = card.link
-      ? `<a href="${card.link}" style="text-decoration: none; color: inherit;">`
-      : '<div>';
-    const endWrapper = card.link ? '</a>' : '</div>';
-    return `${wrapper}<div class="card" title="${card.desc}">
-      <h2>${card.label}</h2>
-      <p>${card.value}</p>
-    </div>${endWrapper}`;
+    const inner = `<div class="card card-accent" title="${escapeHtml(card.desc)}">
+      <h2>${renderIcon(card.icon, 14)}<span>${escapeHtml(card.label)}</span></h2>
+      <p>${Number.isFinite(Number(card.value)) ? Number(card.value).toLocaleString('es-CL') : escapeHtml(String(card.value || '0'))}</p>
+      <div class="card-kicker">${escapeHtml(card.kicker)}${card.link ? ' · ver detalle ' + renderIcon('arrow-right', 11) : ''}</div>
+    </div>`;
+    return card.link
+      ? `<a href="${card.link}" style="text-decoration:none; color:inherit;">${inner}</a>`
+      : `<div>${inner}</div>`;
   }).join('');
 
   const content = `<section class="panel">
@@ -89,9 +123,9 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
         { key: 'updated_at', label: 'Actualizado', render: (row) => escapeHtml(formatDate(row.updated_at)) },
         {
           key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
-          <a href="/admin/contacts/${row.id}/edit" class="action-btn" title="Editar contacto">✏️</a>
-          <button onclick="deleteContact(${row.id}, '${escapeHtml(row.phone)}')" class="action-btn" title="Eliminar contacto">🗑️</button>
-          ${renderCopyButton(row.phone, '📋')}
+          <a href="/admin/contacts/${row.id}/edit" class="action-btn" title="Editar contacto" aria-label="Editar">${renderIcon('edit', 13)}</a>
+          <button onclick="deleteContact(${row.id}, '${escapeHtml(row.phone)}')" class="action-btn danger" title="Eliminar contacto" aria-label="Eliminar">${renderIcon('trash', 13)}</button>
+          ${renderCopyButton(row.phone, '')}
         </div>` }
       ],
       rows: contacts,
@@ -131,7 +165,7 @@ export function renderContactsPage({ contacts, query, offset, limit }) {
       <div class="panel-header">
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
           <h1>Contactos</h1>
-          <a href="/admin/contacts/new" class="action-btn" style="background:var(--accent); color:white; border-color:var(--accent); padding:10px 20px; text-decoration:none;">+ Agregar Contacto</a>
+          <a href="/admin/contacts/new" class="action-btn primary" style="padding:10px 18px; text-decoration:none;">${renderIcon('plus', 14)}<span>Agregar Contacto</span></a>
         </div>
         <form class="inline" method="get" action="/admin/contacts" style="margin-top:10px;">
           <input type="text" name="q" placeholder="Buscar telefono o nombre" value="${escapeHtml(query || '')}" />
@@ -394,62 +428,365 @@ export function renderOptOutEditPage({ optOut = null, error = null }) {
 
 export function renderMessagesPage({ messages, direction, offset, limit }) {
   const helpText = renderHelpText(
-    `<strong>Registro de mensajes:</strong> Todos los mensajes inbound (recibidos) y outbound (enviados).
-    Los estados son: <strong>received</strong> (inbound recibido), <strong>queued</strong> (en cola),
-    <strong>sent</strong> (enviado), <strong>delivered</strong> (entregado), <strong>failed</strong> (falló).
-    Usa los filtros para ver solo inbound u outbound.`
+    `<strong>Bandeja de conversaciones:</strong> los mensajes se agrupan por contacto
+    para que puedas leer cada conversación como un chat. Haz clic en una conversación
+    para ver el hilo completo; filtra por <strong>entrantes</strong> / <strong>salientes</strong>
+    o busca por nombre, teléfono o contenido.`
   );
 
-  const tableContent = messages.length > 0
-    ? renderTable({
-      columns: [
-        { key: 'created_at', label: 'Fecha', render: (row) => escapeHtml(formatDate(row.created_at)) },
-        { key: 'direction', label: 'Direccion', render: (row) => renderBadge(row.direction, statusTone(row.direction)) },
-        { key: 'contact_phone', label: 'Telefono' },
-        { key: 'contact_name', label: 'Nombre' },
-        { key: 'campaign_name', label: 'Campana' },
-        { key: 'status', label: 'Status', render: (row) => renderBadge(row.status || 'n/a', statusTone(row.status)) },
-        { key: 'body', label: 'Contenido', render: (row) => `<span title="${escapeHtml(row.body || '')}">${escapeHtml(truncate(row.body || '', 80))}</span>` },
-        { key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">${row.body ? renderCopyButton(row.body, '📋') : ''}</div>` }
-      ],
-      rows: messages,
-      searchable: true,
-      sortable: true,
-      tableId: 'messages-table'
-    })
-    : renderEmptyState({
+  // ---- Agrupación por contacto (sin tocar persistencia) ----
+  const groupsMap = new Map();
+  for (const msg of messages) {
+    const key = msg.contact_phone || `id:${msg.id}`;
+    let group = groupsMap.get(key);
+    if (!group) {
+      group = {
+        key,
+        phone: msg.contact_phone || '',
+        name: msg.contact_name || '',
+        messages: [],
+        lastAt: msg.created_at,
+        lastBody: msg.body || '',
+        lastDirection: msg.direction,
+        lastStatus: msg.status,
+        campaigns: new Set(),
+        hasFailure: false,
+        inboundCount: 0,
+        outboundCount: 0
+      };
+      groupsMap.set(key, group);
+    }
+    group.messages.push(msg);
+    if (msg.campaign_name) {
+      group.campaigns.add(msg.campaign_name);
+    }
+    if (String(msg.status || '').toLowerCase() === 'failed') {
+      group.hasFailure = true;
+    }
+    if (msg.direction === 'inbound') group.inboundCount += 1;
+    else if (msg.direction === 'outbound') group.outboundCount += 1;
+    // Primera aparición == más reciente porque listMessages ordena DESC.
+    if (!group.lastAt || String(msg.created_at || '') > String(group.lastAt)) {
+      group.lastAt = msg.created_at;
+      group.lastBody = msg.body || '';
+      group.lastDirection = msg.direction;
+      group.lastStatus = msg.status;
+    }
+    if (!group.name && msg.contact_name) {
+      group.name = msg.contact_name;
+    }
+  }
+
+  const groups = Array.from(groupsMap.values()).sort((a, b) => String(b.lastAt || '').localeCompare(String(a.lastAt || '')));
+
+  // Orden cronológico ascendente dentro de cada conversación para renderizar chat.
+  for (const g of groups) {
+    g.messages.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  }
+
+  const totalMsgs = messages.length;
+  const totalConv = groups.length;
+  const inboundCount = messages.filter((m) => m.direction === 'inbound').length;
+  const outboundCount = totalMsgs - inboundCount;
+
+  const chipBase = '/admin/messages';
+  const chips = `
+    <div class="chip-group" role="tablist" aria-label="Filtro de dirección">
+      <a class="chip ${!direction ? 'active' : ''}" href="${chipBase}">Todos <span class="muted">${totalMsgs}</span></a>
+      <a class="chip ${direction === 'inbound' ? 'active' : ''}" href="${chipBase}?direction=inbound">${renderIcon('arrow-down-left', 13)} Entrantes <span class="muted">${inboundCount}</span></a>
+      <a class="chip ${direction === 'outbound' ? 'active' : ''}" href="${chipBase}?direction=outbound">${renderIcon('arrow-up-right', 13)} Salientes <span class="muted">${outboundCount}</span></a>
+    </div>`;
+
+  const inboxItems = groups.map((g, idx) => {
+    const displayName = g.name ? escapeHtml(g.name) : `<span class="muted">Sin nombre</span>`;
+    const phoneSafe = escapeHtml(g.phone || '—');
+    const dirIconName = g.lastDirection === 'outbound' ? 'arrow-up-right' : 'arrow-down-left';
+    const dirClass = g.lastDirection === 'outbound' ? 'inbox-dir-out' : 'inbox-dir-in';
+    const preview = escapeHtml(truncate(g.lastBody || '(sin contenido)', 70));
+    const timeLabel = escapeHtml(formatShortTime(g.lastAt));
+    const statusLabel = g.lastStatus ? renderBadge(g.lastStatus, statusTone(g.lastStatus)) : '';
+    const failureLabel = g.hasFailure && String(g.lastStatus || '').toLowerCase() !== 'failed'
+      ? renderBadge('fallo previo', 'bad')
+      : '';
+    const campaignLabels = Array.from(g.campaigns).slice(0, 1).map((c) => renderBadge(truncate(c, 22), 'accent')).join('');
+    const avatar = `<div class="inbox-avatar">${escapeHtml(initials(g.name, g.phone))}</div>`;
+    return `<div class="inbox-item${idx === 0 ? ' active' : ''}" data-conv-key="${escapeHtml(g.key)}" role="button" tabindex="0">
+      ${avatar}
+      <div class="inbox-body">
+        <div class="inbox-row1">
+          <div class="inbox-name">${displayName}</div>
+          <div class="inbox-time">${timeLabel}</div>
+        </div>
+        <div class="inbox-phone">${phoneSafe}</div>
+        <div class="inbox-row3">
+          <span class="inbox-dir-icon ${dirClass}" title="${g.lastDirection === 'outbound' ? 'Último: saliente' : 'Último: entrante'}">${renderIcon(dirIconName, 11)}</span>
+          <span class="inbox-preview">${preview}</span>
+        </div>
+        <div class="inbox-meta">
+          ${statusLabel}
+          ${failureLabel}
+          ${campaignLabels}
+          ${g.messages.length > 1 ? `<span class="badge badge-muted">${g.messages.length} msgs</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Payload JSON para detalle (se imprime embebido como script JSON seguro).
+  const conversationsPayload = groups.map((g) => ({
+    key: g.key,
+    phone: g.phone,
+    name: g.name,
+    campaigns: Array.from(g.campaigns),
+    inbound: g.inboundCount,
+    outbound: g.outboundCount,
+    messages: g.messages.map((m) => ({
+      id: m.id,
+      direction: m.direction,
+      body: m.body || '',
+      status: m.status || '',
+      message_sid: m.message_sid || '',
+      campaign_name: m.campaign_name || '',
+      created_at: m.created_at || ''
+    }))
+  }));
+
+  const payloadJson = JSON.stringify(conversationsPayload)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+
+  const emptyInbox = totalMsgs === 0
+    ? renderEmptyState({
       title: 'Sin mensajes',
       message: direction === 'inbound'
-        ? 'Aún no hay mensajes inbound. Los mensajes aparecerán cuando los usuarios escriban al WhatsApp.'
+        ? 'Aún no hay mensajes inbound. Aparecerán cuando los usuarios escriban al WhatsApp.'
         : direction === 'outbound'
           ? 'Aún no hay mensajes outbound. Se generan al enviar campañas.'
           : 'Aún no hay mensajes registrados en el sistema.',
       ctaText: 'Ver campañas',
       ctaLink: '/admin/campaigns'
-    });
+    })
+    : '';
 
-  const content = `<section class="panel">
-      <div class="panel-header">
-        <h1>Mensajes</h1>
-        <form class="inline" method="get" action="/admin/messages">
-          <select name="direction">
-            <option value="" ${direction ? '' : 'selected'}>Todos</option>
-            <option value="inbound" ${direction === 'inbound' ? 'selected' : ''}>Inbound</option>
-            <option value="outbound" ${direction === 'outbound' ? 'selected' : ''}>Outbound</option>
-          </select>
-          <button type="submit">Filtrar</button>
-        </form>
-      </div>
-      ${helpText}
-      ${tableContent}
-      ${messages.length > 0 ? renderPager({
+  const inboxLayout = totalMsgs > 0 ? `
+    <div class="inbox" id="messages-inbox">
+      <aside class="inbox-list">
+        <div class="inbox-toolbar">
+          <div class="search-box" style="flex:1;">
+            <span class="search-icon">${renderIcon('search', 14)}</span>
+            <input type="text" id="inbox-search" placeholder="Buscar contacto, teléfono o mensaje…" autocomplete="off" />
+          </div>
+        </div>
+        <div class="inbox-count">
+          ${totalConv} ${totalConv === 1 ? 'conversación' : 'conversaciones'} ·
+          ${totalMsgs} ${totalMsgs === 1 ? 'mensaje' : 'mensajes'}
+        </div>
+        <div class="inbox-items" id="inbox-items">${inboxItems}</div>
+      </aside>
+      <section class="conv-pane" id="conv-pane">
+        <div class="conv-empty" id="conv-empty" hidden>
+          ${renderIcon('message-square', 40)}
+          <div>Selecciona una conversación para ver el hilo completo.</div>
+        </div>
+        <div class="conv-header" id="conv-header"></div>
+        <div class="conv-body" id="conv-body"></div>
+      </section>
+    </div>
+  ` : '';
+
+  const pager = totalMsgs > 0 ? renderPager({
     basePath: '/admin/messages',
     query: { direction: direction || '' },
     offset,
     limit,
-    hasNext: messages.length === limit
-  }) : ''}
-    </section>`;
+    hasNext: totalMsgs === limit
+  }) : '';
+
+  const script = totalMsgs > 0 ? `
+    <script id="conversations-data" type="application/json">${payloadJson}</script>
+    <script>
+    (function() {
+      const raw = document.getElementById('conversations-data')?.textContent || '[]';
+      let conversations = [];
+      try { conversations = JSON.parse(raw); } catch (_) { conversations = []; }
+      const byKey = new Map(conversations.map((c) => [c.key, c]));
+
+      const items = Array.from(document.querySelectorAll('.inbox-item'));
+      const searchInput = document.getElementById('inbox-search');
+      const convHeader = document.getElementById('conv-header');
+      const convBody = document.getElementById('conv-body');
+      const convEmpty = document.getElementById('conv-empty');
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function statusTone(value) {
+        const text = String(value || '').toLowerCase();
+        if (['sent','delivered','read','received','active','completed'].includes(text)) return 'good';
+        if (['pending','queued','sending','scheduled','draft','paused'].includes(text) || text.includes('skip')) return 'warn';
+        if (['failed','opted_out','cancelled','undelivered','error'].includes(text)) return 'bad';
+        return 'muted';
+      }
+
+      function formatDay(value) {
+        const raw = String(value || '').replace('T', ' ').trim();
+        if (!raw) return '';
+        const dt = new Date(raw.includes(':') ? raw.replace(' ', 'T') : raw);
+        if (isNaN(dt.getTime())) return raw.slice(0, 10);
+        const today = new Date();
+        const yest = new Date(); yest.setDate(today.getDate() - 1);
+        const sameDay = (a, b) => a.toDateString() === b.toDateString();
+        if (sameDay(dt, today)) return 'Hoy';
+        if (sameDay(dt, yest)) return 'Ayer';
+        return dt.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+
+      function formatTime(value) {
+        const raw = String(value || '').replace('T', ' ').trim();
+        if (!raw) return '';
+        const dt = new Date(raw.includes(':') ? raw.replace(' ', 'T') : raw);
+        if (isNaN(dt.getTime())) return raw.slice(11, 16);
+        return dt.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function initialsFor(name, phone) {
+        const s = String(name || '').trim();
+        if (s) {
+          const parts = s.split(/\\s+/).filter(Boolean).slice(0, 2);
+          return parts.map((p) => p.charAt(0).toUpperCase()).join('') || '?';
+        }
+        const d = String(phone || '').replace(/\\D+/g, '');
+        return d.length >= 2 ? d.slice(-2) : '?';
+      }
+
+      function renderConversation(key) {
+        const conv = byKey.get(key);
+        if (!conv) {
+          convEmpty.hidden = false;
+          convHeader.innerHTML = '';
+          convBody.innerHTML = '';
+          return;
+        }
+        convEmpty.hidden = true;
+
+        const title = conv.name ? escapeHtml(conv.name) : '<span class="muted">Sin nombre registrado</span>';
+        const phone = conv.phone ? escapeHtml(conv.phone) : '—';
+        const camps = conv.campaigns && conv.campaigns.length
+          ? conv.campaigns.slice(0, 2).map((c) => '<span class="badge badge-accent">' + escapeHtml(c) + '</span>').join(' ')
+          : '';
+        convHeader.innerHTML = ''
+          + '<div class="inbox-avatar">' + escapeHtml(initialsFor(conv.name, conv.phone)) + '</div>'
+          + '<div class="conv-header-main">'
+          +   '<div class="conv-header-title">' + title + '</div>'
+          +   '<div class="conv-header-sub">' + phone + '</div>'
+          + '</div>'
+          + '<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">'
+          +   '<span class="badge badge-info">' + conv.inbound + ' in</span>'
+          +   '<span class="badge badge-good">' + conv.outbound + ' out</span>'
+          +   camps
+          + '</div>';
+
+        let html = '';
+        let lastDay = '';
+        for (const m of (conv.messages || [])) {
+          const day = formatDay(m.created_at);
+          if (day && day !== lastDay) {
+            html += '<div class="conv-date-sep">' + escapeHtml(day) + '</div>';
+            lastDay = day;
+          }
+          const side = m.direction === 'outbound' ? 'outbound' : 'inbound';
+          const time = formatTime(m.created_at);
+          const statusChip = m.status
+            ? '<span class="badge badge-' + statusTone(m.status) + '" style="padding:1px 6px; font-size:9.5px;">' + escapeHtml(m.status) + '</span>'
+            : '';
+          const campChip = m.campaign_name
+            ? '<span class="badge badge-accent" style="padding:1px 6px; font-size:9.5px;">' + escapeHtml(m.campaign_name) + '</span>'
+            : '';
+          const body = escapeHtml(m.body || '');
+          html += ''
+            + '<div class="bubble ' + side + '">'
+            +   '<div>' + body + '</div>'
+            +   '<div class="bubble-meta">'
+            +     '<span>' + escapeHtml(time) + '</span>'
+            +     (statusChip ? ' · ' + statusChip : '')
+            +     (campChip ? ' · ' + campChip : '')
+            +   '</div>'
+            + '</div>';
+        }
+        convBody.innerHTML = html;
+        convBody.scrollTop = convBody.scrollHeight;
+      }
+
+      function selectItem(el) {
+        if (!el) return;
+        items.forEach((it) => it.classList.remove('active'));
+        el.classList.add('active');
+        renderConversation(el.dataset.convKey);
+      }
+
+      items.forEach((it) => {
+        it.addEventListener('click', () => selectItem(it));
+        it.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            selectItem(it);
+          }
+        });
+      });
+
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const q = e.target.value.toLowerCase();
+          let anyVisible = false;
+          items.forEach((it) => {
+            const text = it.textContent.toLowerCase();
+            const match = !q || text.includes(q);
+            it.classList.toggle('hidden', !match);
+            if (match) anyVisible = true;
+          });
+          if (anyVisible) {
+            const firstVisible = items.find((it) => !it.classList.contains('hidden'));
+            if (firstVisible && !firstVisible.classList.contains('active')) {
+              selectItem(firstVisible);
+            }
+          }
+        });
+      }
+
+      // Auto-seleccionar la primera conversación al cargar.
+      const first = items[0];
+      if (first) {
+        renderConversation(first.dataset.convKey);
+      } else {
+        if (convEmpty) convEmpty.hidden = false;
+      }
+    })();
+    </script>
+  ` : '';
+
+  const content = `<section class="panel">
+      <div class="panel-header">
+        <div>
+          <h1>Mensajes</h1>
+          <div class="muted" style="margin-top:4px; font-size:12.5px;">
+            ${totalConv} ${totalConv === 1 ? 'conversación' : 'conversaciones'} ·
+            ${totalMsgs} ${totalMsgs === 1 ? 'mensaje' : 'mensajes'} en la página actual
+          </div>
+        </div>
+        ${chips}
+      </div>
+      ${helpText}
+      ${emptyInbox}
+      ${inboxLayout}
+      ${pager}
+    </section>${script}`;
 
   return renderLayout({ title: 'Mensajes', content, active: 'messages' });
 }
@@ -1512,8 +1849,8 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
         { key: 'created_at', label: 'Fecha', render: (row) => escapeHtml(formatDate(row.created_at)) },
         {
           key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
-            <a href="/admin/opt-outs/${encodeURIComponent(row.phone)}/edit" class="action-btn" title="Editar razón">✏️</a>
-            <button onclick="deleteOptOut('${escapeHtml(row.phone)}')" class="action-btn" title="Eliminar (Reactivar)">🗑️</button>
+            <a href="/admin/opt-outs/${encodeURIComponent(row.phone)}/edit" class="action-btn" title="Editar razón" aria-label="Editar">${renderIcon('edit', 13)}</a>
+            <button onclick="deleteOptOut('${escapeHtml(row.phone)}')" class="action-btn danger" title="Eliminar (Reactivar)" aria-label="Eliminar">${renderIcon('trash', 13)}</button>
         </div>` }
       ],
       rows: optOuts,
@@ -1881,42 +2218,47 @@ export function renderCampaignFollowUpPage({ campaign, stats, recipients, offset
 
 
 export function renderConversationPage({ campaign, phone, contactName, messages }) {
-  const messagesHtml = messages.length > 0
-    ? messages.map(msg => {
-      const isOutbound = msg.direction === 'outbound';
-      const alignment = isOutbound ? 'left' : 'right';
-      const bgColor = isOutbound ? '#e3f2fd' : '#f1f8e9';
-      const label = isOutbound ? '📤 ENVIADO POR SISTEMA' : '💬 RECIBIDO DEL CONTACTO';
-
-      return `
-        <div style="margin: 1.5rem 0; text-align: ${alignment};">
-          <div style="font-size: 0.75rem; color: #6c757d; margin-bottom: 0.25rem;">${label}</div>
-          <div style="font-size: 0.75rem; color: #6c757d; margin-bottom: 0.5rem;">${formatDate(msg.created_at)}</div>
-          <div style="display: inline-block; max-width: 70%; text-align: left; background: ${bgColor}; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-            <div style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(msg.body || '')}</div>
+  const bubbles = messages.length > 0
+    ? messages.map((msg) => {
+      const side = msg.direction === 'outbound' ? 'outbound' : 'inbound';
+      const time = formatDate(msg.created_at);
+      const statusChip = msg.status
+        ? renderBadge(msg.status, statusTone(msg.status))
+        : '';
+      const sidText = side === 'outbound' && msg.message_sid
+        ? `<span class="mono muted" style="font-size:10.5px;">${escapeHtml(String(msg.message_sid).slice(0, 14))}…</span>`
+        : '';
+      return `<div class="bubble ${side}">
+          <div>${escapeHtml(msg.body || '')}</div>
+          <div class="bubble-meta">
+            <span>${escapeHtml(time)}</span>
+            ${statusChip ? ` · ${statusChip}` : ''}
+            ${sidText ? ` · ${sidText}` : ''}
           </div>
-          ${isOutbound && msg.status ? `<div style="font-size: 0.75rem; color: #6c757d; margin-top: 0.25rem;">Estado: ${renderBadge(msg.status, statusTone(msg.status))} ${msg.message_sid ? `| SID: ${escapeHtml(msg.message_sid.substring(0, 15))}...` : ''}</div>` : ''}
-        </div>
-      `;
+        </div>`;
     }).join('')
-    : renderEmptyState({
-      title: 'Sin mensajes',
-      message: 'No hay mensajes en esta conversación.'
-    });
+    : `<div class="conv-caption">No hay mensajes en esta conversación.</div>`;
+
+  const header = `
+    <div class="conv-header" style="border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+      <div class="inbox-avatar">${escapeHtml(initials(contactName, phone))}</div>
+      <div class="conv-header-main">
+        <div class="conv-header-title">${contactName ? escapeHtml(contactName) : '<span class="muted">Sin nombre</span>'}</div>
+        <div class="conv-header-sub">${escapeHtml(phone || '')}</div>
+      </div>
+      <a href="/admin/campaigns/${campaign.id}/seguimiento" class="action-btn">${renderIcon('arrow-left', 13)}<span>Volver</span></a>
+    </div>`;
 
   const content = `
-    <div class="panel">
-      <div class="panel-header">
-        <h1>💬 Conversación con ${escapeHtml(phone)} ${contactName ? `(${escapeHtml(contactName)})` : ''}</h1>
-        <a href="/admin/campaigns/${campaign.id}/seguimiento" class="action-btn">← Volver a Seguimiento</a>
+    <section class="panel" style="padding: 0; overflow: hidden;">
+      ${header}
+      <div style="padding: 10px 18px; background: var(--surface-1); border-bottom: 1px solid var(--ink-100); font-size: 12.5px; color: var(--ink-500);">
+        ${renderIcon('send', 12)} <strong>Campaña:</strong> ${escapeHtml(campaign.name)}
       </div>
-      <div style="background: #f8f9fa; padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 1rem;">
-        <strong>Campaña:</strong> ${escapeHtml(campaign.name)}
+      <div class="conv-body" style="max-height: 62vh; border-radius: 0;">
+        ${bubbles}
       </div>
-      <div style="background: white; padding: 1rem; border-radius: 4px; min-height: 300px;">
-        ${messagesHtml}
-      </div>
-    </div>
+    </section>
   `;
 
   return renderLayout({ title: `Conversación - ${phone}`, content, active: 'campaigns' });
@@ -1978,7 +2320,7 @@ export function renderTemplatesPage({ templates, offset, limit }) {
           <h1>Plantillas de Mensajes</h1>
           <div class="muted">Total: ${templates.length}</div>
         </div>
-        <a href="/admin/templates/new" class="action-btn" style="background:var(--accent); color:white; border-color:var(--accent); padding:10px 20px; text-decoration:none;">+ Nueva Plantilla</a>
+        <a href="/admin/templates/new" class="action-btn primary" style="padding:10px 18px; text-decoration:none;">${renderIcon('plus', 14)}<span>Nueva Plantilla</span></a>
       </div>
       ${helpText}
       ${tableContent}
