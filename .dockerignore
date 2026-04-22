@@ -1,0 +1,46 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Dependencies (se instalan dentro del contenedor)
+node_modules
+npm-debug.log*
+
+# Environment / secrets (se inyectan por runtime)
+.env
+.env.*
+!.env.example
+
+# Databases locales (produccion usa volumen montado)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Logs y archivos temporales
+*.log
+error.txt
+test_out.txt
+tmp_*.mjs
+tmp_*.js
+
+# Backups y artefactos de desarrollo
+*.bak
+fix_*.js
+test_import.js
+send-test.js
+
+# Documentacion y claude artifacts
+docs
+claudedocs
+*.md
+!README.md
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Scripts de desarrollo
+scripts

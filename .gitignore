@@ -1,5 +1,34 @@
+# Secrets y configuracion local
 .env
+.env.*
+!.env.example
+
+# Dependencias
 node_modules
 
+# Base de datos (se genera en runtime)
 data/
 *.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+error.txt
+test_out.txt
+
+# Backups y archivos temporales
+*.bak
+tmp_*.mjs
+tmp_*.js
+fix_*.js
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Artefactos de herramientas locales (Claude Code, Playwright MCP)
+.claude/
+.playwright-mcp/
