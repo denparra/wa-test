@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
     filters TEXT, -- JSON con filtros: {"make":"Toyota","year_min":2015}
     paused_at TEXT,
     failed_at TEXT,
-    error_message TEXT -- Error a nivel campana
+    error_message TEXT, -- Error a nivel campana
+    is_test INTEGER NOT NULL DEFAULT 0 -- 1 = campaña de prueba (badge 🧪)
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);

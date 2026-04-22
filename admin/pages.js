@@ -839,7 +839,12 @@ export function renderCampaignsPage({ campaigns, offset, limit }) {
         {
           key: 'name',
           label: 'Nombre',
-          render: (row) => `<a href="/admin/campaigns/${row.id}" style="color: var(--accent); font-weight: 600;">${escapeHtml(row.name)}</a>`
+          render: (row) => {
+            const badge = row.is_test
+              ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;background:#fffbeb;border:1px solid #f59e0b;color:#92400e;margin-right:5px;">🧪 TEST</span>`
+              : '';
+            return `${badge}<a href="/admin/campaigns/${row.id}" style="color:var(--accent);font-weight:600;">${escapeHtml(row.name)}</a>`;
+          }
         },
         { key: 'status', label: 'Status', render: (row) => renderBadge(row.status, statusTone(row.status)) },
         { key: 'type', label: 'Tipo' },
@@ -1204,667 +1209,593 @@ export function renderCampaignDetailPage({ campaign, recipients, offset, limit }
   });
 }
 
-export function renderCampaignFormPage({ campaign = {} }) {
+export function renderCampaignFormPage({ campaign = {}, makes = [] }) {
   const isNew = !campaign.id;
   const title = isNew ? 'Nueva Campaña' : 'Editar Campaña';
-  const action = isNew ? 'Crear' : 'Guardar';
-
+  const submitLabel = isNew ? 'Crear Campaña' : 'Guardar Cambios';
   const scheduledValue = formatDateTimeLocal(campaign.scheduled_at || '');
+  const msgType = campaign.content_sid ? 'twilio' : 'libre';
+  const isTestCampaign = campaign.is_test ? 'test' : (campaign.id ? 'prod' : '');
+
+  const dotBase = 'width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;';
+  const dotActive   = dotBase + 'background:var(--accent);color:#fff;';
+  const dotInactive = dotBase + 'background:#e0d8ce;color:#999;';
+
+  const brandChips = makes.length > 0
+    ? '<button type="button" class="brand-chip" data-make="" style="padding:4px 12px;border-radius:12px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;margin:2px;">Todos</button>'
+      + makes.map(m =>
+          '<button type="button" class="brand-chip" data-make="' + escapeHtml(m.make) + '" style="padding:4px 12px;border-radius:12px;border:1px solid #d0c8be;background:#f0ebe4;color:#555;font-size:13px;cursor:pointer;margin:2px;">'
+          + escapeHtml(m.make) + ' <span style="opacity:.6;font-size:11px;">' + m.contacts + '</span></button>'
+        ).join('')
+    : '<span class="muted" style="font-size:13px;">Sin marcas aún — importa contactos primero.</span>';
 
   const form = `
-    <form id="campaignForm" class="panel">
-        <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-             <h1>${title}</h1>
-             <div id="campaign-clock" style="font-family:monospace; font-size:1.2rem; font-weight:bold; color:var(--accent);">--:--:--</div>
+<div id="campaignFormError" style="color:var(--bad);margin-bottom:10px;min-height:18px;font-size:13px;"></div>
+
+<!-- ── Indicador de pasos ── -->
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:22px;padding:14px 18px;background:#f8f5f1;border-radius:10px;">
+  <div id="dot1" style="${dotActive}">1</div>
+  <div id="line1" style="flex:1;height:3px;background:var(--accent);border-radius:2px;"></div>
+  <div id="dot2" style="${dotInactive}">2</div>
+  <div id="line2" style="flex:1;height:3px;background:#e0d8ce;border-radius:2px;"></div>
+  <div id="dot3" style="${dotInactive}">3</div>
+  <span id="stepTitle" style="margin-left:12px;font-weight:600;font-size:15px;">Mensaje</span>
+</div>
+
+<form id="campaignForm" autocomplete="off">
+
+<!-- ════════════════════════════════════
+     PASO 1 — MENSAJE
+     ════════════════════════════════════ -->
+<section id="stepPanel1" class="panel">
+  <div class="panel-header"><h1>${title}</h1></div>
+
+  <div style="margin-bottom:15px;">
+    <label style="display:block;font-weight:600;margin-bottom:5px;">Nombre *</label>
+    <input type="text" name="name" value="${escapeHtml(campaign.name || '')}" required style="width:100%;" placeholder="Ej: Toyota Abril 2026" />
+  </div>
+
+  <div style="margin-bottom:15px;">
+    <label style="display:block;font-weight:600;margin-bottom:8px;">Tipo de mensaje</label>
+    <div style="display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;">
+      <label id="tabLibre" style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px;cursor:pointer;font-size:14px;font-weight:600;background:var(--accent);color:#fff;">
+        <input type="radio" name="msgType" value="libre" ${msgType !== 'twilio' ? 'checked' : ''} style="display:none;" />
+        Mensaje libre
+      </label>
+      <label id="tabTwilio" style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px;cursor:pointer;font-size:14px;background:#f8f5f1;color:#666;">
+        <input type="radio" name="msgType" value="twilio" ${msgType === 'twilio' ? 'checked' : ''} style="display:none;" />
+        Plantilla Twilio (SID)
+      </label>
+    </div>
+  </div>
+
+  <div id="panelLibre">
+    <label style="display:block;font-weight:600;margin-bottom:5px;">Mensaje</label>
+    <textarea name="messageTemplate" id="msgTextarea" rows="4"
+      style="width:100%;border-radius:8px;border:1px solid var(--line);padding:10px;resize:vertical;"
+      placeholder="Hola {{nombre}}, te contactamos sobre tu {{marca}} {{modelo}}..."
+    >${escapeHtml(campaign.message_template || '')}</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:4px;">
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button type="button" class="var-btn action-btn" data-var="{{nombre}}" style="font-size:12px;padding:3px 8px;">+{{nombre}}</button>
+        <button type="button" class="var-btn action-btn" data-var="{{marca}}" style="font-size:12px;padding:3px 8px;">+{{marca}}</button>
+        <button type="button" class="var-btn action-btn" data-var="{{modelo}}" style="font-size:12px;padding:3px 8px;">+{{modelo}}</button>
+        <button type="button" class="var-btn action-btn" data-var="{{año}}" style="font-size:12px;padding:3px 8px;">+{{año}}</button>
+      </div>
+      <span id="charCount" class="muted" style="font-size:12px;"></span>
+    </div>
+  </div>
+
+  <div id="panelTwilio" style="display:none;">
+    <label style="display:block;font-weight:600;margin-bottom:5px;">Content SID (Twilio)</label>
+    <input type="text" name="contentSid" value="${escapeHtml(campaign.content_sid || '')}" style="width:100%;" placeholder="HX..." />
+    <div class="muted" style="font-size:12px;margin-top:5px;">Template aprobado en Twilio Content API. Formato: HX...</div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-top:20px;gap:10px;">
+    <a href="/admin/campaigns" style="padding:10px 16px;color:var(--muted);text-decoration:none;">Cancelar</a>
+    <button type="button" id="toStep2" style="padding:10px 24px;font-weight:600;">Siguiente →</button>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════
+     PASO 2 — PREVIEW
+     ════════════════════════════════════ -->
+<section id="stepPanel2" class="panel" style="display:none;">
+  <div class="panel-header"><h2>Vista previa del mensaje</h2></div>
+  <div class="muted" style="margin-bottom:12px;font-size:13px;">
+    Muestra cómo queda el mensaje con datos reales. Solo visual — no envía nada.
+  </div>
+
+  ${makes.length > 0 ? `
+  <div style="margin-bottom:10px;">
+    <label style="display:block;font-weight:600;margin-bottom:6px;">Filtrar muestra por marca:</label>
+    <div style="display:flex;flex-wrap:wrap;" id="brandChipRow">${brandChips}</div>
+  </div>` : ''}
+
+  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+    <input type="text" id="previewModel" placeholder="Modelo (opcional)" style="flex:1;" />
+    <button type="button" id="previewBtn" style="padding:8px 16px;">Previsualizar</button>
+  </div>
+
+  <div id="previewResults" style="min-height:60px;padding:12px;background:#f8f5f1;border-radius:8px;">
+    <span class="muted">Haz click en "Previsualizar" para ver ejemplos del mensaje.</span>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;margin-top:20px;">
+    <button type="button" id="toStep1" style="padding:10px 20px;">← Anterior</button>
+    <button type="button" id="toStep3" style="padding:10px 24px;font-weight:600;">Siguiente →</button>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════
+     PASO 3 — DESTINATARIOS + ENVÍO
+     ════════════════════════════════════ -->
+<section id="stepPanel3" class="panel" style="display:none;">
+  <div class="panel-header"><h2>Destinatarios y envío</h2></div>
+
+  <!-- Tarjetas de tipo de campaña -->
+  <div style="margin-bottom:20px;">
+    <label style="display:block;font-weight:600;margin-bottom:10px;">Tipo de campaña:</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div id="cardTest" onclick="selectMode('test')"
+        style="padding:16px;border-radius:10px;border:2px solid #d0c8be;cursor:pointer;">
+        <div style="font-size:22px;margin-bottom:6px;">🧪</div>
+        <div style="font-weight:700;margin-bottom:4px;">Prueba</div>
+        <div class="muted" style="font-size:12px;line-height:1.5;">Selecciona contactos manualmente.<br/>Verifica el pipeline completo antes de producción.</div>
+      </div>
+      <div id="cardProd" onclick="selectMode('prod')"
+        style="padding:16px;border-radius:10px;border:2px solid #d0c8be;cursor:pointer;">
+        <div style="font-size:22px;margin-bottom:6px;">🚀</div>
+        <div style="font-weight:700;margin-bottom:4px;">Producción</div>
+        <div class="muted" style="font-size:12px;line-height:1.5;">Destinatarios por filtros masivos.<br/>Campaña real para tu audiencia.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 🧪 Prueba -->
+  <div id="panelTest" style="display:none;margin-bottom:20px;padding:15px;background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;">
+    <h3 style="margin:0 0 10px;color:#92400e;">Seleccionar contactos</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">Los opt-outs se excluyen automáticamente durante el envío.</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="testQuery" placeholder="Buscar por nombre o teléfono" style="flex:1;" />
+      <button type="button" id="testPreviewBtn" style="padding:8px 14px;">Buscar</button>
+    </div>
+    <div id="testModeHint" class="muted" style="font-size:12px;margin-bottom:6px;"></div>
+    <div id="testContactsWrapper"></div>
+    <div id="testSelectionCount" style="margin-top:8px;font-weight:600;font-size:13px;color:#92400e;min-height:18px;"></div>
+  </div>
+
+  <!-- Panel 🚀 Producción -->
+  <div id="panelProd" style="display:none;margin-bottom:20px;">
+    <div class="inline" style="margin-bottom:10px;">
+      <label class="muted">Fuente:</label>
+      <select id="recipientSource">
+        <option value="">No asignar ahora (borrador)</option>
+        <option value="vehicles">Por vehículos</option>
+        <option value="contacts">Por contactos</option>
+      </select>
+      <button type="button" id="loadRecipientsBtn">Cargar destinatarios</button>
+    </div>
+
+    <div id="recipientVehicleFilters" class="hidden" style="background:#f8f5f1;padding:12px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #eee;">
+        <div class="inline">
+          <select id="segmentSelect" style="max-width:200px;">
+            <option value="">-- Cargar Segmento --</option>
+          </select>
+          <button type="button" id="loadSegmentBtn" class="action-btn">Cargar</button>
         </div>
-        <div id="campaignFormError" class="muted" style="color:var(--bad); margin-bottom:10px;"></div>
-        
-        <div style="margin-bottom:15px;">
-            <label style="display:block; font-weight:600; margin-bottom:5px;">Nombre</label>
-            <input type="text" name="name" value="${escapeHtml(campaign.name || '')}" required style="width:100%;" />
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label style="display:block; font-weight:600; margin-bottom:5px;">Plantilla de Mensaje (Content SID)</label>
-            <input type="text" name="contentSid" value="${escapeHtml(campaign.content_sid || '')}" style="width:100%;" />
-            <div class="muted" style="font-size:12px; margin-top:5px;">Pega el CONTENT_SID aprobado por Twilio. Deja vacio si usas mensaje libre.</div>
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label style="display:block; font-weight:600; margin-bottom:5px;">Mensaje (body libre)</label>
-            <textarea name="messageTemplate" rows="4" style="width:100%; border-radius:10px; border:1px solid var(--line); padding:10px;">${escapeHtml(campaign.message_template || '')}</textarea>
-            <div class="muted" style="font-size:12px; margin-top:5px;">Variables disponibles: {{name}}, {{make}}, {{model}}</div>
-        </div>
-        
-        <div style="margin-bottom:15px;">
-             <label style="display:block; font-weight:600; margin-bottom:5px;">Tipo</label>
-            <select name="type" style="width:100%;">
-                <option value="twilio_template"${campaign.type === 'twilio_template' || !campaign.type ? ' selected' : ''}>Twilio Template</option>
-            </select>
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label style="display:block; font-weight:600; margin-bottom:5px;">Programar envio</label>
-            <input type="datetime-local" name="scheduledAt" value="${escapeHtml(scheduledValue)}" style="width:100%;" />
-            <div class="muted" style="font-size:12px; margin-top:5px;">Dejar vacio para iniciar manualmente.</div>
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label style="display:block; font-weight:600; margin-bottom:5px;">Preview (1-3 destinatarios)</label>
-            <div class="muted" style="font-size:12px; margin-top:5px;">Usa datos reales segun la fuente seleccionada.</div>
-            <div class="inline" style="margin-top:8px;">
-                <label for="previewSource" class="muted">Fuente:</label>
-                <select id="previewSource">
-                    <option value="vehicles">Por vehiculos</option>
-                    <option value="contacts">Por contactos</option>
-                </select>
-                <button type="button" id="previewBtn">Previsualizar</button>
-            </div>
-            <div id="previewVehicleFilters" style="margin-top:10px;">
-                <div class="inline">
-                    <input type="text" id="previewMake" placeholder="Marca (opcional)" />
-                    <input type="text" id="previewModel" placeholder="Modelo (opcional)" />
-                    <input type="number" id="previewYearMin" placeholder="Ano min" />
-                    <input type="number" id="previewYearMax" placeholder="Ano max" />
-                </div>
-            </div>
-            <div id="previewContactFilters" class="hidden" style="margin-top:10px;">
-                <div class="inline">
-                    <input type="text" id="previewQuery" placeholder="Telefono o nombre" />
-                </div>
-            </div>
-            <div id="previewResults" class="muted" style="margin-top:8px;"></div>
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label style="display:flex; align-items:center; gap:8px; font-weight:600;">
-                <input type="checkbox" id="testModeToggle" />
-                Modo Test (seleccion manual)
-            </label>
-            <div class="muted" style="font-size:12px; margin-top:5px;">Previsualiza contactos y envia solo a los seleccionados.</div>
-            <div id="testModePanel" class="hidden" style="margin-top:10px;">
-                <div class="inline" style="margin-bottom:8px;">
-                    <input type="text" id="testQuery" placeholder="Telefono o nombre" />
-                    <button type="button" id="testPreviewBtn">Previsualizar</button>
-                    <button type="button" id="testSendBtn">Enviar a seleccionados</button>
-                </div>
-                <div id="testModeHint" class="muted" style="font-size:12px; margin-bottom:6px;"></div>
-                <div id="testContactsWrapper"></div>
-            </div>
-        </div>
-
-        <div style="margin-bottom:15px; padding:15px; border:2px solid var(--accent); border-radius:10px; background:#f8f5f1;">
-            <h3 style="margin-top:0;">Destinatarios para campaña programada</h3>
-            <div class="muted" style="margin-bottom:10px;">
-                ⚠️ <strong>Importante:</strong> Si programas el envío, debes asignar destinatarios AHORA.
-                De lo contrario, la campaña se completará sin enviar mensajes.
-            </div>
-
-            <div class="inline" style="margin-bottom:10px;">
-                <label for="recipientSource" class="muted">Fuente:</label>
-                <select id="recipientSource">
-                    <option value="">No asignar ahora (crear como draft)</option>
-                    <option value="vehicles">Por vehiculos</option>
-                    <option value="contacts">Por contactos</option>
-                </select>
-                <button type="button" id="loadRecipientsBtn">Cargar destinatarios</button>
-            </div>
-
-            <div id="recipientVehicleFilters" class="hidden" style="margin-top:10px; background:white; padding:10px; border-radius:8px; border:1px solid var(--line);">
-                 <!-- Segments UI -->
-                <div style="display:flex; justify-content:space-between; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #eee;">
-                    <div class="inline">
-                        <select id="segmentSelect" style="max-width:200px;">
-                            <option value="">-- Cargar Segmento --</option>
-                        </select>
-                        <button type="button" id="loadSegmentBtn" class="action-btn">Cargar</button>
-                    </div>
-                    <button type="button" id="saveSegmentBtn" class="action-btn" style="background:var(--accent-2); border-color:var(--accent-2); color:white;">Guardar Filtros</button>
-                </div>
-
-                <div class="inline">
-                    <input type="text" id="filterMake" placeholder="Marca (opcional)" />
-                    <input type="text" id="filterModel" placeholder="Modelo (opcional)" />
-                    <input type="number" id="filterYearMin" placeholder="Ano min" />
-                    <input type="number" id="filterYearMax" placeholder="Ano max" />
-                </div>
-            </div>
-
-            <div id="recipientContactFilters" class="hidden" style="margin-top:10px;">
-                <div class="inline">
-                    <input type="text" id="filterQuery" placeholder="Telefono o nombre" />
-                </div>
-            </div>
-
-            <div id="recipientCount" class="muted" style="margin-top:10px;"></div>
-            <div id="recipientPreview" style="margin-top:10px; max-height:200px; overflow-y:auto;"></div>
-        </div>
-
-        <div style="margin-top:20px;">
-            <button type="submit">${action}</button>
-            <a href="/admin/campaigns" style="margin-left:10px; color:var(--muted); text-decoration:none;">Cancelar</a>
-        </div>
-    </form>
-    <script>
-    console.log('Campaign form script loaded');
-
-    function updateClock() {
-        const clock = document.getElementById('campaign-clock');
-        if (clock) {
-            const now = new Date();
-            clock.textContent = now.toLocaleTimeString('es-CL');
-        }
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    function escapeHtml(value) {
-        return String(value || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
-    function maskPhone(phone) {
-        const text = String(phone || '');
-        if (text.length <= 4) return text;
-        const visible = text.slice(-4);
-        return text.slice(0, -4).replace(/\d/g, '*') + visible;
-    }
-
-    const campaignId = ${campaign.id ? Number(campaign.id) : 'null'};
-    console.log('Campaign ID:', campaignId);
-
-    function setFormError(message) {
-        const errorEl = document.getElementById('campaignFormError');
-        if (!errorEl) return;
-        errorEl.textContent = message || '';
-    }
-
-    function setTestHint(message, isError = false) {
-        const hint = document.getElementById('testModeHint');
-        if (!hint) return;
-        hint.textContent = message || '';
-        hint.style.color = isError ? 'var(--bad)' : 'var(--muted)';
-    }
-
-    function togglePreviewFilters() {
-        const sourceEl = document.getElementById('previewSource');
-        if (!sourceEl) return;
-        const vehicleFilters = document.getElementById('previewVehicleFilters');
-        const contactFilters = document.getElementById('previewContactFilters');
-        if (sourceEl.value === 'contacts') {
-            if (vehicleFilters) vehicleFilters.classList.add('hidden');
-            if (contactFilters) contactFilters.classList.remove('hidden');
-        } else {
-            if (vehicleFilters) vehicleFilters.classList.remove('hidden');
-            if (contactFilters) contactFilters.classList.add('hidden');
-        }
-    }
-
-    // Load Segments Dropdown
-    async function loadSegments() {
-        const select = document.getElementById('segmentSelect');
-        if (!select) return;
-        try {
-            const res = await fetch('/admin/api/segments');
-            if (res.ok) {
-                const data = await res.json();
-                select.innerHTML = '<option value="">-- Cargar Segmento --</option>' +
-                   data.segments.map(s => "<option value='" + escapeHtml(s.filters) + "'>" + escapeHtml(s.name) + "</option>").join("");
-            }
-        } catch (e) { console.error('Error loading segments', e); }
-    }
-
-    // Save Segment Logic
-    async function saveSegment() {
-        const make = document.getElementById('filterMake')?.value?.trim();
-        const model = document.getElementById('filterModel')?.value?.trim();
-        const yearMin = document.getElementById('filterYearMin')?.value;
-        const yearMax = document.getElementById('filterYearMax')?.value;
-
-        if (!make && !model && !yearMin && !yearMax) {
-            alert('Ingresa al menos un filtro para guardar.');
-            return;
-        }
-
-        const name = prompt('Nombre para este segmento (ej: "Toyota 2018+"):');
-        if (!name) return;
-
-        const filters = { make, model, yearMin: yearMin ? Number(yearMin) : null, yearMax: yearMax ? Number(yearMax) : null };
-
-        try {
-            const res = await fetch('/admin/api/segments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, filters })
-            });
-            if (res.ok) {
-                alert('Segmento guardado');
-                loadSegments(); // reload dropdown
-            } else {
-                const err = await res.json();
-                alert('Error: ' + err.error);
-            }
-        } catch (e) { alert('Error de conexión'); }
-    }
-
-    async function runPreview() {
-        const results = document.getElementById('previewResults');
-        if (!results) return;
-        const template = document.querySelector('textarea[name="messageTemplate"]')?.value?.trim() || '';
-        if (!template) {
-            results.textContent = 'Ingresa un mensaje libre para previsualizar.';
-            return;
-        }
-
-        const source = document.getElementById('previewSource')?.value || 'vehicles';
-        const filters = {};
-        if (source === 'contacts') {
-            filters.query = document.getElementById('previewQuery')?.value?.trim() || '';
-        } else {
-            const make = document.getElementById('previewMake')?.value?.trim() || null;
-            const model = document.getElementById('previewModel')?.value?.trim() || null;
-            const yearMinRaw = document.getElementById('previewYearMin')?.value || '';
-            const yearMaxRaw = document.getElementById('previewYearMax')?.value || '';
-            const yearMin = yearMinRaw ? Number(yearMinRaw) : null;
-            const yearMax = yearMaxRaw ? Number(yearMaxRaw) : null;
-            filters.make = make || null;
-            filters.model = model || null;
-            filters.yearMin = Number.isNaN(yearMin) ? null : yearMin;
-            filters.yearMax = Number.isNaN(yearMax) ? null : yearMax;
-        }
-
-        const res = await fetch('/admin/api/campaigns/preview-samples', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source, filters, limit: 3 })
-        });
-
-        if (!res.ok) {
-            results.textContent = 'Error al cargar ejemplos.';
-            return;
-        }
-
-        const data = await res.json();
-        const samples = data.samples || [];
-        if (!samples.length) {
-            results.textContent = 'No hay destinatarios para previsualizar.';
-            return;
-        }
-
-        const previews = [];
-        for (const sample of samples) {
-            const previewRes = await fetch('/admin/api/campaigns/preview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ template, variableSource: sample })
-            });
-            const previewData = await previewRes.json();
-            previews.push({ sample, preview: previewData.preview || '' });
-        }
-
-        results.innerHTML = previews.map((item) => {
-            const phone = maskPhone(item.sample.phone || '');
-            return '<div style="margin-top:6px;"><strong>' + escapeHtml(phone) + '</strong> ' + escapeHtml(item.preview) + '</div>';
-        }).join('');
-    }
-
-    function toggleTestMode() {
-        console.log('toggleTestMode called');
-        const panel = document.getElementById('testModePanel');
-        const toggle = document.getElementById('testModeToggle');
-        console.log('Test mode panel:', panel, 'toggle:', toggle);
-        if (!panel || !toggle) {
-            console.error('Panel or toggle not found');
-            return;
-        }
-        console.log('Toggle checked:', toggle.checked);
-        if (toggle.checked) {
-            panel.classList.remove('hidden');
-            console.log('Panel shown, campaignId:', campaignId);
-
-            // Disable send button if campaign not saved
-            const sendBtn = document.getElementById('testSendBtn');
-            if (sendBtn) {
-                if (!campaignId) {
-                    sendBtn.disabled = true;
-                    sendBtn.style.opacity = '0.5';
-                    sendBtn.style.cursor = 'not-allowed';
-                    sendBtn.title = 'Debes guardar la campaña primero';
-                } else {
-                    sendBtn.disabled = false;
-                    sendBtn.style.opacity = '1';
-                    sendBtn.style.cursor = 'pointer';
-                    sendBtn.title = 'Enviar mensajes a contactos seleccionados';
-                }
-            }
-
-            if (!campaignId) {
-                setTestHint('⚠️ Para enviar mensajes de prueba, primero guarda la campaña haciendo clic en "Crear" abajo. Puedes previsualizar contactos ahora.', true);
-            } else {
-                setTestHint('Puedes previsualizar y enviar mensajes a los contactos seleccionados.', false);
-            }
-        } else {
-            panel.classList.add('hidden');
-            setTestHint('');
-        }
-    }
-
-    function renderTestContacts(contacts = []) {
-        const wrapper = document.getElementById('testContactsWrapper');
-        if (!wrapper) return;
-        if (!contacts.length) {
-            wrapper.textContent = 'No hay contactos para mostrar.';
-            return;
-        }
-        const rows = contacts.map((contact) => {
-            return '<tr>'
-                + '<td><input type="checkbox" class="test-contact" data-contact-id="' + contact.id + '" /></td>'
-                + '<td>' + escapeHtml(contact.phone || '') + '</td>'
-                + '<td>' + escapeHtml(contact.name || '') + '</td>'
-                + '<td>' + escapeHtml(contact.status || '') + '</td>'
-                + '</tr>';
-        }).join('');
-        wrapper.innerHTML = ''
-            + '<table id="testContactsTable">'
-            + '  <thead>'
-            + '    <tr>'
-            + '      <th><input type="checkbox" id="selectAllContacts" /></th>'
-            + '      <th>Telefono</th>'
-            + '      <th>Nombre</th>'
-            + '      <th>Status</th>'
-            + '    </tr>'
-            + '  </thead>'
-            + '  <tbody>' + rows + '</tbody>'
-            + '</table>';
-        const selectAll = document.getElementById('selectAllContacts');
-        if (selectAll) {
-            selectAll.addEventListener('change', (e) => {
-                const checked = e.target.checked;
-                document.querySelectorAll('.test-contact').forEach((input) => {
-                    input.checked = checked;
-                });
-            });
-        }
-    }
-
-    function getSelectedContactIds() {
-        const selected = [];
-        document.querySelectorAll('.test-contact:checked').forEach((input) => {
-            const id = Number(input.dataset.contactId);
-            if (Number.isInteger(id)) {
-                selected.push(id);
-            }
-        });
-        return selected;
-    }
-
-    async function loadTestContacts() {
-        const wrapper = document.getElementById('testContactsWrapper');
-        if (!wrapper) return;
-        const query = document.getElementById('testQuery')?.value?.trim() || '';
-        wrapper.textContent = 'Cargando contactos...';
-        try {
-            const res = await fetch('/admin/api/contacts?q=' + encodeURIComponent(query) + '&limit=200');
-            if (!res.ok) {
-                const errorText = await res.text();
-                wrapper.textContent = 'Error al cargar contactos: ' + (errorText || res.statusText);
-                console.error('Failed to load contacts:', res.status, errorText);
-                return;
-            }
-            const data = await res.json();
-            renderTestContacts(data.contacts || []);
-        } catch (error) {
-            wrapper.textContent = 'Error de conexion: ' + error.message;
-            console.error('Error loading contacts:', error);
-        }
-    }
-
-    async function sendTestSelection() {
-        console.log('sendTestSelection called, campaignId:', campaignId);
-        if (!campaignId) {
-            const message = \`Debes guardar la campaña primero antes de enviar mensajes de prueba.
-
-1. Haz clic en "Crear" al final del formulario
-2. Luego edita la campaña guardada
-3. Entonces podrás usar el modo test\`;
-            alert(message);
-            setTestHint('Guarda la campana primero haciendo clic en "Crear" abajo.', true);
-            console.log('Cannot send: campaign not saved yet');
-            return;
-        }
-        const selected = getSelectedContactIds();
-        console.log('Selected contact IDs:', selected);
-        if (!selected.length) {
-            setTestHint('Selecciona al menos un contacto.', true);
-            return;
-        }
-        setTestHint('Enviando...', false);
-        try {
-            const url = '/admin/api/campaigns/' + campaignId + '/test-send';
-            console.log('Sending test to:', url, 'with contactIds:', selected);
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactIds: selected })
-            });
-            console.log('Response status:', res.status);
-            if (!res.ok) {
-                const errorText = await res.text();
-                console.error('Error sending test:', res.status, errorText);
-                setTestHint('Error al enviar: ' + (errorText || res.statusText), true);
-                return;
-            }
-            const data = await res.json();
-            console.log('Send result:', data);
-            setTestHint('Enviados: ' + (data.sent || 0) + ' | Omitidos: ' + (data.skipped || 0) + ' | Fallidos: ' + (data.failed || 0), false);
-        } catch (error) {
-            console.error('Exception sending test:', error);
-            setTestHint('Error de conexion: ' + error.message, true);
-        }
-    }
-
-    function initSegmentListeners() {
-        document.getElementById('saveSegmentBtn')?.addEventListener('click', saveSegment);
-        document.getElementById('loadSegmentBtn')?.addEventListener('click', () => {
-             const select = document.getElementById('segmentSelect');
-             const val = select.value;
-             if(val) {
-                 const filters = JSON.parse(val);
-                 if(filters.make) document.getElementById('filterMake').value = filters.make;
-                 if(filters.model) document.getElementById('filterModel').value = filters.model;
-                 if(filters.yearMin) document.getElementById('filterYearMin').value = filters.yearMin;
-                 if(filters.yearMax) document.getElementById('filterYearMax').value = filters.yearMax;
-             }
-        });
-        loadSegments(); // Init load
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOMContentLoaded fired');
-        initSegmentListeners();
-
-        // Form submit handler
-        const campaignForm = document.getElementById('campaignForm');
-        console.log('Campaign form element:', campaignForm);
-        if (campaignForm) {
-            campaignForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                setFormError('');
-                const formData = new FormData(e.target);
-                const data = Object.fromEntries(formData.entries());
-                const messageTemplate = String(data.messageTemplate || '').trim();
-                const contentSid = String(data.contentSid || '').trim();
-                if (!messageTemplate && !contentSid) {
-                    setFormError('Debes ingresar Content SID o mensaje libre.');
-                    return;
-                }
-
-                // Validate recipients for scheduled campaigns
-                if (data.scheduledAt && (!window.selectedRecipients || window.selectedRecipients.length === 0)) {
-                    if (!confirm('⚠️ ADVERTENCIA: Estás programando una campaña SIN destinatarios.\\n\\n' +
-                                 'La campaña se completará automáticamente sin enviar mensajes.\\n\\n' +
-                                 '¿Deseas continuar de todos modos?')) {
-                        return;
-                    }
-                }
-
-                // Include recipient IDs in payload
-                if (window.selectedRecipients && window.selectedRecipients.length > 0) {
-                    data.recipientIds = window.selectedRecipients.map(r => r.id);
-                }
-
-                let url, method;
-                if (${isNew ? 'true' : 'false'}) {
-                    url = '/admin/api/campaigns';
-                    method = 'POST';
-                } else {
-                    url = '/admin/api/campaigns/' + ${campaign.id ? campaign.id : 'null'};
-                    method = 'PATCH';
-                }
-
-                const res = await fetch(url, {
-                    method,
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-
-                if(res.ok) {
-                    window.location.href = '/admin/campaigns';
-                } else {
-                    setFormError('Error al guardar.');
-                }
-            });
-        }
-
-        // Preview source toggle
-        const sourceEl = document.getElementById('previewSource');
-        if (sourceEl) {
-            sourceEl.addEventListener('change', togglePreviewFilters);
-            togglePreviewFilters();
-        }
-
-        // Preview button
-        const previewBtn = document.getElementById('previewBtn');
-        if (previewBtn) previewBtn.addEventListener('click', runPreview);
-
-        // Recipient assignment handlers
-        const recipientSourceEl = document.getElementById('recipientSource');
-        if (recipientSourceEl) {
-            recipientSourceEl.addEventListener('change', () => {
-                const source = recipientSourceEl.value;
-                const vehicleFilters = document.getElementById('recipientVehicleFilters');
-                const contactFilters = document.getElementById('recipientContactFilters');
-
-                if (source === 'vehicles') {
-                    vehicleFilters?.classList.remove('hidden');
-                    contactFilters?.classList.add('hidden');
-                } else if (source === 'contacts') {
-                    vehicleFilters?.classList.add('hidden');
-                    contactFilters?.classList.remove('hidden');
-                } else {
-                    vehicleFilters?.classList.add('hidden');
-                    contactFilters?.classList.add('hidden');
-                }
-
-                // Clear preview
-                document.getElementById('recipientCount').textContent = '';
-                document.getElementById('recipientPreview').innerHTML = '';
-            });
-        }
-
-        const loadRecipientsBtn = document.getElementById('loadRecipientsBtn');
-        if (loadRecipientsBtn) {
-            loadRecipientsBtn.addEventListener('click', async () => {
-                const source = document.getElementById('recipientSource')?.value;
-                if (!source) {
-                    alert('Selecciona una fuente de destinatarios');
-                    return;
-                }
-
-                const filters = {};
-                if (source === 'contacts') {
-                    filters.query = document.getElementById('filterQuery')?.value?.trim() || '';
-                } else {
-                    filters.make = document.getElementById('filterMake')?.value?.trim() || null;
-                    filters.model = document.getElementById('filterModel')?.value?.trim() || null;
-                    filters.yearMin = document.getElementById('filterYearMin')?.value || null;
-                    filters.yearMax = document.getElementById('filterYearMax')?.value || null;
-                }
-
-                try {
-                    const res = await fetch('/admin/api/campaigns/preview-samples', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ source, filters, limit: 100 })
-                    });
-
-                    if (!res.ok) {
-                        alert('Error al cargar destinatarios');
-                        return;
-                    }
-
-                    const data = await res.json();
-                    const recipients = data.samples || [];
-
-                    document.getElementById('recipientCount').textContent =
-                        recipients.length + ' destinatarios encontrados';
-
-                    // Show preview
-                    const previewHtml = recipients.slice(0, 10).map(r =>
-                        '<div style="padding:4px; border-bottom:1px solid #eee;">' +
-                            maskPhone(r.phone) + ' - ' + escapeHtml(r.name || 'Sin nombre') +
-                        '</div>'
-                    ).join('');
-
-                    document.getElementById('recipientPreview').innerHTML =
-                        previewHtml +
-                        (recipients.length > 10 ? '<div class="muted" style="padding:8px;">...y ' + (recipients.length - 10) + ' más</div>' : '');
-
-                    // Save recipients to global variable for submit
-                    window.selectedRecipients = recipients;
-
-                } catch (error) {
-                    alert('Error: ' + error.message);
-                }
-            });
-        }
-
-        // Test mode toggle
-        const testToggle = document.getElementById('testModeToggle');
-        if (testToggle) {
-            testToggle.addEventListener('change', toggleTestMode);
-        }
-
-        // Test preview button
-        const testPreviewBtn = document.getElementById('testPreviewBtn');
-        console.log('Test preview button element:', testPreviewBtn);
-        if (testPreviewBtn) {
-            console.log('Attaching click listener to test preview button');
-            testPreviewBtn.addEventListener('click', () => {
-                console.log('Test preview button clicked!');
-                loadTestContacts();
-            });
-        }
-
-        // Test send button
-        const testSendBtn = document.getElementById('testSendBtn');
-        console.log('Test send button element:', testSendBtn);
-        if (testSendBtn) {
-            console.log('Attaching click listener to test send button');
-            testSendBtn.addEventListener('click', () => {
-                console.log('Test send button clicked!');
-                sendTestSelection();
-            });
-        } else {
-            console.error('Test send button NOT FOUND in DOM');
-        }
+        <button type="button" id="saveSegmentBtn" class="action-btn" style="background:var(--accent-2);border-color:var(--accent-2);color:white;">Guardar Filtros</button>
+      </div>
+      <div class="inline">
+        <input type="text" id="filterMake" placeholder="Marca (opcional)" />
+        <input type="text" id="filterModel" placeholder="Modelo (opcional)" />
+        <input type="number" id="filterYearMin" placeholder="Año min" />
+        <input type="number" id="filterYearMax" placeholder="Año max" />
+      </div>
+    </div>
+
+    <div id="recipientContactFilters" class="hidden" style="margin-bottom:10px;">
+      <div class="inline">
+        <input type="text" id="filterQuery" placeholder="Teléfono o nombre" />
+      </div>
+    </div>
+
+    <div id="recipientCount" class="muted" style="margin-top:8px;"></div>
+    <div id="recipientPreview" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
+  </div>
+
+  <!-- Programar envío -->
+  <div style="padding:15px;border:1px solid var(--line);border-radius:10px;margin-bottom:20px;">
+    <label style="display:block;font-weight:600;margin-bottom:10px;">Programar envío:</label>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="radio" name="sendTiming" value="draft" checked onchange="updateTimingUI()" />
+        <span><strong>Borrador</strong> — guardar para enviar manualmente después</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="radio" name="sendTiming" value="scheduled" onchange="updateTimingUI()" />
+        <span><strong>Programar para:</strong></span>
+      </label>
+    </div>
+    <div id="scheduledPicker" style="display:none;margin-top:10px;padding-left:24px;">
+      <input type="datetime-local" name="scheduledAt" value="${escapeHtml(scheduledValue)}" style="width:100%;" />
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <button type="button" id="toStep2back" style="padding:10px 20px;">← Anterior</button>
+    <button type="submit" id="submitBtn" disabled style="padding:10px 24px;font-weight:600;opacity:.4;cursor:not-allowed;">${submitLabel}</button>
+  </div>
+  <div id="submitHint" class="muted" style="text-align:right;font-size:12px;margin-top:4px;">Selecciona el tipo de campaña para activar el botón.</div>
+</section>
+
+</form>
+
+<script>
+// ── Estado ──────────────────────────
+const campaignId = ${campaign.id ? Number(campaign.id) : 'null'};
+let currentStep = 1;
+let campaignMode = '${isTestCampaign}';
+let selectedTestIds = [];
+
+const STEP_LABELS = { 1: 'Mensaje', 2: 'Vista previa', 3: 'Destinatarios y envío' };
+
+// ── Helpers ──────────────────────────
+function escapeHtml(v) {
+  return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function maskPhone(p) {
+  const s = String(p||''); return s.length<=4?s:s.slice(0,-4).replace(/\\d/g,'*')+s.slice(-4);
+}
+function setFormError(msg) {
+  const el = document.getElementById('campaignFormError');
+  if (el) el.textContent = msg || '';
+}
+function setTestHint(msg, isErr) {
+  const el = document.getElementById('testModeHint');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isErr ? 'var(--bad)' : 'var(--muted)';
+}
+
+// ── Navegación de pasos ──────────────
+function goToStep(n) {
+  const dotBase = 'width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;';
+  [1,2,3].forEach(i => {
+    const p = document.getElementById('stepPanel' + i);
+    const d = document.getElementById('dot' + i);
+    if (p) p.style.display = i===n ? '' : 'none';
+    if (d) d.style.cssText = i<n ? dotBase+'background:#22c55e;color:#fff;'
+                              : i===n ? dotBase+'background:var(--accent);color:#fff;'
+                              : dotBase+'background:#e0d8ce;color:#999;';
+  });
+  [1,2].forEach(i => {
+    const l = document.getElementById('line'+i);
+    if (l) l.style.background = i<n ? '#22c55e' : '#e0d8ce';
+  });
+  const t = document.getElementById('stepTitle');
+  if (t) t.textContent = STEP_LABELS[n] || '';
+  currentStep = n;
+  window.scrollTo(0,0);
+}
+
+function validateStep1() {
+  const name = document.querySelector('input[name="name"]')?.value?.trim();
+  if (!name) { setFormError('El nombre es requerido.'); return false; }
+  const type = document.querySelector('input[name="msgType"]:checked')?.value;
+  if (type === 'libre') {
+    if (!document.getElementById('msgTextarea')?.value?.trim()) { setFormError('Escribe el contenido del mensaje.'); return false; }
+  } else {
+    if (!document.querySelector('input[name="contentSid"]')?.value?.trim()) { setFormError('Ingresa el Content SID.'); return false; }
+  }
+  setFormError('');
+  return true;
+}
+
+// ── Tabs de tipo de mensaje ──────────
+function updateMsgTabs() {
+  const t = document.querySelector('input[name="msgType"]:checked')?.value || 'libre';
+  const libre = t === 'libre';
+  document.getElementById('panelLibre').style.display  = libre ? '' : 'none';
+  document.getElementById('panelTwilio').style.display = libre ? 'none' : '';
+  const tl = document.getElementById('tabLibre');
+  const tw = document.getElementById('tabTwilio');
+  if (tl) { tl.style.background = libre ? 'var(--accent)' : '#f8f5f1'; tl.style.color = libre ? '#fff' : '#666'; tl.style.fontWeight = libre ? '600' : '400'; }
+  if (tw) { tw.style.background = libre ? '#f8f5f1' : 'var(--accent)'; tw.style.color = libre ? '#666' : '#fff'; tw.style.fontWeight = libre ? '400' : '600'; }
+}
+
+// ── Inserción de variables ───────────
+function insertVar(v) {
+  const ta = document.getElementById('msgTextarea');
+  if (!ta) return;
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  ta.value = ta.value.slice(0,s) + v + ta.value.slice(e);
+  ta.selectionStart = ta.selectionEnd = s + v.length;
+  ta.focus(); updateCharCount();
+}
+function updateCharCount() {
+  const ta = document.getElementById('msgTextarea');
+  const el = document.getElementById('charCount');
+  if (!ta||!el) return;
+  el.textContent = ta.value.length + ' caracteres';
+  el.style.color = ta.value.length > 1600 ? 'var(--bad)' : '';
+}
+
+// ── Preview (paso 2) ─────────────────
+let activeMake = '';
+function setActiveChip(make) {
+  activeMake = make;
+  document.querySelectorAll('.brand-chip').forEach(b => {
+    const active = b.dataset.make === make;
+    b.style.background = active ? 'var(--accent)' : '#f0ebe4';
+    b.style.color       = active ? '#fff' : '#555';
+    b.style.border      = active ? '1px solid var(--accent)' : '1px solid #d0c8be';
+  });
+}
+
+async function runPreview() {
+  const results = document.getElementById('previewResults');
+  if (!results) return;
+  const type = document.querySelector('input[name="msgType"]:checked')?.value || 'libre';
+  const template = document.getElementById('msgTextarea')?.value?.trim() || '';
+  if (type === 'libre' && !template) {
+    results.innerHTML = '<span class="muted">Escribe un mensaje en el Paso 1 para previsualizar.</span>'; return;
+  }
+  results.innerHTML = '<span class="muted">Cargando...</span>';
+  const model = document.getElementById('previewModel')?.value?.trim() || null;
+  try {
+    const sr = await fetch('/admin/api/campaigns/preview-samples', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ source:'vehicles', filters:{ make:activeMake||null, model }, limit:3 })
     });
+    if (!sr.ok) { results.innerHTML='<span class="muted">Error al cargar muestras.</span>'; return; }
+    const { samples=[] } = await sr.json();
+    if (!samples.length) { results.innerHTML='<span class="muted">No hay contactos con vehículos para este filtro.</span>'; return; }
+    if (type !== 'libre') {
+      results.innerHTML = samples.map(s=>
+        '<div style="padding:8px;border-bottom:1px solid #eee;"><strong>'+escapeHtml(maskPhone(s.phone))+'</strong>'+(s.name?' — '+escapeHtml(s.name):'')+' · '+escapeHtml([s.make,s.model,s.year].filter(Boolean).join(' '))+'</div>'
+      ).join(''); return;
+    }
+    const previews = await Promise.all(samples.map(async s => {
+      const r = await fetch('/admin/api/campaigns/preview', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ template, variableSource:s })
+      });
+      const d = await r.json();
+      return { phone:s.phone, text:d.preview||'' };
+    }));
+    results.innerHTML = previews.map(p=>
+      '<div style="padding:8px;border-bottom:1px solid #eee;"><strong>'+escapeHtml(maskPhone(p.phone))+'</strong> '+escapeHtml(p.text)+'</div>'
+    ).join('');
+  } catch(e) { results.innerHTML='<span class="muted">Error: '+escapeHtml(e.message)+'</span>'; }
+}
+
+// ── Selección de tipo de campaña ─────
+function selectMode(mode) {
+  campaignMode = mode;
+  const isTest = mode === 'test';
+  document.getElementById('panelTest').style.display = isTest ? '' : 'none';
+  document.getElementById('panelProd').style.display = isTest ? 'none' : '';
+  const selStyle = 'padding:16px;border-radius:10px;border:2px solid var(--accent);cursor:pointer;background:#f0ebe4;';
+  const norStyle = 'padding:16px;border-radius:10px;border:2px solid #d0c8be;cursor:pointer;';
+  document.getElementById('cardTest').style.cssText = isTest ? selStyle : norStyle;
+  document.getElementById('cardProd').style.cssText = isTest ? norStyle : selStyle;
+  const btn = document.getElementById('submitBtn');
+  if (btn) { btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
+  const hint = document.getElementById('submitHint');
+  if (hint) hint.textContent = '';
+}
+
+// ── Timing UI ────────────────────────
+function updateTimingUI() {
+  const v = document.querySelector('input[name="sendTiming"]:checked')?.value;
+  const p = document.getElementById('scheduledPicker');
+  if (p) p.style.display = v==='scheduled' ? '' : 'none';
+}
+
+// ── Selector de contactos (prueba) ───
+function renderTestContacts(contacts) {
+  const wrapper = document.getElementById('testContactsWrapper');
+  if (!wrapper) return;
+  if (!contacts.length) { wrapper.innerHTML='<p class="muted">No se encontraron contactos.</p>'; return; }
+  const rows = contacts.map(c =>
+    '<tr>'
+    +'<td style="width:32px;padding:4px;"><input type="checkbox" class="test-contact" data-id="'+c.id+'" /></td>'
+    +'<td style="padding:4px;">'+escapeHtml(maskPhone(c.phone))+'</td>'
+    +'<td style="padding:4px;">'+escapeHtml(c.name||'—')+'</td>'
+    +'<td style="padding:4px;">'+escapeHtml(c.status||'')+'</td>'
+    +'</tr>'
+  ).join('');
+  wrapper.innerHTML =
+    '<table style="width:100%;font-size:13px;border-collapse:collapse;">'
+    +'<thead><tr style="border-bottom:2px solid #e8e0d5;">'
+    +'<th style="padding:4px;"><input type="checkbox" id="selectAllTest" /></th>'
+    +'<th style="padding:4px;text-align:left;">Teléfono</th>'
+    +'<th style="padding:4px;text-align:left;">Nombre</th>'
+    +'<th style="padding:4px;text-align:left;">Estado</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>';
+  document.getElementById('selectAllTest')?.addEventListener('change', e => {
+    document.querySelectorAll('.test-contact').forEach(cb => cb.checked=e.target.checked);
+    updateTestCount();
+  });
+  document.querySelectorAll('.test-contact').forEach(cb => cb.addEventListener('change', updateTestCount));
+}
+function updateTestCount() {
+  selectedTestIds = [];
+  document.querySelectorAll('.test-contact:checked').forEach(cb => { const id=Number(cb.dataset.id); if(id) selectedTestIds.push(id); });
+  const el = document.getElementById('testSelectionCount');
+  if (el) el.textContent = selectedTestIds.length ? selectedTestIds.length+' contacto(s) seleccionado(s)' : '';
+}
+async function loadTestContacts() {
+  const wrapper = document.getElementById('testContactsWrapper');
+  if (!wrapper) return;
+  const q = document.getElementById('testQuery')?.value?.trim()||'';
+  wrapper.innerHTML='<p class="muted">Buscando...</p>';
+  try {
+    const res = await fetch('/admin/api/contacts?q='+encodeURIComponent(q)+'&limit=100');
+    if (!res.ok) { wrapper.innerHTML='<p class="muted">Error al cargar contactos.</p>'; return; }
+    const { contacts=[] } = await res.json();
+    renderTestContacts(contacts);
+  } catch(e) { wrapper.innerHTML='<p class="muted">Error: '+escapeHtml(e.message)+'</p>'; }
+}
+
+// ── Segmentos (producción) ───────────
+async function loadSegments() {
+  const sel = document.getElementById('segmentSelect');
+  if (!sel) return;
+  try {
+    const r = await fetch('/admin/api/segments');
+    if (r.ok) {
+      const d = await r.json();
+      sel.innerHTML = '<option value="">-- Cargar Segmento --</option>'
+        + d.segments.map(s=>"<option value='"+escapeHtml(s.filters)+"'>"+escapeHtml(s.name)+"</option>").join('');
+    }
+  } catch(e) { console.error('loadSegments',e); }
+}
+async function saveSegment() {
+  const make=document.getElementById('filterMake')?.value?.trim();
+  const model=document.getElementById('filterModel')?.value?.trim();
+  const yearMin=document.getElementById('filterYearMin')?.value;
+  const yearMax=document.getElementById('filterYearMax')?.value;
+  if (!make&&!model&&!yearMin&&!yearMax) { alert('Ingresa al menos un filtro.'); return; }
+  const name=prompt('Nombre para este segmento:');
+  if (!name) return;
+  try {
+    const r=await fetch('/admin/api/segments',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,filters:{make,model,yearMin:yearMin?Number(yearMin):null,yearMax:yearMax?Number(yearMax):null}})});
+    if(r.ok){alert('Segmento guardado');loadSegments();}
+    else{const e=await r.json();alert('Error: '+e.error);}
+  } catch(e){alert('Error de conexión');}
+}
+
+// ── Destinatarios producción ─────────
+async function loadProdRecipients() {
+  const source=document.getElementById('recipientSource')?.value;
+  if (!source){alert('Selecciona una fuente');return;}
+  const filters={};
+  if(source==='contacts') filters.query=document.getElementById('filterQuery')?.value?.trim()||'';
+  else {
+    filters.make=document.getElementById('filterMake')?.value?.trim()||null;
+    filters.model=document.getElementById('filterModel')?.value?.trim()||null;
+    filters.yearMin=document.getElementById('filterYearMin')?.value||null;
+    filters.yearMax=document.getElementById('filterYearMax')?.value||null;
+  }
+  try {
+    const r=await fetch('/admin/api/campaigns/preview-samples',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({source,filters,limit:100})});
+    if(!r.ok){alert('Error al cargar destinatarios');return;}
+    const {samples:recipients=[]}=await r.json();
+    document.getElementById('recipientCount').textContent=recipients.length+' destinatarios encontrados';
+    document.getElementById('recipientPreview').innerHTML=
+      recipients.slice(0,10).map(r=>'<div style="padding:4px;border-bottom:1px solid #eee;">'+maskPhone(r.phone)+' — '+escapeHtml(r.name||'Sin nombre')+'</div>').join('')
+      +(recipients.length>10?'<div class="muted" style="padding:8px;">...y '+(recipients.length-10)+' más</div>':'');
+    window.selectedRecipients=recipients;
+  } catch(e){alert('Error: '+e.message);}
+}
+
+// ── Submit ───────────────────────────
+async function handleSubmit(e) {
+  e.preventDefault();
+  setFormError('');
+  if (!campaignMode) { setFormError('Selecciona el tipo de campaña (Paso 3).'); goToStep(3); return; }
+  const name=document.querySelector('input[name="name"]')?.value?.trim();
+  if (!name) { goToStep(1); setFormError('El nombre es requerido.'); return; }
+  const msgType=document.querySelector('input[name="msgType"]:checked')?.value||'libre';
+  const msgTemplate=document.getElementById('msgTextarea')?.value?.trim()||'';
+  const contentSid=document.querySelector('input[name="contentSid"]')?.value?.trim()||'';
+  if (msgType==='libre'&&!msgTemplate){goToStep(1);setFormError('Escribe el contenido del mensaje.');return;}
+  if (msgType==='twilio'&&!contentSid){goToStep(1);setFormError('Ingresa el Content SID.');return;}
+  const timing=document.querySelector('input[name="sendTiming"]:checked')?.value||'draft';
+  const scheduledAt=timing==='scheduled'?document.querySelector('input[name="scheduledAt"]')?.value||'':'';
+  const isTest=campaignMode==='test';
+  let recipientIds=[];
+  if (isTest) {
+    if (!selectedTestIds.length){setTestHint('Selecciona al menos un contacto.',true);return;}
+    recipientIds=selectedTestIds;
+  } else {
+    if (window.selectedRecipients?.length) recipientIds=window.selectedRecipients.map(r=>r.id);
+    if (!recipientIds.length&&scheduledAt) {
+      if (!confirm('⚠️ Estás programando sin destinatarios.\\n\\n¿Deseas continuar de todos modos?')) return;
+    }
+  }
+  const payload={name,messageTemplate:msgType==='libre'?msgTemplate:'',contentSid:msgType==='twilio'?contentSid:'',
+    type:msgType==='twilio'?'twilio_template':'custom_message',scheduledAt,isTest,recipientIds};
+  const url=campaignId?'/admin/api/campaigns/'+campaignId:'/admin/api/campaigns';
+  const method=campaignId?'PATCH':'POST';
+  const btn=document.getElementById('submitBtn');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try {
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(r.ok){window.location.href='/admin/campaigns';}
+    else{const err=await r.json().catch(()=>({error:'Error desconocido'}));setFormError('Error: '+(err.error||r.statusText));if(btn){btn.disabled=false;btn.textContent='${submitLabel}';}}
+  } catch(e){setFormError('Error de conexión: '+e.message);if(btn){btn.disabled=false;btn.textContent='${submitLabel}';}}
+}
+
+// ── DOMContentLoaded ────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Step navigation
+  document.getElementById('toStep2')?.addEventListener('click', () => { if(validateStep1()) goToStep(2); });
+  document.getElementById('toStep1')?.addEventListener('click', () => goToStep(1));
+  document.getElementById('toStep3')?.addEventListener('click', () => goToStep(3));
+  document.getElementById('toStep2back')?.addEventListener('click', () => goToStep(2));
+
+  // Message type tabs
+  document.querySelectorAll('input[name="msgType"]').forEach(r => r.addEventListener('change', updateMsgTabs));
+  updateMsgTabs();
+
+  // Variable insertion
+  document.querySelectorAll('.var-btn').forEach(b => b.addEventListener('click', () => insertVar(b.dataset.var)));
+
+  // Char counter
+  document.getElementById('msgTextarea')?.addEventListener('input', updateCharCount);
+  updateCharCount();
+
+  // Brand chips (preview step)
+  document.querySelectorAll('.brand-chip').forEach(b => b.addEventListener('click', () => setActiveChip(b.dataset.make)));
+
+  // Preview button
+  document.getElementById('previewBtn')?.addEventListener('click', runPreview);
+
+  // Test contact search
+  document.getElementById('testPreviewBtn')?.addEventListener('click', loadTestContacts);
+
+  // Production: segment management
+  document.getElementById('saveSegmentBtn')?.addEventListener('click', saveSegment);
+  document.getElementById('loadSegmentBtn')?.addEventListener('click', () => {
+    const sel=document.getElementById('segmentSelect'); if(!sel?.value) return;
+    const f=JSON.parse(sel.value);
+    if(f.make)    document.getElementById('filterMake').value=f.make;
+    if(f.model)   document.getElementById('filterModel').value=f.model;
+    if(f.yearMin) document.getElementById('filterYearMin').value=f.yearMin;
+    if(f.yearMax) document.getElementById('filterYearMax').value=f.yearMax;
+  });
+  loadSegments();
+
+  // Production: recipient source toggle
+  document.getElementById('recipientSource')?.addEventListener('change', () => {
+    const src=document.getElementById('recipientSource').value;
+    document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', src!=='vehicles');
+    document.getElementById('recipientContactFilters')?.classList.toggle('hidden', src!=='contacts');
+    document.getElementById('recipientCount').textContent='';
+    document.getElementById('recipientPreview').innerHTML='';
+  });
+  document.getElementById('loadRecipientsBtn')?.addEventListener('click', loadProdRecipients);
+
+  // Scheduling
+  document.querySelectorAll('input[name="sendTiming"]').forEach(r => r.addEventListener('change', updateTimingUI));
+  updateTimingUI();
+
+  // Form submit
+  document.getElementById('campaignForm')?.addEventListener('submit', handleSubmit);
+
+  // Edit mode: restore state
+  if ('${isTestCampaign}') { selectMode('${isTestCampaign}'); goToStep(3); }
+});
 </script>
-    `;
+  `;
 
   return renderLayout({ title, content: form, active: 'campaigns' });
 }

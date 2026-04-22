@@ -350,7 +350,8 @@ app.get('/admin/campaigns', (req, res) => {
 });
 
 app.get('/admin/campaigns/new', (req, res) => {
-    res.status(200).type('text/html').send(renderCampaignFormPage({}));
+    const makes = listVehicleMakes();
+    res.status(200).type('text/html').send(renderCampaignFormPage({ makes }));
 });
 
 app.get('/admin/campaigns/:id/edit', (req, res) => {
@@ -359,7 +360,8 @@ app.get('/admin/campaigns/:id/edit', (req, res) => {
     if (!campaign) {
         return res.status(404).send('Not found');
     }
-    res.status(200).type('text/html').send(renderCampaignFormPage({ campaign }));
+    const makes = listVehicleMakes();
+    res.status(200).type('text/html').send(renderCampaignFormPage({ campaign, makes }));
 });
 
 app.get('/admin/campaigns/:id', (req, res) => {
@@ -957,17 +959,12 @@ app.post('/admin/import/confirm', adminAuth, express.urlencoded({ extended: fals
 
 app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
     try {
-        const { name, messageTemplate, type, scheduledAt, contentSid, filters, recipientIds } = req.body;
+        const { name, messageTemplate, type, scheduledAt, contentSid, filters, recipientIds, isTest } = req.body;
         const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
         const status = normalizedScheduledAt ? 'scheduled' : 'draft';
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required' });
-        }
-
-        // Warn if scheduled without recipients
-        if (status === 'scheduled' && (!recipientIds || recipientIds.length === 0)) {
-            console.warn(`Campaign "${name}" scheduled without recipients`);
         }
 
         const campaign = createCampaign({
@@ -977,7 +974,8 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
             scheduledAt: normalizedScheduledAt,
             contentSid,
             filters,
-            status
+            status,
+            isTest: Boolean(isTest)
         });
 
         // Assign recipients if provided

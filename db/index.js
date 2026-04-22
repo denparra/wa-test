@@ -77,7 +77,8 @@ if (campaignsTableExists) {
         ['filters', 'TEXT'],
         ['paused_at', 'TEXT'],
         ['failed_at', 'TEXT'],
-        ['error_message', 'TEXT']
+        ['error_message', 'TEXT'],
+        ['is_test', 'INTEGER NOT NULL DEFAULT 0']
     ];
     for (const [colName, colType] of newColumns) {
         const hasColumn = campaignsInfo.some(col => col.name === colName);
@@ -179,20 +180,20 @@ const statements = {
     getCampaignById: db.prepare(`
         SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
                type, scheduled_at, content_sid, filters, started_at, completed_at, paused_at,
-               failed_at, error_message, updated_at
+               failed_at, error_message, updated_at, is_test
         FROM campaigns
         WHERE id = ?
     `),
     getCampaignByName: db.prepare(`
         SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
                type, scheduled_at, content_sid, filters, started_at, completed_at, paused_at,
-               failed_at, error_message, updated_at
+               failed_at, error_message, updated_at, is_test
         FROM campaigns
         WHERE name = ?
     `),
     insertCampaign: db.prepare(`
-        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, content_sid, filters, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, content_sid, filters, is_test, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
     `),
     updateCampaignMessage: db.prepare(`
         UPDATE campaigns
@@ -476,10 +477,11 @@ export function createCampaign({
     name,
     messageTemplate = null,
     status = 'draft',
-    type = 'twilio_template', // Phase 2.1
-    scheduledAt = null, // Phase 2.1
-    contentSid = null, // Phase 2.1
-    filters = null // Phase 2.1
+    type = 'twilio_template',
+    scheduledAt = null,
+    contentSid = null,
+    filters = null,
+    isTest = false
 }) {
     const filtersJson = filters ? JSON.stringify(filters) : null;
     const result = statements.insertCampaign.run(
@@ -489,7 +491,8 @@ export function createCampaign({
         type,
         scheduledAt,
         contentSid,
-        filtersJson
+        filtersJson,
+        isTest ? 1 : 0
     );
     return getCampaignById(result.lastInsertRowid);
 }
@@ -591,6 +594,7 @@ export function listCampaigns({ limit = 50, offset = 0 }) {
         SELECT c.id, c.name, c.status, c.message_template, c.created_at, c.type, c.scheduled_at,
                c.total_recipients,
                c.sent_count,
+               c.is_test,
                (SELECT COUNT(*) FROM campaign_recipients cr WHERE cr.campaign_id = c.id AND cr.status = 'failed') AS recipients_failed,
                (SELECT COUNT(*) FROM campaign_recipients cr WHERE cr.campaign_id = c.id AND cr.status LIKE 'skipped%') AS recipients_skipped
         FROM campaigns c
