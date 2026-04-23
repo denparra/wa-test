@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     type TEXT NOT NULL DEFAULT 'twilio_template', -- twilio_template|custom_message
     scheduled_at TEXT, -- ISO timestamp para envio programado
     updated_at TEXT NOT NULL DEFAULT '2026-01-11 00:01:16',
+    template_id INTEGER, -- Referencia a message_templates (catalogo)
     content_sid TEXT, -- Twilio Content Template SID (HX...)
     filters TEXT, -- JSON con filtros: {"make":"Toyota","year_min":2015}
     paused_at TEXT,
@@ -79,6 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
 CREATE INDEX IF NOT EXISTS idx_campaigns_created_at ON campaigns(created_at);
 CREATE INDEX IF NOT EXISTS idx_campaigns_type ON campaigns(type);
 CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled_at ON campaigns(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_campaigns_template_id ON campaigns(template_id);
 
 -- ============================================================
 -- CAMPAIGN_RECIPIENTS: Tracking por destinatario

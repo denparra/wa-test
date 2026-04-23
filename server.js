@@ -120,6 +120,14 @@ function normalizeScheduledAt(value) {
     return trimmed;
 }
 
+function normalizeTemplateId(value) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 async function processCampaignQueue() {
     if (schedulerState.running) {
         return;
@@ -351,7 +359,8 @@ app.get('/admin/campaigns', (req, res) => {
 
 app.get('/admin/campaigns/new', (req, res) => {
     const makes = listVehicleMakes();
-    res.status(200).type('text/html').send(renderCampaignFormPage({ makes }));
+    const templates = listTemplates({ limit: 500, offset: 0, includeArchived: true });
+    res.status(200).type('text/html').send(renderCampaignFormPage({ makes, templates }));
 });
 
 app.get('/admin/campaigns/:id/edit', (req, res) => {
@@ -361,7 +370,8 @@ app.get('/admin/campaigns/:id/edit', (req, res) => {
         return res.status(404).send('Not found');
     }
     const makes = listVehicleMakes();
-    res.status(200).type('text/html').send(renderCampaignFormPage({ campaign, makes }));
+    const templates = listTemplates({ limit: 500, offset: 0, includeArchived: true });
+    res.status(200).type('text/html').send(renderCampaignFormPage({ campaign, makes, templates }));
 });
 
 app.get('/admin/campaigns/:id', (req, res) => {
@@ -959,20 +969,43 @@ app.post('/admin/import/confirm', adminAuth, express.urlencoded({ extended: fals
 
 app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
     try {
-        const { name, messageTemplate, type, scheduledAt, contentSid, filters, recipientIds, isTest } = req.body;
+        const { name, messageTemplate, type, scheduledAt, contentSid, templateId, filters, recipientIds, isTest } = req.body;
         const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
         const status = normalizedScheduledAt ? 'scheduled' : 'draft';
+        const normalizedTemplateId = normalizeTemplateId(templateId);
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required' });
         }
 
+        let resolvedTemplate = null;
+        if (normalizedTemplateId) {
+            resolvedTemplate = getTemplateById(normalizedTemplateId);
+            if (!resolvedTemplate) {
+                return res.status(400).json({ error: 'Template not found' });
+            }
+        }
+
+        const normalizedType = type || 'twilio_template';
+        let resolvedMessageTemplate = messageTemplate || null;
+        let resolvedContentSid = contentSid || null;
+
+        if (resolvedTemplate) {
+            resolvedMessageTemplate = resolvedTemplate.body || resolvedMessageTemplate;
+            resolvedContentSid = resolvedTemplate.content_sid || resolvedContentSid;
+        }
+
+        if (normalizedType === 'twilio_template' && !String(resolvedContentSid || '').trim()) {
+            return res.status(400).json({ error: 'Twilio template requires content SID or selected template' });
+        }
+
         const campaign = createCampaign({
             name,
-            messageTemplate,
-            type,
+            messageTemplate: resolvedMessageTemplate,
+            type: normalizedType,
             scheduledAt: normalizedScheduledAt,
-            contentSid,
+            templateId: normalizedTemplateId,
+            contentSid: resolvedContentSid,
             filters,
             status,
             isTest: Boolean(isTest)
@@ -1001,16 +1034,43 @@ app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
 
         const hasScheduledAt = Object.prototype.hasOwnProperty.call(updates, 'scheduledAt')
             || Object.prototype.hasOwnProperty.call(updates, 'scheduled_at');
+        const hasTemplateId = Object.prototype.hasOwnProperty.call(updates, 'templateId');
         const normalizedScheduledAt = hasScheduledAt
             ? normalizeScheduledAt(updates.scheduledAt || updates.scheduled_at)
             : current.scheduled_at;
 
+        const normalizedTemplateId = hasTemplateId
+            ? normalizeTemplateId(updates.templateId)
+            : current.template_id;
+
+        let resolvedTemplate = null;
+        if (normalizedTemplateId) {
+            resolvedTemplate = getTemplateById(normalizedTemplateId);
+            if (!resolvedTemplate) {
+                return res.status(400).json({ error: 'Template not found' });
+            }
+        }
+
+        const nextType = updates.type ?? current.type;
+        let resolvedMessageTemplate = updates.messageTemplate ?? current.message_template;
+        let resolvedContentSid = updates.contentSid ?? current.content_sid;
+
+        if (resolvedTemplate) {
+            resolvedMessageTemplate = resolvedTemplate.body || resolvedMessageTemplate;
+            resolvedContentSid = resolvedTemplate.content_sid || resolvedContentSid;
+        }
+
+        if (nextType === 'twilio_template' && !String(resolvedContentSid || '').trim()) {
+            return res.status(400).json({ error: 'Twilio template requires content SID or selected template' });
+        }
+
         const payload = {
             name: updates.name ?? current.name,
-            messageTemplate: updates.messageTemplate ?? current.message_template,
-            type: updates.type ?? current.type,
+            messageTemplate: resolvedMessageTemplate,
+            type: nextType,
             scheduledAt: normalizedScheduledAt,
-            contentSid: updates.contentSid ?? current.content_sid,
+            templateId: normalizedTemplateId,
+            contentSid: resolvedContentSid,
             filters: updates.filters ?? current.filters
         };
 

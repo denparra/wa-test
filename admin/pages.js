@@ -1209,13 +1209,14 @@ export function renderCampaignDetailPage({ campaign, recipients, offset, limit }
   });
 }
 
-export function renderCampaignFormPage({ campaign = {}, makes = [] }) {
+export function renderCampaignFormPage({ campaign = {}, makes = [], templates = [] }) {
   const isNew = !campaign.id;
   const title = isNew ? 'Nueva Campaña' : 'Editar Campaña';
   const submitLabel = isNew ? 'Crear Campaña' : 'Guardar Cambios';
   const scheduledValue = formatDateTimeLocal(campaign.scheduled_at || '');
-  const msgType = campaign.content_sid ? 'twilio' : 'libre';
+  const msgType = (campaign.content_sid || campaign.template_id) ? 'twilio' : 'libre';
   const isTestCampaign = campaign.is_test ? 'test' : (campaign.id ? 'prod' : '');
+  const selectedTemplateId = campaign.template_id ? String(campaign.template_id) : '';
 
   const dotBase = 'width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;';
   const dotActive   = dotBase + 'background:var(--accent);color:#fff;';
@@ -1228,6 +1229,37 @@ export function renderCampaignFormPage({ campaign = {}, makes = [] }) {
           + escapeHtml(m.make) + ' <span style="opacity:.6;font-size:11px;">' + m.contacts + '</span></button>'
         ).join('')
     : '<span class="muted" style="font-size:13px;">Sin marcas aún — importa contactos primero.</span>';
+
+  const templateChoices = templates.length > 0
+    ? templates.map((tpl) => {
+      const isChecked = selectedTemplateId && Number(selectedTemplateId) === Number(tpl.id);
+      const isActive = tpl.is_active === 1;
+      const itemStyle = isActive
+        ? 'border:1px solid var(--line);background:#fff;'
+        : 'border:1px dashed #d0c8be;background:#f8f5f1;opacity:.75;';
+      return `<label style="display:block;padding:10px;border-radius:8px;cursor:pointer;${itemStyle}">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <input type="radio" name="templateId" value="${tpl.id}" ${isChecked ? 'checked' : ''} style="margin-top:3px;" />
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+              <strong style="font-size:13px;">${escapeHtml(tpl.name || '')}</strong>
+              ${isActive ? '<span class="badge badge-good">activa</span>' : '<span class="badge badge-muted">archivada</span>'}
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:2px;">SID: ${escapeHtml(tpl.content_sid || 'sin SID')}</div>
+            <div style="font-size:12px;margin-top:4px;line-height:1.35;">${escapeHtml(truncate(tpl.body || '', 110))}</div>
+          </div>
+        </div>
+      </label>`;
+    }).join('')
+    : '<div class="muted" style="font-size:12px;">No hay plantillas creadas aún. Crea una en la sección Plantillas.</div>';
+
+  const templateMapJson = JSON.stringify(templates.map((tpl) => ({
+    id: tpl.id,
+    name: tpl.name,
+    body: tpl.body,
+    content_sid: tpl.content_sid,
+    is_active: tpl.is_active
+  }))).replace(/</g, '\\u003c');
 
   const form = `
 <div id="campaignFormError" style="color:var(--bad);margin-bottom:10px;min-height:18px;font-size:13px;"></div>
@@ -1287,9 +1319,20 @@ export function renderCampaignFormPage({ campaign = {}, makes = [] }) {
   </div>
 
   <div id="panelTwilio" style="display:none;">
-    <label style="display:block;font-weight:600;margin-bottom:5px;">Content SID (Twilio)</label>
-    <input type="text" name="contentSid" value="${escapeHtml(campaign.content_sid || '')}" style="width:100%;" placeholder="HX..." />
-    <div class="muted" style="font-size:12px;margin-top:5px;">Template aprobado en Twilio Content API. Formato: HX...</div>
+    <label style="display:block;font-weight:600;margin-bottom:5px;">Selecciona una plantilla Twilio</label>
+    <div id="templateChecklist" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding:2px;">
+      ${templateChoices}
+    </div>
+    <div id="selectedTemplateInfo" class="muted" style="font-size:12px;margin-top:8px;min-height:18px;"></div>
+
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-size:12px;">Modo avanzado: SID manual</summary>
+      <div style="margin-top:8px;">
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Content SID (Twilio)</label>
+        <input type="text" name="contentSid" id="manualContentSid" value="${escapeHtml(campaign.content_sid || '')}" style="width:100%;" placeholder="HX..." />
+        <div class="muted" style="font-size:12px;margin-top:5px;">Se usa si no seleccionas plantilla o para compatibilidad con campañas antiguas.</div>
+      </div>
+    </details>
   </div>
 
   <div style="display:flex;justify-content:flex-end;margin-top:20px;gap:10px;">
@@ -1439,6 +1482,7 @@ const campaignId = ${campaign.id ? Number(campaign.id) : 'null'};
 let currentStep = 1;
 let campaignMode = '${isTestCampaign}';
 let selectedTestIds = [];
+const TEMPLATE_MAP = ${templateMapJson};
 
 const STEP_LABELS = { 1: 'Mensaje', 2: 'Vista previa', 3: 'Destinatarios y envío' };
 
@@ -1488,10 +1532,38 @@ function validateStep1() {
   if (type === 'libre') {
     if (!document.getElementById('msgTextarea')?.value?.trim()) { setFormError('Escribe el contenido del mensaje.'); return false; }
   } else {
-    if (!document.querySelector('input[name="contentSid"]')?.value?.trim()) { setFormError('Ingresa el Content SID.'); return false; }
+    const selectedTemplate = document.querySelector('input[name="templateId"]:checked')?.value || '';
+    const sidValue = document.querySelector('input[name="contentSid"]')?.value?.trim() || '';
+    if (!selectedTemplate && !sidValue) { setFormError('Selecciona una plantilla o ingresa un Content SID.'); return false; }
   }
   setFormError('');
   return true;
+}
+
+function updateTemplateSelectionUI() {
+  const info = document.getElementById('selectedTemplateInfo');
+  const selectedId = document.querySelector('input[name="templateId"]:checked')?.value || '';
+  const sidInput = document.getElementById('manualContentSid');
+  if (!info) return;
+
+  if (!selectedId) {
+    info.textContent = 'Sin plantilla seleccionada.';
+    return;
+  }
+
+  const selected = TEMPLATE_MAP.find(t => String(t.id) === String(selectedId));
+  if (!selected) {
+    info.textContent = 'Plantilla no encontrada.';
+    return;
+  }
+
+  if (sidInput && selected.content_sid) {
+    sidInput.value = selected.content_sid;
+  }
+
+  const sidTxt = selected.content_sid ? ('SID: ' + selected.content_sid) : 'Sin SID';
+  const bodyTxt = selected.body ? (' | ' + selected.body.slice(0, 90)) : '';
+  info.textContent = selected.name + ' - ' + sidTxt + bodyTxt;
 }
 
 // ── Tabs de tipo de mensaje ──────────
@@ -1706,8 +1778,9 @@ async function handleSubmit(e) {
   const msgType=document.querySelector('input[name="msgType"]:checked')?.value||'libre';
   const msgTemplate=document.getElementById('msgTextarea')?.value?.trim()||'';
   const contentSid=document.querySelector('input[name="contentSid"]')?.value?.trim()||'';
+  const selectedTemplateId=document.querySelector('input[name="templateId"]:checked')?.value||'';
   if (msgType==='libre'&&!msgTemplate){goToStep(1);setFormError('Escribe el contenido del mensaje.');return;}
-  if (msgType==='twilio'&&!contentSid){goToStep(1);setFormError('Ingresa el Content SID.');return;}
+  if (msgType==='twilio'&&!selectedTemplateId&&!contentSid){goToStep(1);setFormError('Selecciona una plantilla o ingresa un Content SID.');return;}
   const timing=document.querySelector('input[name="sendTiming"]:checked')?.value||'draft';
   const scheduledAt=timing==='scheduled'?document.querySelector('input[name="scheduledAt"]')?.value||'':'';
   const isTest=campaignMode==='test';
@@ -1721,7 +1794,7 @@ async function handleSubmit(e) {
       if (!confirm('⚠️ Estás programando sin destinatarios.\\n\\n¿Deseas continuar de todos modos?')) return;
     }
   }
-  const payload={name,messageTemplate:msgType==='libre'?msgTemplate:'',contentSid:msgType==='twilio'?contentSid:'',
+  const payload={name,messageTemplate:msgType==='libre'?msgTemplate:'',contentSid:msgType==='twilio'?contentSid:'',templateId:selectedTemplateId||null,
     type:msgType==='twilio'?'twilio_template':'custom_message',scheduledAt,isTest,recipientIds};
   const url=campaignId?'/admin/api/campaigns/'+campaignId:'/admin/api/campaigns';
   const method=campaignId?'PATCH':'POST';
@@ -1745,6 +1818,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Message type tabs
   document.querySelectorAll('input[name="msgType"]').forEach(r => r.addEventListener('change', updateMsgTabs));
   updateMsgTabs();
+
+  document.querySelectorAll('input[name="templateId"]').forEach(r => r.addEventListener('change', updateTemplateSelectionUI));
+  updateTemplateSelectionUI();
 
   // Variable insertion
   document.querySelectorAll('.var-btn').forEach(b => b.addEventListener('click', () => insertVar(b.dataset.var)));

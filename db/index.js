@@ -73,6 +73,7 @@ if (campaignsTableExists) {
     }
     // Add other new columns silently (they won't cause errors if already exist in schema.sql)
     const newColumns = [
+        ['template_id', 'INTEGER'],
         ['content_sid', 'TEXT'],
         ['filters', 'TEXT'],
         ['paused_at', 'TEXT'],
@@ -179,21 +180,21 @@ const statements = {
     `),
     getCampaignById: db.prepare(`
         SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
-               type, scheduled_at, content_sid, filters, started_at, completed_at, paused_at,
+               type, scheduled_at, template_id, content_sid, filters, started_at, completed_at, paused_at,
                failed_at, error_message, updated_at, is_test
         FROM campaigns
         WHERE id = ?
     `),
     getCampaignByName: db.prepare(`
         SELECT id, name, message_template, status, total_recipients, sent_count, created_at,
-               type, scheduled_at, content_sid, filters, started_at, completed_at, paused_at,
+               type, scheduled_at, template_id, content_sid, filters, started_at, completed_at, paused_at,
                failed_at, error_message, updated_at, is_test
         FROM campaigns
         WHERE name = ?
     `),
     insertCampaign: db.prepare(`
-        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, content_sid, filters, is_test, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+        INSERT INTO campaigns (name, message_template, status, type, scheduled_at, template_id, content_sid, filters, is_test, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
     `),
     updateCampaignMessage: db.prepare(`
         UPDATE campaigns
@@ -226,7 +227,7 @@ const statements = {
     // Phase 2.1: New campaign management statements
     updateCampaign: db.prepare(`
         UPDATE campaigns
-        SET name = ?, message_template = ?, type = ?, scheduled_at = ?, content_sid = ?, filters = ?
+        SET name = ?, message_template = ?, type = ?, scheduled_at = ?, template_id = ?, content_sid = ?, filters = ?
         WHERE id = ?
     `),
     setCampaignStatus: db.prepare(`
@@ -263,7 +264,7 @@ const statements = {
             (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status LIKE 'skipped%') AS skipped
     `),
     listScheduledCampaignsDue: db.prepare(`
-        SELECT id, name, message_template, status, type, scheduled_at, content_sid, filters
+        SELECT id, name, message_template, status, type, scheduled_at, template_id, content_sid, filters
         FROM campaigns
         WHERE status = 'scheduled'
           AND scheduled_at IS NOT NULL
@@ -272,7 +273,7 @@ const statements = {
         LIMIT ?
     `),
     listCampaignsByStatus: db.prepare(`
-        SELECT id, name, message_template, status, type, scheduled_at, content_sid, filters
+        SELECT id, name, message_template, status, type, scheduled_at, template_id, content_sid, filters
         FROM campaigns
         WHERE status = ?
         ORDER BY created_at ASC
@@ -479,6 +480,7 @@ export function createCampaign({
     status = 'draft',
     type = 'twilio_template',
     scheduledAt = null,
+    templateId = null,
     contentSid = null,
     filters = null,
     isTest = false
@@ -490,6 +492,7 @@ export function createCampaign({
         status,
         type,
         scheduledAt,
+        templateId,
         contentSid,
         filtersJson,
         isTest ? 1 : 0
@@ -592,6 +595,7 @@ export function listMessages({ limit = 50, offset = 0, direction = '' }) {
 export function listCampaigns({ limit = 50, offset = 0 }) {
     return db.prepare(`
         SELECT c.id, c.name, c.status, c.message_template, c.created_at, c.type, c.scheduled_at,
+               c.template_id,
                c.total_recipients,
                c.sent_count,
                c.is_test,
@@ -629,9 +633,9 @@ export function listOptOuts({ limit = 50, offset = 0 }) {
 // Phase 2.1: Campaign Management Functions
 // ============================================================
 
-export function updateCampaignFull(id, { name, messageTemplate, type, scheduledAt, contentSid, filters }) {
+export function updateCampaignFull(id, { name, messageTemplate, type, scheduledAt, templateId = null, contentSid, filters }) {
     const filtersJson = filters ? JSON.stringify(filters) : null;
-    statements.updateCampaign.run(name, messageTemplate, type, scheduledAt, contentSid, filtersJson, id);
+    statements.updateCampaign.run(name, messageTemplate, type, scheduledAt, templateId, contentSid, filtersJson, id);
     return getCampaignById(id);
 }
 
@@ -771,8 +775,21 @@ export function renderMessageTemplate(template, variables = {}) {
     if (!template) {
         return '';
     }
-    return String(template).replace(/\{\{(\w+)\}\}/g, (match, varName) => {
-        const value = variables[varName];
+    const normalized = {
+        ...variables,
+        nombre: variables.nombre ?? variables.name,
+        name: variables.name ?? variables.nombre,
+        marca: variables.marca ?? variables.make,
+        make: variables.make ?? variables.marca,
+        modelo: variables.modelo ?? variables.model,
+        model: variables.model ?? variables.modelo,
+        anio: variables.anio ?? variables.año ?? variables.year,
+        año: variables.año ?? variables.anio ?? variables.year,
+        year: variables.year ?? variables.anio ?? variables.año
+    };
+    return String(template).replace(/\{\{([^}]+)\}\}/g, (match, rawVarName) => {
+        const varName = String(rawVarName || '').trim();
+        const value = normalized[varName];
         return value !== undefined && value !== null ? String(value) : match;
     });
 }
