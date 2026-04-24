@@ -260,15 +260,15 @@ const hasHumanNegation = /\\b(no quiero|no me contacten|no me llamen|sin ejecuti
 const explicitHuman = /\\b(humano|persona|ejecutivo|asesor|persona real|hablar con alguien|necesito hablar|quiero hablar con)\\b/.test(textNorm);
 const legalSensitive = /\\b(prenda|deuda prendaria|limitacion de dominio|embargo|gravamen|perdida total|multa|multas|reclamo|queja|molesto|mala atencion|denuncia|demanda|estafa)\\b/.test(textNorm);
 const affirmative = /^(si|sii|ok|oki|okey|dale|de acuerdo|perfecto|listo|quiero|me interesa)$/.test(textNorm)
-  || /\\b(si|sii|ok|dale|quiero|contactenme|contacten me|me contacten|que me contacten|que me llame|quiero que me contacten)\\b/.test(textNorm);
+  || /\\b(si|sii|ok|dale|quiero|contactenme|contacten me|me contacten|me contacte|que me contacten|que me contacte|que me llame|quiero que me contacten)\\b/.test(textNorm);
 const compoundAffirmative = /^(ok|si|sii|dale|de acuerdo)\\s+(perfecto|gracias|dale|listo)$/.test(textNorm)
   || /^(perfecto|listo)\\s+(gracias|ok)$/.test(textNorm);
 const phaticAck = /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(textNorm);
 const softPositive = /\\b(por favor|porfa|okey|oki|oka|vale|ya)\\b/.test(textNorm);
-const handoffActionIntent = /\\b(enviame|enviame|mandame|manda me|envia me|enviar|mandar|derivame|deriva me|contactame|contacta me|llamame|llama me|pasame con ejecutivo|pasame con asesor|quiero que me contacten|si espero|ok espero|oka espero)\\b/.test(textNorm);
-const explicitContactRequest = /\\b(que me contacten|me contacten|contactame|contacta me|llamame|llama me|quiero que me contacten|quiero hablar con ejecutivo|quiero hablar con asesor|me llamen|que me llamen)\\b/.test(textNorm);
+const handoffActionIntent = /\\b(enviame|enviame|mandame|manda me|envia me|enviar|mandar|derivame|deriva me|contactame|contacta me|llamame|llama me|pasame con ejecutivo|pasame con asesor|quiero que me contacten|si espero|ok espero|oka espero|ok porfa|oka porfa|si porfa|dale porfa)\\b/.test(textNorm);
+const explicitContactRequest = /\\b(que me contacten|que me contacte|me contacten|me contacte|contactame|contacta me|llamame|llama me|quiero que me contacten|quiero hablar con ejecutivo|quiero hablar con asesor|me llamen|que me llamen)\\b/.test(textNorm);
 const lastAssistantHadCta = /\\b(ejecutivo|asesor)\\b/.test(lastAssistantNorm)
-  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);
+  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|contactar|puede contactar|pueden contactar|llame|llamemos|llamen|agendar|agendemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);
 const handoffContextActive = awaitingHandoffConfirmation || lastAssistantHadCta || pendingOfferFromServer;
 const contextualAck = handoffContextActive
   && !hasHumanNegation
@@ -297,7 +297,7 @@ if (security.is_prompt_injection) {
   reason = 'caso_sensible';
   needsHuman = true;
   handoffOutput = 'Perfecto, te puedo derivar con un ejecutivo para revisarlo bien. Te contactamos en 15-30 min.';
-} else if (!hasHumanNegation && handoffContextActive && (affirmative || compoundAffirmative || contextualAck || handoffActionIntent)) {
+} else if (!hasHumanNegation && (handoffContextActive && (affirmative || compoundAffirmative || contextualAck) || handoffActionIntent)) {
   reason = 'confirmacion_handoff';
   needsHuman = true;
   handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
@@ -525,7 +525,7 @@ if (isHumanThisTurn) {
 const outputText = String(outbound.output || '').trim();
 const outputNorm = outputText.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
 const offersExecutive = /\\b(ejecutivo|asesor)\\b/.test(outputNorm)
-  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);
+  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|contactar|puede contactar|pueden contactar|llame|llamemos|llamen|agendar|agendemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);
 const confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm)
   || (/\\bte contacto un ejecutivo\\b/.test(outputNorm) && !/[?¿]/.test(outputText));
 

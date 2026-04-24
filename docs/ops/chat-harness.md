@@ -8,6 +8,24 @@ This harness lets you run scripted conversations without sending real WhatsApp m
 - Catch regressions (handoff loops, repeated CTA, weak confirmations).
 - Build confidence before production tests.
 
+## Admin Lab Chat (UI mirror)
+
+Use browser playground:
+
+- `GET /admin/lab/chat`
+
+Capabilities:
+
+- Manual turn-by-turn chat simulation (mirror of inbound processing).
+- Scenario runner from UI (`Run smoke` / `Run regression`).
+- Markdown report generation under `docs/qa/` with pass/fail per step.
+- Session transcript export to markdown for future analysis.
+
+Notes:
+
+- Lab runs are non-persistent (do not write message records by default).
+- Default lab phone is `+56935229766` (override with env `LAB_CHAT_DEFAULT_PHONE`).
+
 ## Command
 
 ```bash

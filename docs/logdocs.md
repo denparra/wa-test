@@ -111,3 +111,64 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
   - `npm run harness:chat` (twilio_inbound) -> `PASSED`.
   - direct n8n scenario available in `scenarios/harness/chat-regression.n8n.json`.
 - Rollback: restore remote backup above and revert server/tune changes.
+
+### 2026-04-24 19:18 - Admin Lab Chat mirror for rapid conversational QA
+
+- Scope: add admin chat playground to simulate WhatsApp conversation behavior in a browser UI.
+- Why: run faster iterative testing and evaluate response coherence without sending real WhatsApp messages.
+- Files: `server.js`, `admin/pages.js`, `admin/render.js`.
+- Runtime impact:
+  - new page `GET /admin/lab/chat` with chat-style interface and quick scenarios.
+  - new API `POST /admin/api/lab/chat/send` (non-persistent mirror of inbound logic).
+  - new API `POST /admin/api/lab/chat/reset` to isolate sessions and clear handoff transient state.
+  - shared inbound processor now powers both Twilio webhook and lab mirror path.
+- Validation:
+  - syntax checks for `server.js`, `admin/pages.js`, `admin/render.js`.
+  - `npm run harness:chat` with local server -> `PASSED`.
+- Rollback: remove lab routes/page/nav item and revert to direct `/twilio/inbound` handler block.
+
+### 2026-04-24 19:26 - Lab Chat default phone fixed and editable
+
+- Scope: set deterministic Lab Chat default phone with UI edit support.
+- Why: keep repeatable context for QA while still allowing quick number switches during tests.
+- Files: `server.js`, `admin/pages.js`.
+- Runtime impact:
+  - default lab phone is now `+56935229766` (or `LAB_CHAT_DEFAULT_PHONE` env override).
+  - lab phone can be edited directly in UI and is used immediately by send/reset actions.
+- Validation: syntax checks on modified files.
+- Rollback: revert to random lab phone generator behavior.
+
+### 2026-04-24 19:40 - Expanded Lab scenarios and markdown pass/fail reports
+
+- Scope: broaden QA scenario coverage and add report/export workflow directly from `/admin/lab/chat`.
+- Why: enable iterative bot tuning with reproducible scenario execution and documented fail/pass trace.
+- Files: `server.js`, `admin/pages.js`, `docs/ops/chat-harness.md`.
+- Runtime impact:
+  - added multi-scenario catalog (`smoke` + `regression`) for lab execution.
+  - added APIs:
+    - `GET /admin/api/lab/chat/scenarios`
+    - `POST /admin/api/lab/chat/run-scenarios`
+    - `POST /admin/api/lab/chat/save-session`
+  - lab UI now supports running suites, running specific scenario, and saving markdown outputs.
+  - markdown artifacts are generated in `docs/qa/` with per-step pass/fail details.
+- Validation:
+  - `node --check server.js`
+  - `node --check admin/pages.js`
+  - `npm run harness:chat` (local) -> `PASSED`.
+- Rollback: remove new lab endpoints and restore previous single-scenario UI behavior.
+
+### 2026-04-24 19:45 - Targeted regression fix for informal/action affirmatives
+
+- Scope: fix persistent failures in `informal_affirmative` and `action_affirmative` without changing stable passing flows.
+- Why: repeated regression runs showed deterministic failures (`oka porfa`, `ok enviame`) after executive CTA offer.
+- Files: `server.js`, `scripts/n8n/tune-meta-agent-handoff.js`, `n8n/workflows/META-CONSIGNACION-V1.json`.
+- n8n workflow: id `PI8uZo5omcN3576y`, name `META-CONSIGNACION-V1`.
+- Backup artifact: `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-targeted-regression-fix.json`.
+- Runtime impact:
+  - expanded CTA-offer detection patterns in server and n8n (contactar/contacten/llamen/agendar variants).
+  - broadened affirmative intent matching (`me contacte`, `que me contacte`, `ok porfa`, `oka porfa`, `dale porfa`).
+  - added deterministic server guard: if offer is pending and reply is short affirmative, confirm handoff directly.
+- Validation:
+  - targeted inbound simulation with fresh phones shows handoff confirmation for both failing cases.
+  - `npm run harness:chat` -> `PASSED`.
+- Rollback: restore backup artifact above and revert the server/tune changes.

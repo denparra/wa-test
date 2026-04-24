@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { timingSafeEqual } from 'crypto';
+import fs from 'fs/promises';
 import express from 'express';
 import twilio from 'twilio';
 import multer from 'multer';
@@ -88,7 +89,8 @@ import {
     renderTemplatesPage,
     renderTemplateFormPage,
     renderVehiclesPage,
-    renderVehicleFormPage
+    renderVehicleFormPage,
+    renderChatLabPage
 } from './admin/pages.js';
 import { sendOneRecipient } from './lib/twilio-sender.js';
 import {
@@ -135,6 +137,7 @@ const HANDOFF_ACK_WINDOW_MS = 6 * 60 * 60 * 1000;
 const HANDOFF_OFFER_WINDOW_MS = 20 * 60 * 1000;
 const recentHandoffByPhone = new Map();
 const recentHandoffOfferByPhone = new Map();
+const LAB_CHAT_DEFAULT_PHONE = normalizePhone(String(process.env.LAB_CHAT_DEFAULT_PHONE || '+56935229766').trim()) || '+56935229766';
 
 if (!N8N_CHAT_WEBHOOK_URL) {
     console.warn('[startup] N8N_CHAT_WEBHOOK_URL no configurada: /twilio/inbound usara respuesta local fallback');
@@ -218,13 +221,25 @@ function isPhaticAckMessage(text = '') {
 function isHandoffOfferText(text = '') {
     const normalized = normalizeIntentText(text);
     const hasExecutive = /\b(ejecutivo|asesor)\b/.test(normalized);
-    const hasContactAction = /\b(contacta|contacto|contactamos|contactarte|llame|llamemos)\b/.test(normalized);
+    const hasContactAction = /\b(contacta|contacto|contacte|contacten|contactamos|contactarte|contactar|llame|llamemos|llamen|agendemos)\b/.test(normalized);
     const hasEta = /\b(15-30|15 30|min|minutos)\b/.test(normalized);
     return hasExecutive && (hasContactAction || hasEta);
 }
 
 function hasEmailInText(text = '') {
     return /([^\s<>"'`]+@[^\s<>"'`]+\.[^\s<>"'`]+)/i.test(String(text || ''));
+}
+
+function isHandoffOfferAffirmative(text = '') {
+    const normalized = normalizeIntentText(text);
+    if (!normalized) {
+        return false;
+    }
+    if (/\b(no|no gracias|mejor no|despues|después)\b/.test(normalized)) {
+        return false;
+    }
+    return /^(si|sii|ok|oki|okey|oka|dale|de acuerdo|perfecto|listo|vale|ya)\s*(porfa|por favor)?$/.test(normalized)
+        || /\b(ok enviame|enviame|mandame|si espero|ok espero|oka espero|que me contacten|me contacten)\b/.test(normalized);
 }
 
 function normalizeIntentText(text = '') {
@@ -309,6 +324,13 @@ function markHandoffStarted(phone = '') {
     });
 }
 
+function clearHandoffState(phone = '') {
+    if (!phone) {
+        return;
+    }
+    recentHandoffByPhone.delete(phone);
+}
+
 function getActiveHandoffOfferState(phone = '') {
     if (!phone) {
         return null;
@@ -338,6 +360,207 @@ function clearHandoffOffer(phone = '') {
         return;
     }
     recentHandoffOfferByPhone.delete(phone);
+}
+
+function buildLabPhone() {
+    return LAB_CHAT_DEFAULT_PHONE;
+}
+
+function resolveLabPhone(candidate = '') {
+    return normalizePhone(String(candidate || '').trim()) || LAB_CHAT_DEFAULT_PHONE;
+}
+
+const LAB_SCENARIOS = [
+    {
+        id: 'happy_handoff',
+        name: 'Happy Path Handoff',
+        suite: 'smoke',
+        steps: [
+            { user: 'hola puedo consignar mi auto?', expect: { containsAny: ['consign', 'ejecutivo', 'contact'] } },
+            { user: 'si dale que me contacte', expect: { containsAny: ['quedaste derivado', 'te contactamos en 15-30'] } },
+            { user: 'gracias, chao', expect: { notContainsAny: ['quieres que te contacte', 'si quieres, te contacta un ejecutivo'] } }
+        ]
+    },
+    {
+        id: 'post_handoff_lock',
+        name: 'Post-Handoff No Reopen',
+        suite: 'smoke',
+        steps: [
+            { user: 'me interesa consignar', expect: { containsAny: ['ejecutivo', 'contact'] } },
+            { user: 'si por favor que me contacten', expect: { containsAny: ['quedaste derivado'] } },
+            { user: 'ok gracias', expect: { notContainsAny: ['quieres que te contacte', 'si quieres, te contacta un ejecutivo'] } }
+        ]
+    },
+    {
+        id: 'email_after_handoff',
+        name: 'Email After Handoff',
+        suite: 'smoke',
+        steps: [
+            { user: 'hola, me interesa consignar mi auto', expect: { containsAny: ['consign', 'ejecutivo'] } },
+            { user: 'si por favor que me contacten', expect: { containsAny: ['quedaste derivado'] } },
+            { user: 'mi correo es qa@example.com', expect: { containsAny: ['correo', 'derivado'], notContainsAny: ['quieres que te contacte'] } }
+        ]
+    },
+    {
+        id: 'optout_keyword',
+        name: 'Opt-out Keyword',
+        suite: 'smoke',
+        steps: [
+            { user: 'BAJA', expect: { containsAny: ['dado de baja', 'confirmado'] } }
+        ]
+    },
+    {
+        id: 'optout_semantic',
+        name: 'Opt-out Semantic',
+        suite: 'smoke',
+        steps: [
+            { user: 'no me escriban mas por favor', expect: { containsAny: ['dado de baja', 'confirmado'] } }
+        ]
+    },
+    {
+        id: 'known_vehicle_context',
+        name: 'Known Vehicle Context',
+        suite: 'regression',
+        steps: [
+            { user: 'me interesa consignar', expect: { notContainsAny: ['Marca, Modelo, Ano y Comuna'] } }
+        ]
+    },
+    {
+        id: 'informal_affirmative',
+        name: 'Informal Affirmative',
+        suite: 'regression',
+        steps: [
+            { user: 'hola me interesa consignar', expect: { containsAny: ['ejecutivo'] } },
+            { user: 'oka porfa', expect: { containsAny: ['quedaste derivado', 'te contactamos en 15-30'] } }
+        ]
+    },
+    {
+        id: 'action_affirmative',
+        name: 'Action-style Affirmative',
+        suite: 'regression',
+        steps: [
+            { user: 'me interesa consignar', expect: { containsAny: ['ejecutivo'] } },
+            { user: 'ok enviame', expect: { containsAny: ['quedaste derivado'] } }
+        ]
+    },
+    {
+        id: 'decline_handoff',
+        name: 'Decline Handoff',
+        suite: 'regression',
+        steps: [
+            { user: 'me interesa consignar', expect: { containsAny: ['ejecutivo'] } },
+            { user: 'no gracias', expect: { notContainsAny: ['quedaste derivado'] } }
+        ]
+    },
+    {
+        id: 'faq_process',
+        name: 'FAQ Process Question',
+        suite: 'regression',
+        steps: [
+            { user: 'como es el proceso de consignacion?', expect: { containsAny: ['proceso', 'consign'] } }
+        ]
+    },
+    {
+        id: 'faq_costs',
+        name: 'FAQ Costs Question',
+        suite: 'regression',
+        steps: [
+            { user: 'que costo tiene consignar?', expect: { containsAny: ['consign', 'proceso', 'ejecutivo'] } }
+        ]
+    },
+    {
+        id: 'legal_sensitive',
+        name: 'Legal Sensitive Case',
+        suite: 'regression',
+        steps: [
+            { user: 'tengo un problema de prenda y embargo', expect: { containsAny: ['derivado', 'ejecutivo', 'contactamos'] } }
+        ]
+    }
+];
+
+function getLabScenarioCatalog() {
+    return LAB_SCENARIOS.map((scenario) => ({
+        id: scenario.id,
+        name: scenario.name,
+        suite: scenario.suite,
+        step_count: scenario.steps.length
+    }));
+}
+
+function containsAnyText(text, list = []) {
+    const hay = String(text || '').toLowerCase();
+    return list.some((needle) => hay.includes(String(needle || '').toLowerCase()));
+}
+
+function containsAllText(text, list = []) {
+    const hay = String(text || '').toLowerCase();
+    return list.every((needle) => hay.includes(String(needle || '').toLowerCase()));
+}
+
+function containsNoneText(text, list = []) {
+    const hay = String(text || '').toLowerCase();
+    return list.every((needle) => !hay.includes(String(needle || '').toLowerCase()));
+}
+
+function evaluateLabExpectation(reply, expect = {}) {
+    const failures = [];
+    if (Array.isArray(expect.containsAny) && expect.containsAny.length > 0 && !containsAnyText(reply, expect.containsAny)) {
+        failures.push(`missing containsAny: ${JSON.stringify(expect.containsAny)}`);
+    }
+    if (Array.isArray(expect.containsAll) && expect.containsAll.length > 0 && !containsAllText(reply, expect.containsAll)) {
+        failures.push(`missing containsAll: ${JSON.stringify(expect.containsAll)}`);
+    }
+    if (Array.isArray(expect.notContainsAny) && expect.notContainsAny.length > 0 && !containsNoneText(reply, expect.notContainsAny)) {
+        failures.push(`matched forbidden text: ${JSON.stringify(expect.notContainsAny)}`);
+    }
+    if (typeof expect.equals === 'string' && String(reply || '').trim() !== expect.equals.trim()) {
+        failures.push(`equals mismatch: expected "${expect.equals}" got "${reply}"`);
+    }
+    return {
+        ok: failures.length === 0,
+        failures
+    };
+}
+
+function buildLabReportMarkdown({ suite, results, generatedAt, summary }) {
+    const lines = [];
+    lines.push(`# Lab Chat Report - ${generatedAt}`);
+    lines.push('');
+    lines.push(`- Suite: ${suite}`);
+    lines.push(`- Total escenarios: ${summary.total}`);
+    lines.push(`- PASS: ${summary.passed}`);
+    lines.push(`- FAIL: ${summary.failed}`);
+    lines.push('');
+
+    for (const scenario of results) {
+        lines.push(`## ${scenario.name} (${scenario.id})`);
+        lines.push('');
+        lines.push(`- Resultado: ${scenario.ok ? 'PASS' : 'FAIL'}`);
+        lines.push(`- Pasos: ${scenario.steps.length}`);
+        lines.push('');
+        for (const step of scenario.steps) {
+            lines.push(`### Paso ${step.step}`);
+            lines.push(`- User: ${step.user}`);
+            lines.push(`- Bot: ${step.reply || '(empty)'}`);
+            lines.push(`- Resultado: ${step.ok ? 'PASS' : 'FAIL'}`);
+            if (!step.ok && step.failures.length > 0) {
+                lines.push(`- Fallas: ${step.failures.join(' | ')}`);
+            }
+            lines.push('');
+        }
+    }
+
+    return lines.join('\n');
+}
+
+async function saveLabMarkdownReport(content, prefix = 'lab-chat-report') {
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[:]/g, '-').replace(/\..+/, '');
+    const relativeDir = 'docs/qa';
+    const relativePath = `${relativeDir}/${prefix}-${stamp}.md`;
+    await fs.mkdir(relativeDir, { recursive: true });
+    await fs.writeFile(relativePath, content, 'utf8');
+    return relativePath;
 }
 
 function incrementHandoffAck(phone = '') {
@@ -767,6 +990,13 @@ app.get('/admin/messages', (req, res) => {
         direction,
         offset,
         limit
+    }));
+});
+
+app.get('/admin/lab/chat', (req, res) => {
+    res.status(200).type('text/html').send(renderChatLabPage({
+        defaultPhone: LAB_CHAT_DEFAULT_PHONE,
+        scenarioCatalog: getLabScenarioCatalog()
     }));
 });
 
@@ -1905,20 +2135,17 @@ app.post('/admin/api/n8n/workflows/:id/duplicate', adminAuth, express.json(), as
 // ============================================================
 // Webhooks
 // ============================================================
-app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
-    const from = req.body.From;            // "whatsapp:+569..."
-    const body = (req.body.Body || '').trim(); // texto del usuario
-
-    const phone = normalizePhone(from); // Renamed internal var for clarity, though not strictly required
-    const normalizedBody = normalizeIntentText(body);
-    const upper = body.toUpperCase();
+async function processInboundMessage({ from, body, messageSid = null, persist = true, source = 'twilio' }) {
+    const text = String(body || '').trim();
+    const phone = normalizePhone(from);
+    const normalizedBody = normalizeIntentText(text);
+    const upper = text.toUpperCase();
     const existingContact = phone ? getContactByPhone(phone) : null;
     const knownVehicles = existingContact?.id
         ? toVehicleContextList(getVehiclesByContactId(existingContact.id))
         : [];
     const knownVehicleSummary = formatVehicleShortSummary(knownVehicles);
 
-    // Quick Win #8: Expanded opt-out keywords for better compliance
     const OPTOUT_KEYWORDS = ['baja', 'stop', 'unsubscribe', 'cancelar', 'remover', 'salir'];
     const OPTOUT_PHRASES = [
         /\bno me (escriban|escribas|contacten|contactes|llamen|llames)\b/,
@@ -1932,9 +2159,7 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
     const isMenuOptOut = normalizedBody === '3';
     const isBaja = isKeywordOptOut || isPhraseOptOut || isMenuOptOut;
 
-    // Respuesta local fallback
     let reply = 'Gracias por escribir a Queirolo Autos. Responde:\n1) Me interesa consignar\n2) Quiero mas info\n3) BAJA';
-
 
     if (isBaja) {
         reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
@@ -1948,11 +2173,14 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
         reply = 'Genial. Te cuento: consignamos, publicamos y gestionamos todo. Quieres que te llame un ejecutivo? (SI/NO)';
     }
 
-    // Si no es BAJA, intentamos respuesta IA via n8n (modo webhook bridge).
+    let usedAi = false;
+    let aiNeedsHuman = false;
+    let aiHandoffReason = '';
+
     if (!isBaja) {
         const handoffState = phone ? getActiveHandoffState(phone) : null;
         const handoffOfferState = phone ? getActiveHandoffOfferState(phone) : null;
-        const isPhaticAck = isPhaticAckMessage(body);
+        const isPhaticAck = isPhaticAckMessage(text);
         let bypassAiForAck = false;
         let aiResult = null;
 
@@ -1966,14 +2194,19 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                 reply = '';
             }
             bypassAiForAck = true;
+        } else if (handoffOfferState && isHandoffOfferAffirmative(text)) {
+            markHandoffStarted(phone);
+            clearHandoffOffer(phone);
+            reply = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+            bypassAiForAck = true;
         }
 
         if (!bypassAiForAck) {
             aiResult = await getN8nChatReply({
-                source: 'twilio',
+                source,
                 phone,
-                message_text: body,
-                message_sid: req.body.MessageSid || null,
+                message_text: text,
+                message_sid: messageSid,
                 received_at: new Date().toISOString(),
                 context: {
                     is_opted_out: phone ? isOptedOut(phone) : false,
@@ -1983,23 +2216,28 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                     handoff_active: Boolean(handoffState),
                     handoff_offer_pending: Boolean(handoffOfferState),
                     known_vehicle_count: knownVehicles.length,
-                    known_vehicles: knownVehicles
+                    known_vehicles: knownVehicles,
+                    lab_mode: source === 'lab'
                 }
             });
+
+            usedAi = Boolean(aiResult);
+            aiNeedsHuman = Boolean(aiResult?.needsHuman);
+            aiHandoffReason = String(aiResult?.handoffReason || '');
 
             if (aiResult?.replyText) {
                 reply = aiResult.replyText;
             }
 
             if (handoffState && !aiResult?.needsHuman) {
-                if (hasEmailInText(body)) {
+                if (hasEmailInText(text)) {
                     reply = 'Perfecto, ya tengo tu correo. Quedaste derivado. Te contactamos en 15-30 min.';
                 } else if (isHandoffOfferText(reply)) {
                     reply = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
                 }
             }
 
-            if (aiResult?.optoutRequested && phone) {
+            if (aiResult?.optoutRequested && phone && persist) {
                 try {
                     insertOptOut(phone, 'user_request_ai');
                     updateContactStatus(phone, 'opted_out');
@@ -2014,7 +2252,8 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                 clearHandoffOffer(phone);
                 console.log('INBOUND-HANDOFF:', {
                     from: maskPhone(phone),
-                    reason: aiResult.handoffReason || 'unspecified'
+                    reason: aiResult.handoffReason || 'unspecified',
+                    source
                 });
             }
 
@@ -2026,50 +2265,250 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
         }
     } else {
         clearHandoffOffer(phone);
+        clearHandoffState(phone);
     }
 
-    try {
-        if (phone) {
-            const contact = upsertContact(phone, null);
-            insertMessage({
-                contactId: contact?.id || null,
-                campaignId: null,
-                direction: 'inbound',
-                phone: phone, // NEW REQUIRED FIELD
-                body,
-                messageSid: req.body.MessageSid || null, // RENAMED
-                status: 'received'
-            });
-
-            if (reply) {
+    if (persist) {
+        try {
+            if (phone) {
+                const contact = upsertContact(phone, null);
                 insertMessage({
                     contactId: contact?.id || null,
                     campaignId: null,
-                    direction: 'outbound',
+                    direction: 'inbound',
                     phone,
-                    body: reply,
-                    messageSid: null,
-                    status: 'sent'
+                    body: text,
+                    messageSid,
+                    status: 'received'
                 });
-            }
 
-            if (isBaja) {
-                insertOptOut(phone, 'user_request');
-                updateContactStatus(phone, 'opted_out');
+                if (reply) {
+                    insertMessage({
+                        contactId: contact?.id || null,
+                        campaignId: null,
+                        direction: 'outbound',
+                        phone,
+                        body: reply,
+                        messageSid: null,
+                        status: 'sent'
+                    });
+                }
+
+                if (isBaja) {
+                    insertOptOut(phone, 'user_request');
+                    updateContactStatus(phone, 'opted_out');
+                }
             }
+        } catch (error) {
+            console.error('DB error (inbound):', error?.message || error);
         }
-    } catch (error) {
-        console.error('DB error (inbound):', error?.message || error);
     }
 
     console.log('INBOUND:', {
         from: maskPhone(phone),
-        bodyLength: body.length,
-        isBaja
+        bodyLength: text.length,
+        isBaja,
+        source
     });
 
-    const twimlMessage = reply
-        ? `<Message>${escapeXml(reply)}</Message>`
+    return {
+        reply,
+        isBaja,
+        phone,
+        usedAi,
+        needsHuman: aiNeedsHuman,
+        handoffReason: aiHandoffReason
+    };
+}
+
+app.post('/admin/api/lab/chat/send', adminAuth, express.json(), async (req, res) => {
+    const message = String(req.body?.message || '').trim();
+    const candidatePhone = String(req.body?.phone || '').trim();
+    if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const phone = resolveLabPhone(candidatePhone);
+    const from = `whatsapp:${phone}`;
+
+    try {
+        const result = await processInboundMessage({
+            from,
+            body: message,
+            messageSid: `SMLAB${Date.now()}`,
+            persist: false,
+            source: 'lab'
+        });
+
+        res.status(200).json({
+            ok: true,
+            phone,
+            reply: result.reply,
+            is_baja: result.isBaja,
+            meta: {
+                used_ai: result.usedAi,
+                needs_human: result.needsHuman,
+                handoff_reason: result.handoffReason || ''
+            }
+        });
+    } catch (error) {
+        console.error('Lab chat send error:', error);
+        res.status(500).json({ error: 'Failed to process lab message' });
+    }
+});
+
+app.get('/admin/api/lab/chat/scenarios', adminAuth, (req, res) => {
+    res.status(200).json({
+        scenarios: getLabScenarioCatalog()
+    });
+});
+
+app.post('/admin/api/lab/chat/run-scenarios', adminAuth, express.json(), async (req, res) => {
+    const requestedSuite = String(req.body?.suite || 'smoke').trim().toLowerCase();
+    const selectedIds = Array.isArray(req.body?.scenario_ids)
+        ? req.body.scenario_ids.map((item) => String(item || '').trim()).filter(Boolean)
+        : [];
+
+    let scenarios = LAB_SCENARIOS.filter((scenario) => scenario.suite === requestedSuite);
+    if (selectedIds.length > 0) {
+        const allowed = new Set(selectedIds);
+        scenarios = LAB_SCENARIOS.filter((scenario) => allowed.has(scenario.id));
+    }
+
+    if (scenarios.length === 0) {
+        return res.status(400).json({ error: 'No scenarios selected for this run' });
+    }
+
+    const basePhone = resolveLabPhone(req.body?.phone || LAB_CHAT_DEFAULT_PHONE);
+    const generatedAt = new Date().toISOString();
+    const results = [];
+
+    for (const [scenarioIndex, scenario] of scenarios.entries()) {
+        const scenarioPhone = `${basePhone.slice(0, -1)}${(scenarioIndex % 9) + 1}`;
+        clearHandoffState(scenarioPhone);
+        clearHandoffOffer(scenarioPhone);
+
+        const stepResults = [];
+        let scenarioOk = true;
+
+        for (const [stepIndex, step] of scenario.steps.entries()) {
+            const result = await processInboundMessage({
+                from: `whatsapp:${scenarioPhone}`,
+                body: step.user,
+                messageSid: `SMLABRUN${Date.now()}${scenarioIndex}${stepIndex}`,
+                persist: false,
+                source: 'lab'
+            });
+
+            const check = evaluateLabExpectation(result.reply, step.expect || {});
+            if (!check.ok) {
+                scenarioOk = false;
+            }
+            stepResults.push({
+                step: stepIndex + 1,
+                user: step.user,
+                reply: result.reply,
+                ok: check.ok,
+                failures: check.failures
+            });
+        }
+
+        results.push({
+            id: scenario.id,
+            name: scenario.name,
+            suite: scenario.suite,
+            ok: scenarioOk,
+            steps: stepResults
+        });
+    }
+
+    const summary = {
+        total: results.length,
+        passed: results.filter((item) => item.ok).length,
+        failed: results.filter((item) => !item.ok).length
+    };
+
+    const markdown = buildLabReportMarkdown({
+        suite: selectedIds.length > 0 ? 'custom' : requestedSuite,
+        results,
+        generatedAt,
+        summary
+    });
+
+    let reportPath = '';
+    if (req.body?.save_report !== false) {
+        try {
+            reportPath = await saveLabMarkdownReport(markdown, 'lab-chat-report');
+        } catch (error) {
+            console.warn('Failed to save lab report markdown:', error?.message || error);
+        }
+    }
+
+    res.status(200).json({
+        ok: summary.failed === 0,
+        suite: selectedIds.length > 0 ? 'custom' : requestedSuite,
+        generated_at: generatedAt,
+        summary,
+        report_path: reportPath,
+        results
+    });
+});
+
+app.post('/admin/api/lab/chat/save-session', adminAuth, express.json({ limit: '2mb' }), async (req, res) => {
+    const transcript = Array.isArray(req.body?.transcript) ? req.body.transcript : [];
+    const phone = resolveLabPhone(req.body?.phone || LAB_CHAT_DEFAULT_PHONE);
+    if (transcript.length === 0) {
+        return res.status(400).json({ error: 'Transcript is empty' });
+    }
+
+    const lines = [];
+    lines.push(`# Lab Chat Session - ${new Date().toISOString()}`);
+    lines.push('');
+    lines.push(`- Phone: ${phone}`);
+    lines.push(`- Entries: ${transcript.length}`);
+    lines.push('');
+
+    transcript.forEach((entry, idx) => {
+        const role = String(entry?.role || '').toLowerCase() === 'assistant' ? 'BOT' : 'USER';
+        const text = String(entry?.text || '').trim();
+        lines.push(`## ${idx + 1}. ${role}`);
+        lines.push(text || '(empty)');
+        lines.push('');
+    });
+
+    try {
+        const reportPath = await saveLabMarkdownReport(lines.join('\n'), 'lab-chat-session');
+        res.status(200).json({ ok: true, report_path: reportPath });
+    } catch (error) {
+        console.error('Lab save-session error:', error);
+        res.status(500).json({ error: 'Failed to save session markdown' });
+    }
+});
+
+app.post('/admin/api/lab/chat/reset', adminAuth, express.json(), (req, res) => {
+    const oldPhone = normalizePhone(String(req.body?.phone || '').trim());
+    if (oldPhone) {
+        clearHandoffState(oldPhone);
+        clearHandoffOffer(oldPhone);
+    }
+    res.status(200).json({ ok: true, phone: resolveLabPhone(req.body?.phone || '') });
+});
+
+app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
+    const from = req.body.From;
+    const body = req.body.Body;
+    const messageSid = req.body.MessageSid || null;
+
+    const result = await processInboundMessage({
+        from,
+        body,
+        messageSid,
+        persist: true,
+        source: 'twilio'
+    });
+
+    const twimlMessage = result.reply
+        ? `<Message>${escapeXml(result.reply)}</Message>`
         : '';
 
     res

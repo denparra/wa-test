@@ -860,6 +860,301 @@ export function renderMessagesPage({ messages, direction, offset, limit }) {
   return renderLayout({ title: 'Mensajes', content, active: 'messages' });
 }
 
+export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatalog = [] }) {
+  const helpText = renderHelpText(
+    `<strong>Lab Chat:</strong> entorno de prueba ida/vuelta que espeja el comportamiento de WhatsApp sin enviar mensajes reales.
+    Usa un telefono de laboratorio aislado y ejecuta casos para detectar loops o respuestas incoherentes antes de produccion.`
+  );
+
+  const smokeScenarios = scenarioCatalog.filter((scenario) => scenario.suite === 'smoke');
+  const regressionScenarios = scenarioCatalog.filter((scenario) => scenario.suite === 'regression');
+  const scenarioOptions = scenarioCatalog
+    .map((scenario) => `<option value="${escapeHtml(scenario.id)}">${escapeHtml(scenario.name)} (${escapeHtml(scenario.suite)})</option>`)
+    .join('');
+
+  const content = `
+    <section class="panel">
+      <div class="panel-header" style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+        <div>
+          <h1>Lab Chat</h1>
+          <div class="muted" style="margin-top:4px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span>Telefono lab:</span>
+            <input id="lab-phone-input" class="mono" type="text" value="${escapeHtml(defaultPhone)}" placeholder="+569..." style="width:170px;" />
+            <span id="lab-phone-label" class="mono" style="opacity:0.8;">${escapeHtml(defaultPhone)}</span>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <select id="lab-scenario" style="min-width:220px;">
+            <option value="">Escenario rapido...</option>
+            ${scenarioOptions}
+          </select>
+          <button type="button" id="run-scenario-btn" class="action-btn">Ejecutar escenario</button>
+          <button type="button" id="run-smoke-btn" class="action-btn">Run smoke</button>
+          <button type="button" id="run-regression-btn" class="action-btn">Run regression</button>
+          <button type="button" id="save-session-btn" class="action-btn">Guardar session .md</button>
+          <button type="button" id="new-session-btn" class="action-btn">Nueva sesion</button>
+        </div>
+      </div>
+      ${helpText}
+
+      <div style="display:grid; grid-template-columns: 1fr 300px; gap:14px; align-items:start;">
+        <div>
+          <div id="lab-chat-window" class="conv-body" style="max-height:58vh; min-height:320px; border-radius: var(--radius-lg); border:1px solid var(--ink-100);"></div>
+          <form id="lab-chat-form" style="display:flex; gap:10px; margin-top:10px;">
+            <input id="lab-chat-input" type="text" placeholder="Escribe un mensaje para probar..." style="flex:1;" autocomplete="off" />
+            <button type="submit">Enviar</button>
+          </form>
+        </div>
+        <aside class="panel" style="margin:0;">
+          <h3 style="margin-top:0;">Meta test</h3>
+          <div id="lab-meta" class="muted" style="font-size:12px; line-height:1.45;">Sin eventos aun.</div>
+          <div id="lab-last-report" class="muted" style="font-size:12px; line-height:1.45; margin-top:8px;"></div>
+          <hr style="border:none; border-top:1px solid var(--ink-100); margin:12px 0;" />
+          <h3 style="margin-top:0;">Suites</h3>
+          <ul style="margin:0; padding-left:18px; font-size:13px; color:var(--ink-500); line-height:1.5;">
+            <li>Smoke (${smokeScenarios.length}): criticos de no-regresion</li>
+            <li>Regression (${regressionScenarios.length}): cobertura ampliada</li>
+            <li>Cada corrida puede guardar reporte Markdown en <code>docs/qa</code></li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+
+    <script>
+    (function () {
+      const scenarioCatalog = ${JSON.stringify(scenarioCatalog)};
+      const scenarioById = new Map(scenarioCatalog.map((scenario) => [scenario.id, scenario]));
+
+      const state = {
+        phone: ${JSON.stringify(defaultPhone)},
+        sending: false,
+        transcript: []
+      };
+
+      const phoneLabel = document.getElementById('lab-phone-label');
+      const phoneInput = document.getElementById('lab-phone-input');
+      const chatWindow = document.getElementById('lab-chat-window');
+      const chatForm = document.getElementById('lab-chat-form');
+      const chatInput = document.getElementById('lab-chat-input');
+      const runScenarioBtn = document.getElementById('run-scenario-btn');
+      const runSmokeBtn = document.getElementById('run-smoke-btn');
+      const runRegressionBtn = document.getElementById('run-regression-btn');
+      const scenarioSelect = document.getElementById('lab-scenario');
+      const newSessionBtn = document.getElementById('new-session-btn');
+      const saveSessionBtn = document.getElementById('save-session-btn');
+      const metaBox = document.getElementById('lab-meta');
+      const lastReportEl = document.getElementById('lab-last-report');
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function setMeta(text) {
+        metaBox.innerHTML = escapeHtml(text);
+      }
+
+      function updatePhoneLabel() {
+        phoneLabel.textContent = state.phone;
+        if (phoneInput && phoneInput.value !== state.phone) {
+          phoneInput.value = state.phone;
+        }
+      }
+
+      function appendBubble(role, text) {
+        const side = role === 'assistant' ? 'outbound' : 'inbound';
+        const who = role === 'assistant' ? 'Bot' : 'Tester';
+        const safeText = String(text || '');
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble ' + side;
+        bubble.innerHTML = ''
+          + '<div>' + escapeHtml(safeText) + '</div>'
+          + '<div class="bubble-meta">' + who + ' · ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) + '</div>';
+        chatWindow.appendChild(bubble);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        state.transcript.push({ role, text: safeText, at: new Date().toISOString() });
+      }
+
+      async function sendMessage(message) {
+        if (state.sending) return;
+        const text = String(message || '').trim();
+        if (!text) return;
+        appendBubble('user', text);
+        state.sending = true;
+        setMeta('Procesando...');
+        try {
+          const selectedPhone = (phoneInput && phoneInput.value ? phoneInput.value : state.phone);
+          const res = await fetch('/admin/api/lab/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: selectedPhone,
+              message: text
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || 'Error de API');
+          }
+          state.phone = data.phone || state.phone;
+          updatePhoneLabel();
+          appendBubble('assistant', data.reply || '(sin respuesta)');
+          const meta = data.meta || {};
+          setMeta('used_ai=' + Boolean(meta.used_ai)
+            + ' · needs_human=' + Boolean(meta.needs_human)
+            + (meta.handoff_reason ? ' · reason=' + meta.handoff_reason : ''));
+        } catch (error) {
+          appendBubble('assistant', 'Error de laboratorio: ' + (error.message || error));
+          setMeta('ERROR: ' + (error.message || error));
+        } finally {
+          state.sending = false;
+        }
+      }
+
+      async function resetSession() {
+        try {
+          const selectedPhone = (phoneInput && phoneInput.value ? phoneInput.value : state.phone);
+          const res = await fetch('/admin/api/lab/chat/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: selectedPhone })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.phone) {
+            state.phone = data.phone;
+          }
+        } catch (_) {
+          // no-op
+        }
+        chatWindow.innerHTML = '';
+        state.transcript = [];
+        updatePhoneLabel();
+        setMeta('Sesion reiniciada.');
+        if (lastReportEl) {
+          lastReportEl.textContent = '';
+        }
+      }
+
+      async function runScenario() {
+        const key = scenarioSelect.value;
+        if (!key) {
+          setMeta('Selecciona un escenario.');
+          return;
+        }
+        setMeta('Ejecutando escenario: ' + key + '...');
+        await runSuite({ scenarioIds: [key], suite: 'custom' });
+      }
+
+      async function runSuite({ suite, scenarioIds = [] }) {
+        if (state.sending) return;
+        state.sending = true;
+        try {
+          const selectedPhone = (phoneInput && phoneInput.value ? phoneInput.value : state.phone);
+          const res = await fetch('/admin/api/lab/chat/run-scenarios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              suite,
+              scenario_ids: scenarioIds,
+              phone: selectedPhone,
+              save_report: true
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || 'No se pudo ejecutar la suite');
+          }
+
+          if (lastReportEl) {
+            lastReportEl.textContent = data.report_path ? ('Reporte: ' + data.report_path) : 'Reporte no guardado';
+          }
+
+          const summary = data.summary || {};
+          setMeta('Suite=' + (data.suite || suite)
+            + ' · total=' + (summary.total || 0)
+            + ' · pass=' + (summary.passed || 0)
+            + ' · fail=' + (summary.failed || 0));
+
+          const results = Array.isArray(data.results) ? data.results : [];
+          chatWindow.innerHTML = '';
+          state.transcript = [];
+          for (const scenario of results) {
+            appendBubble('assistant', '[Escenario] ' + scenario.name + ' -> ' + (scenario.ok ? 'PASS' : 'FAIL'));
+            const steps = Array.isArray(scenario.steps) ? scenario.steps : [];
+            for (const step of steps) {
+              appendBubble('user', step.user || '');
+              appendBubble('assistant', (step.reply || '(sin respuesta)') + (step.ok ? '' : ' [FAIL]'));
+            }
+          }
+        } catch (error) {
+          setMeta('ERROR suite: ' + (error.message || error));
+        } finally {
+          state.sending = false;
+        }
+      }
+
+      async function saveSession() {
+        if (!state.transcript.length) {
+          setMeta('No hay transcript para guardar.');
+          return;
+        }
+        try {
+          const selectedPhone = (phoneInput && phoneInput.value ? phoneInput.value : state.phone);
+          const res = await fetch('/admin/api/lab/chat/save-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: selectedPhone,
+              transcript: state.transcript
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || 'No se pudo guardar la sesion');
+          }
+          if (lastReportEl) {
+            lastReportEl.textContent = 'Session: ' + (data.report_path || 'sin path');
+          }
+          setMeta('Sesion guardada en markdown.');
+        } catch (error) {
+          setMeta('ERROR session: ' + (error.message || error));
+        }
+      }
+
+      chatForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const value = chatInput.value;
+        chatInput.value = '';
+        await sendMessage(value);
+      });
+
+      runScenarioBtn.addEventListener('click', runScenario);
+      runSmokeBtn.addEventListener('click', () => runSuite({ suite: 'smoke' }));
+      runRegressionBtn.addEventListener('click', () => runSuite({ suite: 'regression' }));
+      newSessionBtn.addEventListener('click', resetSession);
+      saveSessionBtn.addEventListener('click', saveSession);
+      if (phoneInput) {
+        phoneInput.addEventListener('change', () => {
+          state.phone = String(phoneInput.value || '').trim() || state.phone;
+          updatePhoneLabel();
+          setMeta('Telefono lab actualizado.');
+        });
+      }
+
+      setMeta('Listo para probar.');
+      updatePhoneLabel();
+      chatInput.focus();
+    })();
+    </script>
+  `;
+
+  return renderLayout({ title: 'Lab Chat', content, active: 'lab-chat' });
+}
+
 export function renderCampaignsPage({ campaigns, offset, limit }) {
   const helpText = renderHelpText(
     `<strong>Gestión de campañas:</strong> Campañas de mensajería outbound. Estados: draft, active, paused, completed, cancelled. 

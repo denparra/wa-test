@@ -3,6 +3,7 @@ const NAV_ITEMS = [
   { key: 'contacts', label: 'Contactos', href: '/admin/contacts', icon: 'users' },
   { key: 'vehicles', label: 'Vehículos', href: '/admin/vehicles', icon: 'car' },
   { key: 'messages', label: 'Mensajes', href: '/admin/messages', icon: 'message-square' },
+  { key: 'lab-chat', label: 'Lab Chat', href: '/admin/lab/chat', icon: 'message-square' },
   { key: 'campaigns', label: 'Campanas', href: '/admin/campaigns', icon: 'send' },
   { key: 'templates', label: 'Templates', href: '/admin/templates', icon: 'file-text' },
   { key: 'opt-outs', label: 'Opt-outs', href: '/admin/opt-outs', icon: 'user-x' },
