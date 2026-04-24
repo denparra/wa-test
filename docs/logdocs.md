@@ -42,3 +42,17 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
   - confirmations like informal short replies are interpreted with better context.
 - Validation: run n8n tune script, update remote workflow, verify no syntax errors.
 - Rollback: restore `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-intent-context.json` and remove handoff-offer map logic in `server.js`.
+
+### 2026-04-24 15:10 - Persistent post-handoff lock to prevent CTA re-open
+
+- Scope: harden post-derivation behavior so phatic replies never reopen executive CTA.
+- Why: real conversation showed `Ok gracias` after confirmed handoff could still trigger a new CTA.
+- Files: `scripts/n8n/tune-meta-agent-handoff.js`, `n8n/workflows/META-CONSIGNACION-V1.json`, `server.js`.
+- n8n workflow: id `PI8uZo5omcN3576y`, name `META-CONSIGNACION-V1`.
+- Runtime impact:
+  - new persistent flags in memory: `handoff_status`, `suppress_executive_offer_until`.
+  - output guard in fusion: if already derived, force concise closure and block CTA reopen.
+  - `Detectar Handoff` now treats `handoff_status`/suppression window as derived context.
+  - server forwards `handoff_active` context and broadens short phatic ack recognition.
+- Validation: `node --check` for modified files, regenerate workflow from tune script, update remote n8n workflow.
+- Rollback: restore `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-server-context-fix.json` and revert commit.

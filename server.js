@@ -184,7 +184,7 @@ async function getN8nChatReply(payload) {
 
 function isPhaticAckMessage(text = '') {
     const normalized = String(text || '').toLowerCase().replace(/[!?.,;:]/g, '').trim();
-    return /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(normalized);
+    return /^(gracias|ok|oki|okey|oka|dale|perfecto|listo|super|genial|buenisimo|de acuerdo|ok gracias|ok perfecto|si gracias|si perfecto|oka espero)$/.test(normalized);
 }
 
 function isHandoffOfferText(text = '') {
@@ -1948,6 +1948,7 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                     campaign_id: null,
                     contact_id: existingContact?.id || null,
                     contact_name: existingContact?.name || null,
+                    handoff_active: Boolean(handoffState),
                     handoff_offer_pending: Boolean(handoffOfferState),
                     known_vehicle_count: knownVehicles.length,
                     known_vehicles: knownVehicles

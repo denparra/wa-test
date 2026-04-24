@@ -230,7 +230,15 @@ const parseBool = (v) => {
   return s === 'true' || s === '1' || s === 'si' || s === 'yes';
 };
 
-const derivedAlready = parseBool(memoryFacts.derivado_agente_humano || memoryFacts.is_human_handoff);
+const handoffStatus = String(memoryFacts.handoff_status || '').toLowerCase().trim();
+const suppressUntilRaw = String(memoryFacts.suppress_executive_offer_until || '').trim();
+const suppressUntilMs = suppressUntilRaw ? new Date(suppressUntilRaw).getTime() : 0;
+const suppressActive = suppressUntilMs > 0 && Date.now() < suppressUntilMs;
+const derivedAlready = parseBool(memoryFacts.derivado_agente_humano || memoryFacts.is_human_handoff)
+  || handoffStatus === 'confirmed'
+  || handoffStatus === 'closed'
+  || suppressActive
+  || parseBool(rawContext.handoff_active);
 const awaitingHandoffConfirmation = parseBool(memoryFacts.awaiting_handoff_confirmation);
 const pendingOfferFromServer = parseBool(rawContext.handoff_offer_pending);
 const lastAssistantOutput = String(memoryFacts.last_assistant_output || '').trim();
@@ -348,6 +356,8 @@ const nowIso = new Date().toISOString();
 const nowMs = Date.now();
 const COOLDOWN_MINUTES = 360;
 const cooldownMs = COOLDOWN_MINUTES * 60 * 1000;
+const SUPPRESS_EXECUTIVE_HOURS = 24;
+const suppressExecutiveMs = SUPPRESS_EXECUTIVE_HOURS * 60 * 60 * 1000;
 
 const nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;
 const normalizeText = (v) => typeof v === 'string' ? v.trim() : v;
@@ -377,6 +387,7 @@ const contextFacts = outbound.memory_key_facts && typeof outbound.memory_key_fac
   ? outbound.memory_key_facts
   : {};
 const incomingFacts = outbound.extracted_facts || {};
+const resetNotifyRequested = Boolean(outbound.reset_notify_requested);
 const knownVehiclesRaw = Array.isArray(outbound.raw_input?.context?.known_vehicles)
   ? outbound.raw_input.context.known_vehicles
   : [];
@@ -504,6 +515,26 @@ const offersExecutive = /\\b(ejecutivo|asesor)\\b/.test(outputNorm)
   && /\\b(contacta|contacto|contactamos|contactarte|llame|llamemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);
 const confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm);
 
+const previousHandoffStatus = String(mergedFacts.handoff_status || 'none').toLowerCase().trim() || 'none';
+let nextHandoffStatus = previousHandoffStatus;
+if (isHumanThisTurn || confirmsHandoff || isDerived) nextHandoffStatus = 'confirmed';
+else if (offersExecutive) nextHandoffStatus = 'offered';
+if (resetNotifyRequested) nextHandoffStatus = 'none';
+mergedFacts.handoff_status = nextHandoffStatus;
+
+const prevSuppressUntil = String(mergedFacts.suppress_executive_offer_until || '').trim();
+let suppressUntil = prevSuppressUntil;
+if (isHumanThisTurn || confirmsHandoff || isDerived) {
+  suppressUntil = new Date(nowMs + suppressExecutiveMs).toISOString();
+}
+if (resetNotifyRequested) {
+  suppressUntil = '';
+}
+mergedFacts.suppress_executive_offer_until = suppressUntil;
+
+const suppressUntilTs = suppressUntil ? new Date(suppressUntil).getTime() : 0;
+const suppressExecutiveActive = suppressUntilTs > 0 && nowMs < suppressUntilTs;
+
 const awaitingPrev = parseBool(mergedFacts.awaiting_handoff_confirmation);
 let awaitingNext = awaitingPrev;
 if (isDerived || confirmsHandoff || isHumanThisTurn) awaitingNext = false;
@@ -513,15 +544,22 @@ mergedFacts.awaiting_handoff_confirmation = awaitingNext;
 mergedFacts.last_handoff_offer_at = offersExecutive ? nowIso : (mergedFacts.last_handoff_offer_at || '');
 
 if (outputText) {
+    let effectiveOutput = outputText;
+    const isShortAckSignal = userSignal === 'phatic' || userSignal === 'regular';
+    if (isDerived && !isHumanThisTurn && (offersExecutive || suppressExecutiveActive || isShortAckSignal)) {
+      effectiveOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+    }
+
     const prevOutput = String(mergedFacts.last_assistant_output || '').trim();
     const prevNorm = normalizeForRepeat(prevOutput);
-    const currNorm = normalizeForRepeat(outputText);
+    const currNorm = normalizeForRepeat(effectiveOutput);
     const isRepeat = prevNorm && currNorm && (prevNorm === currNorm || prevNorm.includes(currNorm) || currNorm.includes(prevNorm));
     mergedFacts.assistant_repeat_count = isRepeat ? Number(mergedFacts.assistant_repeat_count || 0) + 1 : 0;
     if (mergedFacts.assistant_repeat_count >= 2 && !isDerived) {
       mergedFacts.response_style = 'ultra_concise';
     }
-    mergedFacts.last_assistant_output = outputText.slice(0, 500);
+    mergedFacts.last_assistant_output = effectiveOutput.slice(0, 500);
+    outbound.output = effectiveOutput;
 }
 
 if (updated.length > 0) {
@@ -529,7 +567,6 @@ if (updated.length > 0) {
   mergedFacts.last_captured_at = nowIso;
 }
 
-const resetNotifyRequested = Boolean(outbound.reset_notify_requested);
 if (resetNotifyRequested) {
   mergedFacts.team_notified = false;
   mergedFacts.team_notified_at = '';
@@ -606,6 +643,8 @@ mergedFacts.notification_debug = {
   tone_mode: mergedFacts.tone_mode,
   user_signal: userSignal,
   response_mode: responseMode,
+  handoff_status: nextHandoffStatus,
+  suppress_executive_active: suppressExecutiveActive,
   security_level: securityLevel,
   should_notify: shouldNotify,
   reason: notifyReason,
