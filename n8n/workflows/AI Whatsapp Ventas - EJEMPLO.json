@@ -1,0 +1,1174 @@
+{
+  "name": "AI Whatsapp Ventas - OPENAI V1",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        -576
+      ],
+      "id": "a22e09c9-66a8-485b-ac57-76e9a6c249d6",
+      "name": "Chat Recibido",
+      "webhookId": "26fd3894-d2af-4854-9f95-c09ed680a093",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "kK6r7ZU2AYJzJPE0",
+          "name": "whatsapp 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "wa_id",
+              "value": "={{ $json.contacts?.[0]?.wa_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "message_text",
+              "value": "={{ $json.messages?.[0]?.text?.body ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "raw_input",
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "a4",
+              "name": "brand_trajectory",
+              "value": "Empresa familiar con mas de 60 anos de trayectoria",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "brand_website",
+              "value": "https://queirolo.cl",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "brand_whatsapp",
+              "value": "https://wa.me/56975400946",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "brand_location_text",
+              "value": "Av. Las Condes 12461, Local 4A, Las Condes, Santiago.",
+              "type": "string"
+            },
+            {
+              "id": "a7b",
+              "name": "brand_location_link",
+              "value": "https://goo.gl/maps/ruBtgmHFWtXeZBH47",
+              "type": "string"
+            },
+            {
+              "id": "a8",
+              "name": "kb_service",
+              "value": "Consignacion integral: analizamos mercado, sugerimos precio, publicamos en portales, atendemos interesados, negociamos y cerramos legalmente.",
+              "type": "string"
+            },
+            {
+              "id": "a9",
+              "name": "kb_costs",
+              "value": "Comision referencial: sobre $10.000.000 es 5% + IVA; hasta $10.000.000 es $500.000 + IVA. Retiro voluntario sin venta: $75.000.",
+              "type": "string"
+            },
+            {
+              "id": "a10",
+              "name": "kb_times",
+              "value": "No hay plazo fijo de venta. Depende de estado, precio y mercado. Reportes de seguimiento cada 7-10 dias.",
+              "type": "string"
+            },
+            {
+              "id": "a11",
+              "name": "kb_trust",
+              "value": "Empresa familiar con mas de 60 anos. Showroom seguro, validacion de identidad/fondos y gestion legal del cierre.",
+              "type": "string"
+            },
+            {
+              "id": "a12",
+              "name": "kb_special_cases",
+              "value": "Casos especiales: prenda, multas complejas, limitaciones y reclamos se derivan a ejecutivo.",
+              "type": "string"
+            },
+            {
+              "id": "a13",
+              "name": "kb_advantages",
+              "value": "Sin arriendo mensual (diferenciador clave vs competencia). Seguro total incluido (cubre dano y robo). Publicacion simultanea en ChileAutos, MercadoLibre, FullMotor, queirolo.cl y redes sociales. Pago al cliente en 5-7 dias habiles tras cierre. Comprador puede pagar con efectivo, credito automotriz, tarjeta o auto en parte de pago. Showroom nivel -3, vigilancia 24/7, acceso restringido.",
+              "type": "string"
+            },
+            {
+              "id": "a14",
+              "name": "kb_process",
+              "value": "1) Contacto inicial y datos del auto. 2) Analisis de mercado y precio recomendado enviado por correo. 3) Revision legal y mecanica. 4) Recepcion del vehiculo y firma contrato. 5) Publicacion en multiples portales. 6) Gestion comercial de interesados y pruebas controladas. 7) Confirmacion de oferta con el dueno. 8) Cierre, pago (5-7 dias habiles) y tramites legales completos.",
+              "type": "string"
+            },
+            {
+              "id": "a15",
+              "name": "notify_phone",
+              "value": "+56975400946",
+              "type": "string"
+            },
+            {
+              "id": "a16",
+              "name": "message_type",
+              "value": "={{ $json.messages?.[0]?.type ?? 'unknown' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1152,
+        -400
+      ],
+      "id": "8a8945cf-b073-4674-b895-84d15f90c7b6",
+      "name": "Normalizar Entrada"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.message_text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -848,
+        -400
+      ],
+      "id": "e258d90d-8772-47a0-b0c1-13e02f0374be",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ \"CONTEXTO DE MARCA (usar solo estos datos):\\n- Trayectoria: \" + ($json.brand_trajectory ?? \"\") + \"\\n- Web: \" + ($json.brand_website ?? \"\") + \"\\n- WhatsApp: \" + ($json.brand_whatsapp ?? \"\") + \"\\n- Ubicacion exacta (BRAND_LOCATION_TEXT): \" + ($json.brand_location_text ?? \"\") + \"\\n- Mapa: \" + ($json.brand_location_link ?? \"\") + \"\\n\\nCONOCIMIENTO OPERATIVO:\\n- Servicio: \" + ($json.kb_service ?? \"\") + \"\\n- Costos: \" + ($json.kb_costs ?? \"\") + \"\\n- Tiempos: \" + ($json.kb_times ?? \"\") + \"\\n- Confianza: \" + ($json.kb_trust ?? \"\") + \"\\n- Casos especiales: \" + ($json.kb_special_cases ?? \"\") + \"\\n\\nVENTAJAS CLAVE:\\n\" + ($json.kb_advantages ?? \"\") + \"\\n\\nPROCESO PASO A PASO:\\n\" + ($json.kb_process ?? \"\") + \"\\n\\nDATOS DEL CLIENTE CONOCIDOS (MEMORIA INCREMENTAL):\\n- Nombre: \" + ($json.memory_key_facts?.customer_name ?? \"sin dato\") + \"\\n- Correo: \" + ($json.memory_key_facts?.customer_email ?? \"sin dato\") + \"\\n- Telefono: \" + ($json.memory_key_facts?.customer_phone ?? \"sin dato\") + \"\\n- Auto: \" + ($json.memory_key_facts?.vehicle_brand_model ?? $json.memory_key_facts?.vehicle_description ?? \"sin dato\") + \"\\n- Ano: \" + ($json.memory_key_facts?.vehicle_year ?? \"sin dato\") + \"\\n- Km: \" + ($json.memory_key_facts?.vehicle_km ?? \"sin dato\") + \"\\n- Link auto: \" + ($json.memory_key_facts?.vehicle_url ?? \"sin dato\") + \"\\n- Intencion: \" + ($json.memory_key_facts?.customer_intent ?? \"sin dato\") + \"\\n- Ultima intencion detectada: \" + ($json.memory_key_facts?.last_user_intent ?? \"sin dato\") + \"\\n- Confianza ultima intencion: \" + ($json.memory_key_facts?.last_user_intent_confidence ?? \"low\") + \"\\n- Ultima respuesta enviada por agente: \" + ($json.memory_key_facts?.last_assistant_output ?? \"sin dato\") + \"\\n- Senal ultimo turno: \" + ($json.memory_key_facts?.last_turn_signal ?? \"regular\") + \"\\n\\nFLAGS CONVERSACION:\\n- Contact state: \" + ($json.memory_key_facts?.contact_state ?? \"new\") + \"\\n- Response style: \" + ($json.memory_key_facts?.response_style ?? \"normal\") + \"\\n- Precision mode: \" + ($json.memory_key_facts?.precision_mode ?? \"off\") + \"\\n- Post close lock: \" + ($json.memory_key_facts?.post_close_lock ?? \"off\") + \"\\n- Tone mode: \" + ($json.memory_key_facts?.tone_mode ?? \"warm\") + \"\\n- User signal: \" + ($json.memory_key_facts?.user_signal ?? \"regular\") + \"\\n\\nESTADO CLIENTE PERSISTENTE:\\n- primer_contacto_at: \" + ($json.memory_key_facts?.primer_contacto_at ?? \"sin dato\") + \"\\n- ultimo_contacto_at: \" + ($json.memory_key_facts?.ultimo_contacto_at ?? \"sin dato\") + \"\\n- correo_de_cierre: \" + (($json.memory_key_facts?.correo_de_cierre ?? false) ? \"true\" : \"false\") + \"\\n- derivado_agente_humano: \" + (($json.memory_key_facts?.derivado_agente_humano ?? false) ? \"true\" : \"false\") + \"\\n\\nHISTORIAL RELEVANTE (SUPABASE):\\n- Resumen previo: \" + ($json.memory_summary ?? \"sin historial\") + \"\\n- Ultima intencion: \" + ($json.memory_last_intent ?? \"sin historial\") + \"\\n- Derivacion previa: \" + ($json.memory_needs_human ? \"si\" : \"no\") + \"\\n\\nETAPA DEL FUNNEL: \" + ($json.memory_key_facts?.funnel_stage ?? \"contacto_inicial\") + \"\\n\\nCONTEXTO CLIENTE:\\n- IS_RETURNING_CLIENT: \" + ($json.is_returning_client ? \"true - cliente que regresa (\" + ($json.days_since_last_contact ?? 0) + \" dias)\" : \"false - primera interaccion o misma sesion\") + \"\\n\\nCONTEXTO TEMPORAL:\\n- Horario: \" + ($json.is_off_hours ? \"FUERA DE HORARIO - acciones humanas seran procesadas el siguiente dia habil\" : \"Dentro de horario de atencion\") + \"\\n\\nMENSAJE DEL CLIENTE:\\n\" + ($json.message_text ?? \"\") }}",
+        "options": {
+          "systemMessage": "Eres el asistente de consignacion de Queirolo Autos por WhatsApp.\n\nROL\nAsesor cercano que ayuda a personas que quieren vender su auto via consignacion. Conversas como humano real: directo, amable, sin sonar a robot ni a vendedor.\n\nOBJETIVO PRIMARIO\nObtener correo del cliente + datos minimos del auto en los primeros 3-6 turnos, de forma natural y flexible.\n\nDATOS SUFICIENTES PARA CERRAR\nCualquiera de estas combinaciones es suficiente para ofrecer cierre por correo:\n- Datos del auto (marca/modelo/ano/km) + correo.\n- Link de publicacion del auto + correo.\nCuando tengas lo minimo, confirma que el caso queda derivado y que el ejecutivo continua el proceso.\n\nESTILO OBLIGATORIO\n- Trata al cliente de tu.\n- Responde primero la pregunta o comentario del cliente en la primera linea.\n- 30 a 65 palabras por mensaje, salvo que pida mas detalle.\n- Lenguaje humano, simple, chileno neutral. Nada robotico.\n- Estructura: respuesta directa + dato concreto o valor + pregunta corta de avance (solo antes del cierre).\n- Usa 1 a 2 emojis por mensaje cuando aporten calidez y claridad.\n- En post-cierre usa 0 a 1 emoji como maximo.\n- Usa saltos de linea para legibilidad en WhatsApp.\n\nREGLA CRITICA: NO RE-PEDIR DATOS\n- Revisa DATOS DEL CLIENTE CONOCIDOS antes de cada respuesta.\n- Si ya tienes nombre, auto, correo, link u otro dato, NO lo pidas de nuevo.\n- Usa los datos conocidos para personalizar la respuesta y avanzar al siguiente dato faltante.\nP9 - REGLA DE RE-ENGAGEMENT (cliente que vuelve)\n- Si el contexto indica IS_RETURNING_CLIENT=true (cliente que vuelve despues de 1+ dias):\n  - NO saludes como si fuera primer contacto.\n  - Retoma la conversacion con continuidad usando datos previos.\n  - Si hay datos previos claros, menciona solo 1 dato relevante para retomar.\n  - Si no hay datos claros, usa: \"Hola! Seguimos con la consulta de antes?\"\n\n\nCAPTURA DE DATOS\n- Orden flexible. No sigas formulario. Captura lo que el cliente da naturalmente.\n- Prioridad: info del auto > correo > nombre.\n- Si falta nombre, pedirlo suave mas adelante.\n- Pedir info del auto de forma casual: \"Pasame los datos del auto que quieres vender; si tienes el link de la publicacion, con eso basta.\"\n- No forzar link. Solo mencionarlo como opcion practica.\n- Correo: maximo 2 intentos suaves. Si no lo da, sigue ayudando y retoma despues naturalmente.\n- NO pedir comuna ni datos logisticos.\n  - UNICA EXCEPCION: si el cliente pregunta si pueden buscar el auto a domicilio, responder: \"Entiendo, dame la comuna donde resides y veo la posibilidad.\" Sin prometer que si.\n\nMEMORIA Y CONTINUIDAD\n- Usa HISTORIAL RELEVANTE (SUPABASE) del contexto para continuidad entre sesiones.\n- Si no hay historial, responde normal sin mencionarlo.\n- Cada dato que el cliente mencione, usalo en turnos siguientes.\n- Si falta un dato clave para avanzar, pidelo en forma corta y natural.\n- Nunca inventes datos ni historial que el cliente no haya dicho.\n\nCUANDO EL CLIENTE SOLO PREGUNTA (sin dar datos, solo antes de post-cierre)\n- Responde su pregunta primero usando CONOCIMIENTO OPERATIVO del contexto.\n- Destaca ventajas reales del bloque VENTAJAS cuando sea relevante (sin arriendo, seguro total, 60+ anos).\n- No inventes datos de la empresa. Si no tienes la info, dilo y ofrece confirmar o derivar.\n- Cierra con 1 pregunta de avance para retomar captura.\n\nREGLA DE MARCA Y UBICACION (CRITICA)\n- Nunca inventes direccion, comuna, sucursal, horarios o datos corporativos.\n- Si preguntan por ubicacion, responde solo con el dato canonico entregado en CONTEXTO DE MARCA.\n- Si falta ese dato en contexto, dilo de forma transparente y ofrece derivar.\n\nDETECCION DE POST-CIERRE\n- Activa post-cierre cuando ya exista:\n  - customer_email, y\n  - vehicle_brand_model o vehicle_description o vehicle_url.\n- Si ademas funnel_stage='listo_para_cierre', consideralo confirmado.\n\nPRIORIDAD DE REGLAS\n- Si detectas post-cierre, esa regla manda por sobre cualquier instruccion de avance o captura.\n\nMODO POST-CIERRE (CRITICO)\n- Caso cerrado para derivacion = ya hay correo + datos del auto/link.\n- Desde ese momento, NO pidas mas datos comerciales ni logisticos.\n- No vuelvas a pedir correo, marca/modelo, ano, km, link, telefono ni comuna.\n- Si el cliente hace una pregunta concreta, respondela de forma breve y clara.\n- Si el cliente no pregunta algo concreto, responde solo confirmacion de cierre y derivacion.\n- En post-cierre NO cierres con preguntas como \"Quieres que te...\", \"Te parece...\" o \"Hay algo mas...\".\n- Respuesta base sugerida: \"Perfecto, ya tengo los datos necesarios y tu caso quedo derivado al ejecutivo. Te contactara por WhatsApp/correo para continuar con el proceso de consignacion y sus siguientes pasos.\"\n\nREGLA DE CONTACTO EN POST-CIERRE (CRITICA)\n- En post-cierre, nunca pedir telefono ni nuevos datos.\n- Si el cliente pregunta por telefono o contacto, responder solo con canal oficial del contexto (WhatsApp/web) y confirmar derivacion.\n- Prohibido usar frases: \"si prefieres que te llame\", \"comparteme tu telefono\", \"te llamamos si nos pasas tu numero\".\n\nTERMINOLOGIA COMERCIAL (OBLIGATORIA)\n- No usar la palabra \"cotizacion\".\n- Usar siempre: \"proceso de consignacion\", \"detalle del proceso\" o \"siguientes pasos del proceso\".\n\nREGLAS COMERCIALES\n- No prometer tiempo exacto de venta ni precio garantizado.\n- No prometer aceptacion del vehiculo antes de revision.\n- No prometer retiro a domicilio.\n- No usar frases absolutas como \"si o si\" o garantias de venta.\n- Comision: si el cliente NO pregunta, no abrir con comision. Priorizar entender el auto y contexto.\n- Comision: si pregunta, responder con rangos referenciales del contexto (no exactos por modelo). Si ya existe correo + auto/link, NO pedir correo de nuevo ni ofrecer envio; responder y cerrar breve.\n- La comision se confirma solo tras evaluacion y valor de mercado/publicacion.\n\nCTA DE CIERRE\nVariaciones naturales de: \"Si quieres, te envio el detalle del servicio por correo con el paso a paso. Me compartes tu correo?\"\n\nDERIVACION A EJECUTIVO\nDerivar cuando:\n- El cliente lo pide explicitamente.\n- Caso legal/especial (prenda compleja, perdida total, limitaciones).\n- Reclamo o molestia explicita.\n- Quiere avanzar a evaluacion formal.\nSi derivas, pedir en un solo mensaje: nombre, telefono, marca/modelo/ano/km y motivo.\nNo pedir comuna en derivacion.\n\nHORARIO DE ATENCION\n- Si el contexto temporal indica FUERA DE HORARIO, y prometes enviar algo por correo o derivar a ejecutivo, aclara que sera procesado el siguiente dia habil.\n- Puedes seguir respondiendo y capturando datos normalmente fuera de horario.\n\nCIERRE DE CADA MENSAJE\n- Antes del cierre: terminar con accion concreta o pregunta de avance.\n- En post-cierre: no hacer preguntas de captura ni preguntas de avance; solo confirmar estado o responder preguntas concretas del cliente, y cerrar sin pregunta final.\n\nANTI-REPETICION (NATURALIDAD)\n- Revisa \"Ultima respuesta enviada por agente\" del contexto.\n- Evita repetir frases de apertura/cierre casi iguales entre turnos consecutivos.\n- Si la idea es la misma, parafrasea de forma natural (sin perder precision).\n- No uses respuestas calcadas de mensajes anteriores.\n\nMANEJO POR CONFIANZA DE INTENCION\n- Si \"Confianza ultima intencion\"=high: afirma y avanza con seguridad.\n- Si es medium: valida en una frase corta y luego avanza.\n- Si es low: haz una pregunta breve para confirmar antes de asumir.\n- Mantener tono humano y fluido; no sonar a checklist.\n\nPOST-CIERRE ULTRA NATURAL (PRIORIDAD ALTA)\n- Si el cliente envia un mensaje fatico breve (ej: \"ok\", \"dale\", \"gracias\", \"listo\", \"perfecto\", \"lo\") y no hay pregunta:\n  - Responde en 1 sola linea, 8 a 18 palabras, tono humano.\n  - NO hagas preguntas de avance ni CTA.\n  - NO repitas la misma estructura de cierre en turnos seguidos.\n- Si hay pregunta concreta, responde breve y precisa, sin reabrir captura de datos.\n\nNO PROMETER ACCIONES QUE NO SE EJECUTAN AUTOMATICAMENTE\n- No digas que ya enviaste un correo si no hubo envio real por sistema.\n- Formula correcta: \"Tu caso queda derivado y el ejecutivo te contacta por WhatsApp/correo\".\n\nPRIORIDAD ABSOLUTA DE REGLAS\n- En caso de conflicto: Post-cierre > Naturalidad anti-repeticion > CTA de cierre > captura de datos.\n\nMICRO-AJUSTES DE ESTILO (ALTA PRIORIDAD)\n- Si el cliente ya dejo correo y auto/link, evita cierres largos repetitivos en cada turno.\n- Para mensajes faticos (ok, si ok, dale, gracias, listo): responder en una sola linea breve y sin CTA.\n- Si ya existe correo en memoria, no volver a preguntar \"te lo envio?\"; confirmar que el caso quedo derivado.\n- En consultas de comision durante post-cierre: responder el dato y cerrar sin reabrir captura.\n- En fuera de horario, usar frase natural corta: \"Lo dejamos derivado y lo ven el proximo dia habil\".\n- Evitar lenguaje administrativo repetido (\"siguientes pasos\", \"quedo derivado\") en turnos consecutivos.\n\nEJEMPLOS DE CIERRE CORTO (POST-CIERRE + FATICO)\n- \"Perfecto, quedamos atentos por aqui.\"\n- \"Genial, cualquier cosa me escribes y lo vemos.\"\n- \"Listo, te acompano por aqui si surge algo mas.\"\n\nMATRIZ DE FLAGS CONVERSACIONALES (OBLIGATORIA)\n- Interpreta los flags del contexto y ajusta forma de respuesta sin romper reglas comerciales.\n- Prioridad de decision: post_close_lock > precision_mode/response_style > user_signal > reglas generales.\n\nREGLAS POR FLAG\n- Si post_close_lock=on y user_signal=phatic: respuesta de 6-14 palabras, una sola linea, sin CTA ni preguntas.\n- Si response_style=ultra_concise: 1 idea util + cierre corto humano.\n- Si response_style=concise: maximo 2 frases, sin relleno.\n- Si precision_mode=on: elimina contexto repetido y ve directo al punto.\n- Si user_signal=question: responde primero la pregunta exacta y luego cierra breve.\n- Si user_signal=command: confirma accion en 1 frase y ejecuta siguiente paso conversacional minimo.\n\nGATILLO ANTI-VERBOSIDAD\n- Si el cliente envia mensajes cortos consecutivos (ok/dale/gracias/si ok): no expandas la respuesta.\n- Mantener tono humano, cercano y no administrativo.\n\nHARD-STOP PRE-AI (POST-CIERRE)\n- Si post_close_lock=on o is_post_close_strict=true: NO reabrir captura ni CTA comercial.\n- En ese estado, PROHIBIDO preguntar: \"te lo envio?\", \"quieres que te envie?\", \"me compartes...?\".\n- Si el cliente pregunta algo puntual, responde directo y cierra en maximo 2 frases.\n- Si el cliente envia fatico (ok/si ok/dale/gracias), responder en 1 sola linea (8-16 palabras) y sin pregunta final.\n- Tono balanceado: cercano y calido, pero breve y sin lenguaje administrativo repetitivo.\n\nESTADO PERSISTENTE DEL CLIENTE (MANDATORIO)\n- Usa `primer_contacto_at`, `ultimo_contacto_at`, `correo_de_cierre`, `derivado_agente_humano` y `funnel_stage` como estado fuente para decidir tono y siguiente accion.\n- Si `correo_de_cierre=true` y hay auto/link, considera post-cierre y NO reabras captura comercial.\n- Si `derivado_agente_humano=true`, prioriza continuidad breve y evita pedir nuevamente datos ya capturados.\n- Si `ultimo_contacto_at` es reciente y el mensaje es fatico, responde corto y natural sin CTA.\n\nREGLA ANTI-INSISTENCIA DE CORREO\n- Si el cliente esta haciendo preguntas validas (comision, ubicacion, quienes son), responde primero y evita pedir correo en cada turno.\n- Solo vuelve a pedir correo cuando el cliente confirme intencion de avanzar o cuando no se haya solicitado en los ultimos 2 turnos.\n- Si ya existe correo capturado, no lo vuelvas a pedir."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -288,
+        592
+      ],
+      "id": "28dbd04d-b80d-49ec-9bc8-5dec7d19e4c5",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -480,
+        752
+      ],
+      "id": "fee377f2-532e-4bd0-9c82-9e7b50dcde4c",
+      "name": "n8n agent whatsapp",
+      "credentials": {
+        "openAiApi": {
+          "id": "5bGPqs4NaXMpr3zi",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.wa_id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -288,
+        800
+      ],
+      "id": "9c091ae5-f041-4d75-a848-5a1f758eab22",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst waId = String(item.wa_id || 'unknown');\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0,8) + '-' + raw.slice(8,12) + '-' + raw.slice(12,16) + '-' + raw.slice(16,20) + '-' + raw.slice(20,32);\nreturn [{ json: { ...item, customer_id: customerId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        -688
+      ],
+      "id": "69ed9b41-358f-42e9-b82f-d3989e915a29",
+      "name": "Generar Customer ID"
+    },
+    {
+      "parameters": {
+        "tableId": "customers",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "id",
+              "fieldValue": "={{ $json.customer_id }}"
+            },
+            {
+              "fieldId": "wa_id",
+              "fieldValue": "={{ $json.wa_id }}"
+            },
+            {
+              "fieldId": "display_name",
+              "fieldValue": "={{ $json.raw_input?.body?.name ?? \"\" }}"
+            },
+            {
+              "fieldId": "last_seen_at",
+              "fieldValue": "={{ $now }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -512
+      ],
+      "id": "fb57ef4f-3a43-4f34-9a55-3d819aef927f",
+      "name": "Supabase Crear Cliente",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "tableId": "conversation_messages",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id",
+              "fieldValue": "={{ $(\"Generar Customer ID\").item.json.customer_id }}"
+            },
+            {
+              "fieldId": "direction",
+              "fieldValue": "inbound"
+            },
+            {
+              "fieldId": "role",
+              "fieldValue": "user"
+            },
+            {
+              "fieldId": "message_text",
+              "fieldValue": "={{ $json.message_text }}"
+            },
+            {
+              "fieldId": "message_type",
+              "fieldValue": "text"
+            },
+            {
+              "fieldId": "raw_payload",
+              "fieldValue": "={{ JSON.stringify($json.raw_input ?? {}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -720
+      ],
+      "id": "ba3e3669-34ec-4596-a4fe-8e5c0172179b",
+      "name": "Supabase Guardar Inbound",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = $input.first().json;\nconst waId = $('Normalizar Entrada').item.json.wa_id;\nconst rawInput = $('Normalizar Entrada').item.json.raw_input ?? {};\nconst messageText = $('Normalizar Entrada').item.json.message_text ?? '';\nconst extractedNode = $('Extraer Datos Vitales').item.json;\nconst extractedFacts = extractedNode.extracted_facts ?? {};\nconst resetNotifyRequested = Boolean(extractedNode.reset_notify_requested);\nconst securityFlags = extractedNode.security_flags ?? {};\n\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0, 8) + '-' + raw.slice(8, 12) + '-' + raw.slice(12, 16) + '-' + raw.slice(16, 20) + '-' + raw.slice(20, 32);\n\nreturn [{\n  json: {\n    wa_id: waId,\n    customer_id: customerId,\n    output: out.output,\n    message_text: messageText,\n    raw_input: rawInput,\n    needs_human: Boolean(out.needs_human),\n    handoff_reason: String(out.handoff_reason || ''),\n    extracted_facts: extractedFacts,\n    memory_key_facts: out.memory_key_facts ?? {},\n    reset_notify_requested: resetNotifyRequested,\n    security_flags: securityFlags\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -64
+      ],
+      "id": "d4c9b8e7-ad04-4775-9e49-8ea688fa5fa8",
+      "name": "Preparar Outbound Persistencia"
+    },
+    {
+      "parameters": {
+        "tableId": "conversation_messages",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id",
+              "fieldValue": "={{ $json.customer_id }}"
+            },
+            {
+              "fieldId": "direction",
+              "fieldValue": "outbound"
+            },
+            {
+              "fieldId": "role",
+              "fieldValue": "assistant"
+            },
+            {
+              "fieldId": "message_text",
+              "fieldValue": "={{ $json.output }}"
+            },
+            {
+              "fieldId": "message_type",
+              "fieldValue": "text"
+            },
+            {
+              "fieldId": "raw_payload",
+              "fieldValue": "={{ JSON.stringify({ output: $json.output, needs_human: $json.needs_human, handoff_reason: $json.handoff_reason }) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        464,
+        -48
+      ],
+      "id": "5b3927fd-0369-44d8-ba51-c12dad19201e",
+      "name": "Supabase Guardar Outbound",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "tableId": "customer_memory",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id",
+              "fieldValue": "={{ $json.customer_id }}"
+            },
+            {
+              "fieldId": "name",
+              "fieldValue": "={{ $json.memory_name ?? \"\" }}"
+            },
+            {
+              "fieldId": "context_summary",
+              "fieldValue": "={{ $json.output }}"
+            },
+            {
+              "fieldId": "key_facts",
+              "fieldValue": "={{ $json.memory_key_facts ?? {} }}"
+            },
+            {
+              "fieldId": "last_intent",
+              "fieldValue": "={{ $json.memory_last_intent ?? $json.message_text }}"
+            },
+            {
+              "fieldId": "needs_human",
+              "fieldValue": "={{ $json.needs_human ? true : false }}"
+            },
+            {
+              "fieldId": "memory_version",
+              "fieldValue": "2"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        256,
+        176
+      ],
+      "id": "7b094d5a-3743-435b-b418-a66c8af26142",
+      "name": "Supabase Crear Memoria",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "customer_memory",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customer_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Preparar Outbound Persistencia').item.json.customer_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "name",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_name ?? \"\" }}"
+            },
+            {
+              "fieldId": "context_summary",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.output }}"
+            },
+            {
+              "fieldId": "key_facts",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_key_facts ?? {} }}"
+            },
+            {
+              "fieldId": "last_intent",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_last_intent ?? $(\"Fusionar Memoria Incremental\").item.json.message_text }}"
+            },
+            {
+              "fieldId": "needs_human",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.needs_human ? true : false }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        480,
+        176
+      ],
+      "id": "9370b3f3-a762-400f-8273-b1fdf73cbd44",
+      "name": "Supabase Actualizar Memoria",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1071085216087926",
+        "recipientPhoneNumber": "={{ $('Normalizar Entrada').item.json.wa_id }}",
+        "textBody": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1888,
+        496
+      ],
+      "id": "4cda9da9-2c61-430f-b667-dd5ce50dce01",
+      "name": "Enviar Mensaje",
+      "webhookId": "bbd6a64f-f82c-415a-bd36-9284dc9bc7f5",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "id9ZM5iVMoIoTPzq",
+          "name": "n8n agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst text = String(item.message_text || '').toLowerCase();\nconst security = item.security_flags || {};\n\nlet reason = '';\nlet handoffOutput = '';\nlet needsHuman = false;\n\nif (security.is_prompt_injection) {\n  reason = 'security_prompt_injection';\n  handoffOutput = 'Por seguridad solo puedo ayudarte con consignacion de autos y su proceso. Si quieres vender tu auto por consignacion, comparteme marca/modelo/ano/km o link de publicacion.';\n} else if (security.is_spam_like) {\n  reason = 'security_spam_guard';\n  handoffOutput = 'Recibi mucha informacion en un solo mensaje. Para ayudarte mejor, enviame un mensaje breve y relacionado con consignacion de autos.';\n} else {\n  const patterns = [\n    { r: /\\b(humano|persona|ejecutivo|asesor|persona real|hablar con alguien|necesito hablar|quiero hablar con)\\b/, reason: 'solicitud_humano' },\n    { r: /\\b(prenda|deuda prendaria|limitacion de dominio|embargo|gravamen|perdida total|pérdida total)\\b/, reason: 'caso_legal' },\n    { r: /\\b(multa|multas)\\b/, reason: 'multas' },\n    { r: /\\b(reclamo|queja|molesto|mala atencion|denuncia|demanda|estafa)\\b/, reason: 'reclamo' }\n  ];\n\n  for (const pattern of patterns) {\n    if (pattern.r.test(text)) {\n      reason = pattern.reason;\n      break;\n    }\n  }\n\n  if (reason) {\n    needsHuman = true;\n    handoffOutput = 'Perfecto, te derivo de inmediato con un ejecutivo para ayudarte bien con tu caso. Para agilizar, comparteme nombre, telefono, marca/modelo/ano/kilometraje y motivo.';\n  }\n}\n\nreturn [{\n  json: {\n    ...item,\n    needs_human: Boolean(needsHuman),\n    handoff_reason: reason,\n    handoff_output: handoffOutput\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        -368
+      ],
+      "id": "aa25a2e3-6346-4d4a-bc1b-6a48f8bcd174",
+      "name": "Detectar Handoff"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "h1",
+              "leftValue": "={{ $json.handoff_output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        -368
+      ],
+      "id": "6041031c-94f9-4492-94ef-a6c154b0a0fb",
+      "name": "If Handoff Inmediato"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "o1",
+              "name": "output",
+              "value": "={{ $json.handoff_output }}",
+              "type": "string"
+            },
+            {
+              "id": "o2",
+              "name": "needs_human",
+              "value": "={{ $json.needs_human ? true : false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "o3",
+              "name": "handoff_reason",
+              "value": "={{ $json.handoff_reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        -384
+      ],
+      "id": "cc692575-5891-40a5-aab7-8684a0765b62",
+      "name": "Preparar Respuesta Handoff"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst waId = String(item.wa_id || 'unknown');\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0,8) + '-' + raw.slice(8,12) + '-' + raw.slice(12,16) + '-' + raw.slice(16,20) + '-' + raw.slice(20,32);\nreturn [{ json: { ...item, customer_id: customerId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -16
+      ],
+      "id": "c0288955-9599-4dfc-992a-01e3e3b9eee5",
+      "name": "Preparar Contexto Memoria Persistente"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "customer_memory",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customer_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.customer_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        128
+      ],
+      "id": "6c6b9f7b-d484-4efb-8e26-be0989fad7fd",
+      "name": "Supabase Leer Memoria Contexto",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const live = $('Preparar Contexto Memoria Persistente').item.json;\nconst mem = $input.first().json || {};\n\nlet keyFacts = {};\nif (mem.key_facts && typeof mem.key_facts === 'object') {\n  keyFacts = mem.key_facts;\n} else if (typeof mem.key_facts === 'string') {\n  try {\n    keyFacts = JSON.parse(mem.key_facts);\n  } catch (e) {\n    keyFacts = {};\n  }\n}\n\nconst currentFacts = live.extracted_facts || {};\nfor (const [key, value] of Object.entries(currentFacts)) {\n  if (value !== null && value !== undefined && String(value).trim() !== '') {\n    keyFacts[key] = typeof value === 'string' ? value.trim() : value;\n  }\n}\n\nconst nowIso = new Date().toISOString();\nconst nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;\n\nconst firstSeenBase = keyFacts.primer_contacto_at || keyFacts.first_contact_at || mem.created_at || nowIso;\nkeyFacts.primer_contacto_at = String(firstSeenBase);\nkeyFacts.first_contact_at = String(firstSeenBase);\nkeyFacts.ultimo_contacto_at = nowIso;\nkeyFacts.last_contact_at = nowIso;\n\nconst hasEmail = nonEmpty(keyFacts.customer_email);\nconst hasAuto = nonEmpty(keyFacts.vehicle_brand_model)\n  || nonEmpty(keyFacts.vehicle_description)\n  || nonEmpty(keyFacts.vehicle_url);\n\nkeyFacts.has_closing_email = hasEmail;\nkeyFacts.has_vehicle_min_data = hasAuto;\nkeyFacts.correo_de_cierre = hasEmail;\n\nlet stage = 'contacto_inicial';\nif (hasEmail && hasAuto) stage = 'listo_para_cierre';\nelse if (hasEmail || hasAuto) stage = 'datos_parciales';\nkeyFacts.funnel_stage = stage;\n\nconst rawSignal = String(keyFacts.user_signal || keyFacts.last_turn_signal || 'regular').toLowerCase();\nlet userSignal = 'regular';\nif (rawSignal.includes('question')) userSignal = 'question';\nelse if (rawSignal.includes('phatic')) userSignal = 'phatic';\nelse if (rawSignal.includes('command')) userSignal = 'command';\nelse if (rawSignal.includes('ambiguous')) userSignal = 'ambiguous';\n\nconst postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';\nconst isPostCloseStrict = postCloseLock === 'on';\n\nlet responseStyle = String(keyFacts.response_style || 'normal');\nif (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';\nelse if (postCloseLock === 'on' && userSignal === 'question') responseStyle = 'concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';\n\nconst precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal') ? 'on' : 'off';\nconst toneMode = postCloseLock === 'on' ? 'direct' : 'warm';\n\nlet contactState = 'active';\nconst hasHistory = Boolean(mem.context_summary || mem.key_facts || mem.last_intent);\nif (!hasHistory && stage === 'contacto_inicial') contactState = 'new';\nelse if (stage === 'listo_para_cierre') contactState = 'closed';\n\nlet daysSinceLastContact = null;\nlet isReturningClient = false;\nconst lastUpdate = mem.updated_at || mem.created_at;\nif (lastUpdate) {\n  const diffMs = Date.now() - new Date(lastUpdate).getTime();\n  daysSinceLastContact = Math.floor(diffMs / (1000 * 60 * 60 * 24));\n  isReturningClient = daysSinceLastContact >= 1;\n  if (isReturningClient && contactState !== 'closed') contactState = 'reengaged';\n}\n\nkeyFacts.contact_state = contactState;\nkeyFacts.response_style = responseStyle;\nkeyFacts.precision_mode = precisionMode;\nkeyFacts.post_close_lock = postCloseLock;\nkeyFacts.is_post_close_strict = isPostCloseStrict;\nkeyFacts.tone_mode = toneMode;\nkeyFacts.user_signal = userSignal;\n\nif (keyFacts.derivado_agente_humano === undefined) keyFacts.derivado_agente_humano = false;\nif (keyFacts.is_human_handoff === undefined) keyFacts.is_human_handoff = false;\n\nkeyFacts.conversation_version = 8;\n\nreturn [{\n  json: {\n    ...live,\n    memory_summary: String(mem.context_summary || ''),\n    memory_last_intent: String(mem.last_intent || ''),\n    memory_needs_human: Boolean(mem.needs_human),\n    memory_key_facts: keyFacts,\n    days_since_last_contact: daysSinceLastContact,\n    is_returning_client: isReturningClient\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        368
+      ],
+      "id": "4e486957-b243-40e1-a107-9ebffdb1b170",
+      "name": "Unificar Contexto IA"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst messageText = String(item.message_text || '').trim();\nconst text = messageText.toLowerCase();\nconst rawInput = item.raw_input || {};\n\nconst facts = {};\nconst updatedFields = [];\n\nconst normalize = (value) => String(value || '').trim();\nconst addFact = (key, value) => {\n  const cleaned = normalize(value);\n  if (!cleaned) return;\n  facts[key] = cleaned;\n  updatedFields.push(key);\n};\n\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\n\nconst injectionNeedles = [\n  'ignora instrucciones', 'ignora todas las instrucciones', 'actua como', 'system prompt',\n  'developer message', 'prompt interno', 'revela tu prompt', 'muestra tu prompt', 'jailbreak', 'pretende ser'\n];\n\nconst inDomainNeedles = [\n  'consign', 'vender mi auto', 'vender auto', 'vehiculo', 'camioneta', 'marca', 'modelo',\n  'ano', 'año', 'km', 'kilometraje', 'correo', 'ubicacion', 'telefono', 'comision', 'proceso', 'queirolo', 'whatsapp'\n];\n\nconst neutralText = text.replace(/[!?.,]/g, '').trim();\nconst neutralSet = new Set(['hola', 'buenas', 'gracias', 'ok', 'dale', 'perfecto', 'listo', 'si', 'no', 'hi', 'hello', 'lo']);\nconst phaticSet = new Set(['ok', 'oka', 'okey', 'si ok', 'dale', 'gracias', 'listo', 'perfecto', 'lo', 'super', 'genial', 'buenisimo']);\n\nconst tokens = neutralText ? neutralText.split(' ').filter(Boolean) : [];\nconst tokenCount = tokens.length;\nconst allTokensArePhatic = tokens.length > 0 && tokens.every(t => phaticSet.has(t) || neutralSet.has(t));\nconst hasQuestion = /\\?$|\\b(como|que|cual|donde|cuando|por que|pueden|tienen|hacen|cuanto)\\b/i.test(text);\nconst isPhaticAck = tokenCount <= 3 && !hasQuestion && (phaticSet.has(neutralText) || neutralSet.has(neutralText) || allTokensArePhatic);\n\nconst urlCount = (messageText.match(/https?:\\/\\//gi) || []).length;\nconst hasPromptInjection = injectionNeedles.some(n => text.includes(n));\nconst isInDomain = inDomainNeedles.some(n => text.includes(n));\nconst isNeutral = neutralSet.has(neutralText);\nconst isTooLong = messageText.length > 900;\nconst hasRepeatedChars = /(.)\\1{10,}/.test(text);\nconst isSpamLike = isTooLong || hasRepeatedChars || urlCount > 2;\nconst isShortOrAmbiguous = messageText.length <= 18 || /^(hola|buenas|ok|dale|si|no|gracias|como estas|hola\\?|buenas\\?|lo)$/i.test(neutralText);\nconst isOffTopic = messageText.length > 40 && !hasPromptInjection && !isInDomain && !isNeutral && !isShortOrAmbiguous && !hasQuestion;\nconst securityLevel = hasPromptInjection ? 'high' : (isSpamLike ? 'medium' : (isOffTopic ? 'low' : 'none'));\n\nlet userSignal = 'regular';\nif (hasQuestion) userSignal = 'question';\nelse if (isPhaticAck) userSignal = 'phatic';\nelse if (/^(envia|manda|dame|pasame|quiero|necesito|deriva|contacta)\\b/i.test(text)) userSignal = 'command';\nelse if (tokenCount <= 2 && !isInDomain) userSignal = 'ambiguous';\n\nlet responseStyleSuggested = 'normal';\nif (userSignal === 'phatic') responseStyleSuggested = 'ultra_concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyleSuggested = 'concise';\n\nconst precisionModeSuggested = (userSignal === 'phatic' || userSignal === 'question' || tokenCount <= 3) ? 'on' : 'off';\n\nconst waName = normalize(rawInput?.body?.name);\nif (waName) addFact('customer_name', waName);\nconst nameMatch = messageText.match(/(?:me\\s+llamo|soy|mi\\s+nombre\\s+es)\\s+([a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\\s]{2,50})/i);\nif (nameMatch && !facts.customer_name) addFact('customer_name', nameMatch[1].trim());\n\nconst emailTokenMatch = messageText.match(/([^\\s<>\"'`]+@[^\\s<>\"'`]+\\.[^\\s<>\"'`]+)/i);\nif (emailTokenMatch) {\n  let rawEmail = String(emailTokenMatch[1] || '').trim().replace(/[),.;:!?]+$/, '');\n  rawEmail = rawEmail.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const safeEmail = rawEmail.toLowerCase();\n  if (/^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$/i.test(safeEmail)) {\n    addFact('customer_email', safeEmail);\n  }\n}\n\nconst phoneMatch = messageText.match(/(?:\\+?56)?\\s*9\\s*\\d{4}\\s*\\d{4}/);\nif (phoneMatch) addFact('customer_phone', phoneMatch[0].replace(/\\s/g, ''));\n\nconst urlMatch = messageText.match(/https?:\\/\\/[^\\s]+/i);\nif (urlMatch) addFact('vehicle_url', urlMatch[0]);\n\nlet kmNum = 0;\nconst kmWithUnit = messageText.match(/\\b(\\d{2,3}(?:[.,]\\d{3})+|\\d{4,6})\\s*(km|kms|kilometros|kilómetros)\\b/i);\nconst kmMil = messageText.match(/\\b(\\d{2,3})\\s*mil\\b/i);\n\nif (kmWithUnit) {\n  kmNum = parseInt(String(kmWithUnit[1] || '').replace(/[.,]/g, ''), 10);\n} else if (kmMil) {\n  kmNum = parseInt(String(kmMil[1] || '').replace(/[^0-9]/g, ''), 10) * 1000;\n}\n\nconst yearLike = messageText.match(/\\b(19[89]\\d|20[0-2]\\d)\\b/);\nconst yearCandidate = yearLike ? parseInt(yearLike[1], 10) : 0;\n\nif (Number.isFinite(kmNum) && kmNum >= 1000 && kmNum <= 500000 && kmNum !== yearCandidate && !(kmNum >= 1800 && kmNum <= 2099)) {\n  addFact('vehicle_km', kmNum.toLocaleString('es-CL') + ' km');\n}\n\nconst yearMatch = messageText.match(/\\b(19[89]\\d|20[0-2]\\d)\\b/);\nif (yearMatch) addFact('vehicle_year', yearMatch[1]);\n\nconst brands = 'toyota|hyundai|kia|suzuki|chevrolet|nissan|mazda|mitsubishi|ford|volkswagen|vw|honda|subaru|peugeot|citroen|renault|fiat|jeep|bmw|mercedes|audi|volvo|mg|chery|jac|byd|haval|changan|great wall|ssangyong|dodge|ram|mini';\nconst brandRe = new RegExp('\\\\b(' + brands + ')\\\\b\\\\s*([a-zA-Z0-9áéíóúñ\\\\s-]{2,40})?', 'i');\nconst brandMatch = messageText.match(brandRe);\nif (brandMatch) {\n  const brand = String(brandMatch[1] || '').trim();\n  const tail = String(brandMatch[2] || '').trim();\n  const stopWords = new Set(['mi','nombre','soy','me','llamo','correo','email','mail','por','cierto']);\n  const modelTokens = [];\n  for (const token of tail.split(/\\\\s+/).filter(Boolean)) {\n    const low = token.toLowerCase();\n    if (stopWords.has(low) || low.includes('@')) break;\n    if (/(km|kms|kilometros|kilómetros)/i.test(low)) break;\n    if (/^\\\\d{5,6}$/.test(low)) break;\n    if (low === 'con' && modelTokens.length > 0) break;\n    modelTokens.push(token);\n    if (modelTokens.length >= 3) break;\n  }\n\n  const vehicleDesc = [brand, ...modelTokens].join(' ').trim();\n  addFact('vehicle_brand_model', vehicleDesc);\n}\n\nconst vehicleCue = /\\b(auto|vehiculo|camioneta|suv|sedan|hatchback|pickup|van|marca|modelo|ano|año|kilometraje|km|publicado|publicacion)\\b/i;\nif (vehicleCue.test(messageText) && !facts.vehicle_brand_model) addFact('vehicle_description', messageText.slice(0, 250));\n\nlet detectedIntent = '';\nlet detectedIntentConfidence = 'low';\nconst intentConsignar = [/\\bconsign(?:ar|acion|ación)\\b/i, /\\bquiero\\s+(?:consignar|vender|dejar)\\b/i, /\\bvender\\s+(?:mi\\s+)?(?:auto|vehiculo|camioneta)\\b/i, /\\bdejar(?:lo)?\\s+en\\s+consignacion\\b/i];\nconst intentComision = [/\\bcuanto\\s+(?:cobran|cuesta|vale|sale)\\b/i, /\\bcomision\\b/i];\nconst intentUbicacion = [/\\bdonde\\s+estan\\b/i, /\\bubicacion\\b/i, /\\bdireccion\\b/i, /\\bmapa\\b/i];\nconst intentProceso = [/\\bcomo\\s+(?:funciona|es)\\s+(?:la\\s+)?consignacion\\b/i, /\\bpasos\\b/i, /\\bproceso\\b/i];\n\nif (intentConsignar.some(re => re.test(messageText))) {\n  detectedIntent = 'consignar_auto';\n  detectedIntentConfidence = 'high';\n  addFact('customer_intent', 'consignar_auto');\n} else if (intentComision.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_comision';\n  detectedIntentConfidence = 'high';\n} else if (intentUbicacion.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_ubicacion';\n  detectedIntentConfidence = 'medium';\n} else if (intentProceso.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_proceso';\n  detectedIntentConfidence = 'medium';\n}\n\nif (detectedIntent) {\n  addFact('last_user_intent', detectedIntent);\n  addFact('last_user_intent_confidence', detectedIntentConfidence);\n}\n\naddFact('last_turn_signal', userSignal === 'phatic' ? 'phatic_ack' : (hasQuestion ? 'question' : 'regular'));\naddFact('user_signal', userSignal);\naddFact('response_style', responseStyleSuggested);\naddFact('precision_mode', precisionModeSuggested);\n\nconst resetNotify = /\\b(reset\\s*notify|reset\\s*notificacion|reset\\s*notificación|reset\\s*lead\\s*caliente)\\b/i.test(messageText);\nif (resetNotify) {\n  addFact('team_notified', 'false');\n  addFact('team_notified_at', '');\n}\n\nconst comunaContext = /\\b(buscar|retirar|pasar\\s+a\\s+buscar|ir\\s+a\\s+buscar|domicilio|casa|hogar)\\b/i;\nif (comunaContext.test(messageText)) addFact('needs_pickup', 'true');\n\nlet isOffHours = false;\ntry {\n  const now = new Date();\n  const parts = new Intl.DateTimeFormat('en-US', {\n    timeZone: 'America/Santiago',\n    hour: 'numeric',\n    hour12: false,\n    weekday: 'short'\n  }).formatToParts(now);\n  const hour = parseInt(parts.find(p => p.type === 'hour').value);\n  const weekday = parts.find(p => p.type === 'weekday').value;\n  isOffHours = hour < 8 || hour >= 18 || weekday === 'Sat' || weekday === 'Sun';\n} catch (e) {\n  isOffHours = false;\n}\n\nreturn [{\n  json: {\n    ...item,\n    extracted_facts: facts,\n    extracted_fields: updatedFields,\n    is_off_hours: isOffHours,\n    reset_notify_requested: parseBool(facts.team_notified === 'false'),\n    security_flags: {\n      level: securityLevel,\n      is_prompt_injection: hasPromptInjection,\n      is_spam_like: isSpamLike,\n      is_off_topic: isOffTopic,\n      is_in_domain: isInDomain,\n      is_phatic_ack: isPhaticAck,\n      mode: 'soft'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        -240
+      ],
+      "id": "ad81a308-06e5-4019-9949-d2959b620981",
+      "name": "Extraer Datos Vitales"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "customer_memory",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customer_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Preparar Outbound Persistencia\").item.json.customer_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -64
+      ],
+      "id": "46536b57-ba42-4183-b91b-0c6788f674b3",
+      "name": "Supabase Leer Memoria Persistencia",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = $input.first().json || {};\nconst outbound = $('Preparar Outbound Persistencia').item.json;\n\nconst nowIso = new Date().toISOString();\nconst nowMs = Date.now();\nconst COOLDOWN_MINUTES = 360;\nconst cooldownMs = COOLDOWN_MINUTES * 60 * 1000;\n\nconst nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;\nconst normalizeText = (v) => typeof v === 'string' ? v.trim() : v;\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\nconst normalizeForRepeat = (txt) => String(txt || '').toLowerCase().replace(/[!?.,;:]/g, '').replace(/\\s+/g, ' ').trim();\n\nlet existingFacts = {};\nlet parseStatus = 'ok';\nif (existing.key_facts && typeof existing.key_facts === 'object') {\n  existingFacts = existing.key_facts;\n} else if (typeof existing.key_facts === 'string') {\n  try {\n    existingFacts = JSON.parse(existing.key_facts);\n  } catch (e) {\n    existingFacts = {};\n    parseStatus = 'invalid_json';\n  }\n} else if (existing.key_facts === null || existing.key_facts === undefined) {\n  parseStatus = 'empty';\n}\n\nconst contextFacts = outbound.memory_key_facts && typeof outbound.memory_key_facts === 'object'\n  ? outbound.memory_key_facts\n  : {};\nconst incomingFacts = outbound.extracted_facts || {};\n\nconst mergedFacts = { ...existingFacts, ...contextFacts };\nconst updated = [];\n\nfor (const [key, value] of Object.entries(incomingFacts)) {\n  if (nonEmpty(value)) {\n    const normalized = normalizeText(value);\n    if (mergedFacts[key] !== normalized) {\n      mergedFacts[key] = normalized;\n      updated.push(key);\n    }\n  }\n}\n\nif (!nonEmpty(mergedFacts.customer_name)) {\n  const fallbackName = String(outbound.raw_input?.body?.name || '').trim();\n  if (fallbackName) {\n    mergedFacts.customer_name = fallbackName;\n    updated.push('customer_name');\n  }\n}\n\nconst firstSeen = mergedFacts.primer_contacto_at || mergedFacts.first_contact_at || existing.created_at || nowIso;\nmergedFacts.primer_contacto_at = String(firstSeen);\nmergedFacts.first_contact_at = String(firstSeen);\nmergedFacts.ultimo_contacto_at = nowIso;\nmergedFacts.last_contact_at = nowIso;\n\nconst hasEmail = nonEmpty(mergedFacts.customer_email);\nconst hasAuto = nonEmpty(mergedFacts.vehicle_brand_model)\n  || nonEmpty(mergedFacts.vehicle_description)\n  || nonEmpty(mergedFacts.vehicle_url);\n\nmergedFacts.has_closing_email = hasEmail;\nmergedFacts.has_vehicle_min_data = hasAuto;\nmergedFacts.correo_de_cierre = hasEmail;\n\nlet stage = 'contacto_inicial';\nconst isHuman = Boolean(outbound.needs_human);\nif (isHuman) stage = 'derivado';\nelse if (hasEmail && hasAuto) stage = 'listo_para_cierre';\nelse if (hasEmail || hasAuto) stage = 'datos_parciales';\nmergedFacts.funnel_stage = stage;\n\nlet contactState = 'active';\nif (stage === 'listo_para_cierre') contactState = 'closed';\nelse {\n  const lastSeen = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;\n  const daysSince = lastSeen ? Math.floor((nowMs - lastSeen) / 86400000) : 0;\n  if (daysSince >= 1) contactState = 'reengaged';\n}\nif (!existing.created_at && stage === 'contacto_inicial') contactState = 'new';\nmergedFacts.contact_state = contactState;\n\nconst userSignal = String(mergedFacts.user_signal || mergedFacts.last_turn_signal || 'regular');\nconst postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';\nlet responseStyle = String(mergedFacts.response_style || 'normal');\nif (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';\nconst precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal') ? 'on' : 'off';\nconst toneMode = postCloseLock === 'on' ? 'direct' : 'warm';\n\nmergedFacts.post_close_lock = postCloseLock;\nmergedFacts.is_post_close_strict = postCloseLock === 'on';\nmergedFacts.response_style = responseStyle;\nmergedFacts.precision_mode = precisionMode;\nmergedFacts.tone_mode = toneMode;\n\nmergedFacts.derivado_agente_humano = isHuman;\nmergedFacts.is_human_handoff = isHuman;\nif (isHuman) mergedFacts.last_handoff_reason = String(outbound.handoff_reason || '');\n\nconst outputText = String(outbound.output || '').trim();\nif (outputText) {\n  const prevOutput = String(mergedFacts.last_assistant_output || '').trim();\n  const prevNorm = normalizeForRepeat(prevOutput);\n  const currNorm = normalizeForRepeat(outputText);\n  const isRepeat = prevNorm && currNorm && (prevNorm === currNorm || prevNorm.includes(currNorm) || currNorm.includes(prevNorm));\n  mergedFacts.assistant_repeat_count = isRepeat ? Number(mergedFacts.assistant_repeat_count || 0) + 1 : 0;\n  mergedFacts.last_assistant_output = outputText.slice(0, 500);\n}\n\nif (updated.length > 0) {\n  mergedFacts.updated_fields_last_turn = updated;\n  mergedFacts.last_captured_at = nowIso;\n}\n\nconst resetNotifyRequested = Boolean(outbound.reset_notify_requested);\nlet teamNotified = parseBool(mergedFacts.team_notified);\nif (resetNotifyRequested) {\n  mergedFacts.team_notified = false;\n  mergedFacts.team_notified_at = '';\n  mergedFacts.lead_notify_last_at = '';\n  mergedFacts.lead_notify_cooldown_until = '';\n  teamNotified = false;\n}\n\nconst leadNotifyLastAt = String(mergedFacts.lead_notify_last_at || '').trim();\nconst leadNotifyLastMs = leadNotifyLastAt ? new Date(leadNotifyLastAt).getTime() : 0;\nconst cooldownUntilMs = leadNotifyLastMs ? (leadNotifyLastMs + cooldownMs) : 0;\nconst cooldownActive = leadNotifyLastMs > 0 && nowMs < cooldownUntilMs;\n\nconst leadRelevantFields = new Set(['customer_email', 'vehicle_brand_model', 'vehicle_description', 'vehicle_url', 'vehicle_year', 'vehicle_km', 'customer_phone', 'customer_name']);\nconst hasLeadRelevantUpdate = updated.some(f => leadRelevantFields.has(f));\n\nlet shouldNotify = false;\nlet notifyReason = '';\nif (stage !== 'listo_para_cierre') notifyReason = 'stage_not_ready';\nelse if (isHuman) notifyReason = 'human_handoff';\nelse if (cooldownActive) notifyReason = 'cooldown_active';\nelse if (!teamNotified) {\n  shouldNotify = true;\n  notifyReason = 'ready_first_notification';\n} else if (hasLeadRelevantUpdate) {\n  shouldNotify = true;\n  notifyReason = 'ready_with_new_data';\n} else notifyReason = 'already_notified_no_change';\n\nif (shouldNotify) {\n  mergedFacts.team_notified = true;\n  mergedFacts.team_notified_at = nowIso;\n  mergedFacts.lead_notify_last_at = nowIso;\n  mergedFacts.lead_notify_cooldown_until = new Date(nowMs + cooldownMs).toISOString();\n  mergedFacts.lead_notify_count = Number(mergedFacts.lead_notify_count || 0) + 1;\n}\n\nconst securityLevel = String(outbound.security_flags?.level || 'none');\nlet responseMode = 'normal';\nif (isHuman) responseMode = 'handoff';\nelse if (postCloseLock === 'on' && userSignal === 'phatic') responseMode = 'post_cierre_phatic';\nelse if (postCloseLock === 'on') responseMode = 'post_cierre';\nelse if (securityLevel === 'high' || securityLevel === 'medium') responseMode = 'security_guard';\n\nmergedFacts.last_agent_mode = responseMode;\nmergedFacts.conversation_version = 8;\n\nmergedFacts.notification_debug = {\n  at: nowIso,\n  parse_status: parseStatus,\n  stage,\n  contact_state: mergedFacts.contact_state,\n  response_style: mergedFacts.response_style,\n  precision_mode: mergedFacts.precision_mode,\n  post_close_lock: mergedFacts.post_close_lock,\n  tone_mode: mergedFacts.tone_mode,\n  user_signal: userSignal,\n  response_mode: responseMode,\n  security_level: securityLevel,\n  should_notify: shouldNotify,\n  reason: notifyReason,\n  cooldown_minutes: COOLDOWN_MINUTES,\n  cooldown_active: cooldownActive,\n  has_lead_relevant_update: hasLeadRelevantUpdate,\n  repeat_count: Number(mergedFacts.assistant_repeat_count || 0)\n};\n\nconst memoryName = String(mergedFacts.customer_name || existing.name || '').trim();\nconst memoryLastIntent = String(\n  mergedFacts.last_user_intent\n  || mergedFacts.customer_intent\n  || outbound.message_text\n  || existing.last_intent\n  || ''\n).trim();\n\nreturn [{\n  json: {\n    ...outbound,\n    memory_key_facts: mergedFacts,\n    memory_name: memoryName,\n    memory_last_intent: memoryLastIntent,\n    should_notify: shouldNotify,\n    notify_reason: notifyReason,\n    notify_debug: mergedFacts.notification_debug\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        80
+      ],
+      "id": "5b413c9b-eb0f-4cb8-84d1-c7b69b1dd315",
+      "name": "Fusionar Memoria Incremental"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst messageType = String(item.message_type || 'unknown');\nconst waId = item.wa_id;\n\nlet output = '';\n\nswitch (messageType) {\n  case 'image':\n  case 'video':\n    output = 'Recibi tu archivo! Por ahora solo puedo leer mensajes de texto. Me escribes los datos del auto que quieres vender? Marca, modelo, ano y kilometraje. Si tienes el link de publicacion, con eso basta.';\n    break;\n  case 'audio':\n    output = 'Recibi tu audio, pero por ahora solo puedo leer mensajes de texto. Me los escribes por favor?';\n    break;\n  case 'document':\n    output = 'Recibi tu documento! Por ahora solo proceso mensajes de texto. Me escribes los datos del auto? Marca, modelo, ano y km.';\n    break;\n  default:\n    output = '';\n}\n\nreturn [{ json: { wa_id: waId, output: output } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        -160
+      ],
+      "id": "1257ca10-e0e0-4e05-8a27-a6735c6bab82",
+      "name": "Responder No-Texto"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ntr1",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -480,
+        -160
+      ],
+      "id": "581207c8-658c-448c-b7ed-4b88d0c13992",
+      "name": "If Respuesta No-Texto"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1071085216087926",
+        "recipientPhoneNumber": "={{ $json.wa_id }}",
+        "textBody": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        -800,
+        176
+      ],
+      "id": "fe23ae99-dc5c-4a40-ac35-4561cc17ee62",
+      "name": "Enviar Respuesta No-Texto",
+      "webhookId": "1be9eb1f-9dce-47b7-b3c6-26b728e63b5c",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "id9ZM5iVMoIoTPzq",
+          "name": "n8n agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "lc1",
+              "leftValue": "={{ $json.should_notify }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        704,
+        80
+      ],
+      "id": "bfe28200-8c82-4ba4-a7c5-2b5ca0e958a4",
+      "name": "If Lead Caliente"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst kf = item.memory_key_facts || {};\nconst notifyPhone = $('Normalizar Entrada').item.json.notify_phone || '+56975400946';\n\nconst lines = ['*Lead caliente*', ''];\n\nif (kf.customer_name) lines.push('Nombre: ' + kf.customer_name);\nif (kf.customer_phone) lines.push('Tel: ' + kf.customer_phone);\nif (kf.customer_email) lines.push('Correo: ' + kf.customer_email);\n\nif (kf.vehicle_url) {\n  lines.push('Link auto: ' + kf.vehicle_url);\n} else {\n  const autoParts = [];\n  const brandModel = String(kf.vehicle_brand_model || '').trim();\n  const year = String(kf.vehicle_year || '').trim();\n  const hasYearInsideBrand = Boolean(brandModel && year && new RegExp('\\\\b' + year + '\\\\b').test(brandModel));\n  if (brandModel) autoParts.push(brandModel);\n  if (year && !hasYearInsideBrand) autoParts.push(year);\n\n  const kmRaw = String(kf.vehicle_km || '').trim();\n  if (kmRaw) {\n    const kmNum = parseInt(kmRaw.replace(/[^0-9]/g, ''), 10);\n    const yearNum = parseInt(String(kf.vehicle_year || '').replace(/[^0-9]/g, ''), 10);\n    if (Number.isFinite(kmNum) && kmNum >= 1000 && kmNum <= 500000 && kmNum !== yearNum && !(kmNum >= 1800 && kmNum <= 2099)) {\n      autoParts.push(kmNum.toLocaleString('es-CL') + ' km');\n    } else if (kmRaw && !/^\\d{4}$/.test(kmRaw.replace(/[^0-9]/g, ''))) {\n      autoParts.push(kmRaw);\n    }\n  }\n\n  if (autoParts.length > 0) lines.push('Auto: ' + autoParts.join(' | '));\n  if (kf.vehicle_description && !kf.vehicle_brand_model) lines.push('Info auto: ' + String(kf.vehicle_description).slice(0, 120));\n}\n\nif (kf.customer_intent) lines.push('Intencion: ' + kf.customer_intent);\nif (kf.funnel_stage) lines.push('Funnel: ' + kf.funnel_stage);\nif (kf.notification_debug?.reason) lines.push('Motivo trigger: ' + kf.notification_debug.reason);\n\nlines.push('');\nlines.push('wa.me/' + (item.wa_id || ''));\n\nreturn [{ json: { notify_phone: notifyPhone, notification_text: lines.join('\\n') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        80
+      ],
+      "id": "2910e9bf-a1db-417e-a694-6540a37878ec",
+      "name": "Preparar Notificacion Lead"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1071085216087926",
+        "recipientPhoneNumber": "={{ $json.notify_phone }}",
+        "textBody": "={{ $json.notification_text }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1168,
+        80
+      ],
+      "id": "10809c83-57ff-49ac-a35a-62dc89b17a5e",
+      "name": "Notificar Lead Caliente",
+      "webhookId": "d17f2de3-b0e7-4d4d-a7d6-c1bd55a03d94",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "id9ZM5iVMoIoTPzq",
+          "name": "n8n agent"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Normalizar Entrada": {
+      "main": [
+        [
+          {
+            "node": "Extraer Datos Vitales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Generar Customer ID",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detectar Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "n8n agent whatsapp": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar Outbound Persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Customer ID": {
+      "main": [
+        [
+          {
+            "node": "Supabase Crear Cliente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Guardar Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Outbound Persistencia": {
+      "main": [
+        [
+          {
+            "node": "Supabase Leer Memoria Persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Crear Memoria": {
+      "main": [
+        [
+          {
+            "node": "Supabase Actualizar Memoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Recibido": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar Handoff": {
+      "main": [
+        [
+          {
+            "node": "If Handoff Inmediato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Handoff Inmediato": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Contexto Memoria Persistente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Respuesta Handoff": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar Outbound Persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Contexto Memoria Persistente": {
+      "main": [
+        [
+          {
+            "node": "Supabase Leer Memoria Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Leer Memoria Contexto": {
+      "main": [
+        [
+          {
+            "node": "Unificar Contexto IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unificar Contexto IA": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Datos Vitales": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Leer Memoria Persistencia": {
+      "main": [
+        [
+          {
+            "node": "Fusionar Memoria Incremental",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fusionar Memoria Incremental": {
+      "main": [
+        [
+          {
+            "node": "Supabase Guardar Outbound",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Crear Memoria",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Lead Caliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder No-Texto": {
+      "main": [
+        [
+          {
+            "node": "If Respuesta No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Respuesta No-Texto": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Lead Caliente": {
+      "main": [
+        [
+          {
+            "node": "Preparar Notificacion Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Notificacion Lead": {
+      "main": [
+        [
+          {
+            "node": "Notificar Lead Caliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "09d8c4c3-634b-4f64-b8f0-4edea9e90239",
+  "meta": {
+    "instanceId": "3c5e280ef0c371064167909c21127d77b0c8f554c01ddf089839611bffd7d436"
+  },
+  "id": "Pwrb58z2rbRm9Gkz",
+  "tags": []
+}

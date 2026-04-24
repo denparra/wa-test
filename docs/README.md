@@ -33,10 +33,12 @@ docs/
 - [Base de datos (schema, migraciones, backups)](ops/db.md)
 - [Zona horaria: opciones de fix](ops/timezone_fix_options.md)
 - [Resultados SQLite en VPS](ops/resultadosqliteVPS.txt)
+- [Integración n8n: CLI + API admin](n8n-integration.md)
 
 ### Roadmap y mejoras
 - [Mejoras propuestas (2026-04-21)](roadmap/mejoras-propuestas.md) — último análisis
 - [Quick wins y roadmap inicial](roadmap/quick-wins-and-roadmap.md)
+- [Adaptación n8n + Twilio para conversación IA](roadmap/n8n-twilio-conversation-adaptation.md)
 
 ### Referencia
 - [Proyecto WA-Test: visión general histórica](reference/ProyectoWatest.md)

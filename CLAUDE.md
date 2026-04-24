@@ -43,6 +43,14 @@ CONTENT_SID=HX...                  # Twilio Content template (optional)
 PORT=3000                          # Server port (Easypanel may override)
 ```
 
+### n8n Variables (for workflow integration)
+```
+N8N_API_URL=https://your-instance/api/v1   # n8n Public API base URL
+N8N_API_KEY=...                            # n8n Public API key
+```
+
+If `N8N_API_URL` or `N8N_API_KEY` is missing, n8n features are disabled but the rest of the app can still run.
+
 ## Architecture & Key Files
 
 ### server.js - Main Express Application
@@ -142,6 +150,50 @@ Project uses `"type": "module"` in package.json:
 - `Promise.allSettled()` for parallel operations without fail-fast
 - Individual result checking with `status === 'fulfilled'`
 - Extracting error details from Twilio error objects
+
+## n8n Interaction Playbook (Mandatory)
+
+This repository includes a generic n8n integration for workflow lifecycle management (not campaign-specific only).
+
+### Preferred interaction order
+1. Use local CLI first (`npm run n8n:*`) for direct workflow CRUD operations.
+2. Use protected app endpoints (`/admin/api/n8n/*`) when workflow operations are needed from app logic or modules.
+3. Keep workflow JSON artifacts under `n8n/workflows/` when they are part of this project.
+
+### CLI commands
+```bash
+npm run n8n:list
+npm run n8n:get -- <id>
+npm run n8n:create -- n8n/workflows/<file>.json
+npm run n8n:update -- <id> n8n/workflows/<file>.json
+npm run n8n:delete -- <id>
+npm run n8n:activate -- <id>
+npm run n8n:deactivate -- <id>
+npm run n8n:duplicate -- <id> [new-name]
+```
+
+### Admin API routes (protected by adminAuth)
+- `GET /admin/api/n8n/status`
+- `GET /admin/api/n8n/workflows`
+- `GET /admin/api/n8n/workflows/:id`
+- `POST /admin/api/n8n/workflows`
+- `PUT /admin/api/n8n/workflows/:id`
+- `DELETE /admin/api/n8n/workflows/:id`
+- `POST /admin/api/n8n/workflows/:id/activate`
+- `POST /admin/api/n8n/workflows/:id/deactivate`
+- `POST /admin/api/n8n/workflows/:id/duplicate`
+
+### Safe workflow procedure
+- `list` -> identify target ID.
+- `get` -> save backup JSON before structural changes.
+- `create/update` -> apply intended changes.
+- `activate/deactivate` -> finalize runtime state.
+
+### Prompt patterns for future requests
+- "List n8n workflows and tell me which are active."
+- "Get workflow `<id>` and save/prepare backup."
+- "Update workflow `<id>` using `n8n/workflows/<file>.json`."
+- "Duplicate workflow `<id>` as `<new-name>`."
 
 ## Future Enhancements (Not Yet Implemented)
 

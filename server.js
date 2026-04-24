@@ -81,6 +81,17 @@ import {
     renderTemplateFormPage
 } from './admin/pages.js';
 import { sendOneRecipient } from './lib/twilio-sender.js';
+import {
+    activateWorkflowById,
+    createWorkflow,
+    deactivateWorkflowById,
+    deleteWorkflowById,
+    duplicateWorkflowById,
+    getN8nConfigStatus,
+    getWorkflowById,
+    listWorkflows,
+    updateWorkflowById
+} from './lib/n8n-workflows.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -96,6 +107,11 @@ if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) {
     console.warn('[startup] ADMIN_USER/ADMIN_PASS no configurados: /admin queda SIN autenticacion');
 }
 
+const n8nConfigStatus = getN8nConfigStatus();
+if (!n8nConfigStatus.enabled) {
+    console.warn('[startup] n8n API no configurada (admin n8n disabled):', n8nConfigStatus.missing.join(', '));
+}
+
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
     : null;
@@ -104,6 +120,53 @@ const SCHEDULER_BATCH_SIZE = Number(process.env.CAMPAIGN_SEND_BATCH_SIZE || 20);
 const schedulerState = { running: false };
 const STATUS_CALLBACK_URL = process.env.STATUS_CALLBACK_URL
     || (process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/twilio/status-callback` : null);
+const N8N_CHAT_WEBHOOK_URL = String(process.env.N8N_CHAT_WEBHOOK_URL || '').trim();
+
+if (!N8N_CHAT_WEBHOOK_URL) {
+    console.warn('[startup] N8N_CHAT_WEBHOOK_URL no configurada: /twilio/inbound usara respuesta local fallback');
+}
+
+async function getN8nChatReply(payload) {
+    if (!N8N_CHAT_WEBHOOK_URL) {
+        return null;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4500);
+
+    try {
+        const response = await fetch(N8N_CHAT_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data) {
+            return null;
+        }
+
+        const replyText = String(data.reply_text || '').trim();
+        if (!replyText) {
+            return null;
+        }
+
+        return {
+            replyText,
+            needsHuman: Boolean(data.needs_human),
+            handoffReason: String(data.handoff_reason || '').trim(),
+            optoutRequested: Boolean(data.optout_requested)
+        };
+    } catch (error) {
+        console.warn('[n8n-chat] error calling webhook:', error?.message || error);
+        return null;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 function normalizeScheduledAt(value) {
     if (!value) {
@@ -1367,9 +1430,122 @@ app.post('/admin/api/campaigns/preview-samples', adminAuth, express.json(), (req
 });
 
 // ============================================================
+// n8n Workflows API (generic integration)
+// ============================================================
+
+function handleN8nApiError(res, error, defaultMessage) {
+    const message = error?.message || defaultMessage;
+    const statusCodeMatch = String(message).match(/\((\d{3})\)/);
+    const statusCode = statusCodeMatch ? Number(statusCodeMatch[1]) : 500;
+    const safeStatus = Number.isInteger(statusCode) && statusCode >= 400 && statusCode <= 599 ? statusCode : 500;
+    return res.status(safeStatus).json({ error: message });
+}
+
+app.get('/admin/api/n8n/status', adminAuth, (req, res) => {
+    const status = getN8nConfigStatus();
+    res.json({
+        enabled: status.enabled,
+        missing: status.missing,
+        baseUrl: status.baseUrl || null
+    });
+});
+
+app.get('/admin/api/n8n/workflows', adminAuth, async (req, res) => {
+    try {
+        const workflows = await listWorkflows();
+        res.json({ workflows, total: workflows.length });
+    } catch (error) {
+        console.error('N8N list workflows error:', error);
+        handleN8nApiError(res, error, 'Failed to list workflows');
+    }
+});
+
+app.get('/admin/api/n8n/workflows/:id', adminAuth, async (req, res) => {
+    try {
+        const workflow = await getWorkflowById(req.params.id);
+        res.json({ workflow });
+    } catch (error) {
+        console.error('N8N get workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to get workflow');
+    }
+});
+
+app.post('/admin/api/n8n/workflows', adminAuth, express.json({ limit: '5mb' }), async (req, res) => {
+    try {
+        const workflow = req.body?.workflow || req.body;
+        if (!workflow || typeof workflow !== 'object') {
+            return res.status(400).json({ error: 'workflow object is required' });
+        }
+        const created = await createWorkflow(workflow);
+        res.status(201).json({ workflow: created });
+    } catch (error) {
+        console.error('N8N create workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to create workflow');
+    }
+});
+
+app.put('/admin/api/n8n/workflows/:id', adminAuth, express.json({ limit: '5mb' }), async (req, res) => {
+    try {
+        const workflow = req.body?.workflow || req.body;
+        if (!workflow || typeof workflow !== 'object') {
+            return res.status(400).json({ error: 'workflow object is required' });
+        }
+        const updated = await updateWorkflowById(req.params.id, workflow);
+        res.json({ workflow: updated });
+    } catch (error) {
+        console.error('N8N update workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to update workflow');
+    }
+});
+
+app.delete('/admin/api/n8n/workflows/:id', adminAuth, async (req, res) => {
+    try {
+        const result = await deleteWorkflowById(req.params.id);
+        res.json({ success: true, result: result || null });
+    } catch (error) {
+        console.error('N8N delete workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to delete workflow');
+    }
+});
+
+app.post('/admin/api/n8n/workflows/:id/activate', adminAuth, async (req, res) => {
+    try {
+        const workflow = await activateWorkflowById(req.params.id);
+        res.json({ workflow: workflow || null, success: true });
+    } catch (error) {
+        console.error('N8N activate workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to activate workflow');
+    }
+});
+
+app.post('/admin/api/n8n/workflows/:id/deactivate', adminAuth, async (req, res) => {
+    try {
+        const workflow = await deactivateWorkflowById(req.params.id);
+        res.json({ workflow: workflow || null, success: true });
+    } catch (error) {
+        console.error('N8N deactivate workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to deactivate workflow');
+    }
+});
+
+app.post('/admin/api/n8n/workflows/:id/duplicate', adminAuth, express.json(), async (req, res) => {
+    try {
+        const duplicated = await duplicateWorkflowById(req.params.id, {
+            name: req.body?.name,
+            suffix: req.body?.suffix,
+            activate: req.body?.activate === true
+        });
+        res.status(201).json({ workflow: duplicated });
+    } catch (error) {
+        console.error('N8N duplicate workflow error:', error);
+        handleN8nApiError(res, error, 'Failed to duplicate workflow');
+    }
+});
+
+// ============================================================
 // Webhooks
 // ============================================================
-app.post('/twilio/inbound', validateTwilioSignature, (req, res) => {
+app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
     const from = req.body.From;            // "whatsapp:+569..."
     const body = (req.body.Body || '').trim(); // texto del usuario
 
@@ -1380,7 +1556,7 @@ app.post('/twilio/inbound', validateTwilioSignature, (req, res) => {
     const OPTOUT_KEYWORDS = ['BAJA', '3', 'STOP', 'UNSUBSCRIBE', 'CANCELAR', 'REMOVER'];
     const isBaja = OPTOUT_KEYWORDS.some(kw => upper.includes(kw));
 
-    // Respuesta simple
+    // Respuesta local fallback
     let reply = 'Gracias por escribir a Queirolo Autos. Responde:\n1) Me interesa consignar\n2) Quiero mas info\n3) BAJA';
 
 
@@ -1390,6 +1566,42 @@ app.post('/twilio/inbound', validateTwilioSignature, (req, res) => {
         reply = 'Perfecto. Para avanzar, dime: Marca, Modelo, Ano y Comuna.';
     } else if (upper === '2' || upper.includes('INFO')) {
         reply = 'Genial. Te cuento: consignamos, publicamos y gestionamos todo. Quieres que te llame un ejecutivo? (SI/NO)';
+    }
+
+    // Si no es BAJA, intentamos respuesta IA via n8n (modo webhook bridge).
+    if (!isBaja) {
+        const aiResult = await getN8nChatReply({
+            source: 'twilio',
+            phone,
+            message_text: body,
+            message_sid: req.body.MessageSid || null,
+            received_at: new Date().toISOString(),
+            context: {
+                is_opted_out: phone ? isOptedOut(phone) : false,
+                campaign_id: null
+            }
+        });
+
+        if (aiResult?.replyText) {
+            reply = aiResult.replyText;
+        }
+
+        if (aiResult?.optoutRequested && phone) {
+            try {
+                insertOptOut(phone, 'user_request_ai');
+                updateContactStatus(phone, 'opted_out');
+                reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
+            } catch (error) {
+                console.warn('Opt-out from AI response failed:', error?.message || error);
+            }
+        }
+
+        if (aiResult?.needsHuman) {
+            console.log('INBOUND-HANDOFF:', {
+                from: maskPhone(phone),
+                reason: aiResult.handoffReason || 'unspecified'
+            });
+        }
     }
 
     try {

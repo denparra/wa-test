@@ -195,6 +195,40 @@ Autenticación: Basic Auth (usuario/contraseña configurados en .env)
 - **Campañas**: Gestión de campañas con detalle de destinatarios
 - **Opt-outs**: Usuarios que solicitaron BAJA
 
+### Integración n8n (gestión de workflows)
+
+Variables requeridas en `.env`:
+
+```env
+N8N_API_URL=https://tu-instancia-n8n/api/v1
+N8N_API_KEY=tu_public_api_key
+```
+
+Comandos CLI:
+
+```bash
+npm run n8n:list
+npm run n8n:get -- <id>
+npm run n8n:create -- n8n/workflows/mi-flujo.json
+npm run n8n:update -- <id> n8n/workflows/mi-flujo.json
+npm run n8n:delete -- <id>
+npm run n8n:activate -- <id>
+npm run n8n:deactivate -- <id>
+npm run n8n:duplicate -- <id> "Mi flujo copia"
+```
+
+API administrativa protegida:
+
+- `GET /admin/api/n8n/status`
+- `GET /admin/api/n8n/workflows`
+- `GET /admin/api/n8n/workflows/:id`
+- `POST /admin/api/n8n/workflows`
+- `PUT /admin/api/n8n/workflows/:id`
+- `DELETE /admin/api/n8n/workflows/:id`
+- `POST /admin/api/n8n/workflows/:id/activate`
+- `POST /admin/api/n8n/workflows/:id/deactivate`
+- `POST /admin/api/n8n/workflows/:id/duplicate`
+
 ## 🗄️ Base de Datos
 
 ### Esquema SQLite

@@ -9,7 +9,15 @@
     "db:schema": "node scripts/dump-schema.js",
     "db:verify": "node scripts/verify-db.js",
     "db:debug": "node scripts/debug-db.js",
-    "import": "node scripts/import-csv.js"
+    "import": "node scripts/import-csv.js",
+    "n8n:list": "node scripts/n8n/workflow-manager.js list",
+    "n8n:get": "node scripts/n8n/workflow-manager.js get",
+    "n8n:create": "node scripts/n8n/workflow-manager.js create",
+    "n8n:update": "node scripts/n8n/workflow-manager.js update",
+    "n8n:delete": "node scripts/n8n/workflow-manager.js delete",
+    "n8n:activate": "node scripts/n8n/workflow-manager.js activate",
+    "n8n:deactivate": "node scripts/n8n/workflow-manager.js deactivate",
+    "n8n:duplicate": "node scripts/n8n/workflow-manager.js duplicate"
   },
   "keywords": [
     "whatsapp",
