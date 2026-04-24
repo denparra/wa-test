@@ -56,3 +56,18 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
   - server forwards `handoff_active` context and broadens short phatic ack recognition.
 - Validation: `node --check` for modified files, regenerate workflow from tune script, update remote n8n workflow.
 - Rollback: restore `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-server-context-fix.json` and revert commit.
+
+### 2026-04-24 18:40 - Stability fix for fallback quality and informal handoff confirmations
+
+- Scope: reduce n8n fallback frequency and improve confirmation detection for phrases like `ok enviame`.
+- Why: production flow still showed fallback at first turn and CTA loops after informal acceptance.
+- Files: `server.js`, `scripts/n8n/tune-meta-agent-handoff.js`, `n8n/workflows/META-CONSIGNACION-V1.json`.
+- n8n workflow: id `PI8uZo5omcN3576y`, name `META-CONSIGNACION-V1`.
+- Backup artifact: `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-stability-fix.json`.
+- Runtime impact:
+  - n8n bridge timeout increased to 8s with one retry for transient failures.
+  - enriched n8n bridge logs (`timeout`, `non-2xx`, `invalid json`, `empty reply`).
+  - fallback copy for initial consignation changed to value + CTA (avoids cold data-collection prompt).
+  - `Detectar Handoff` now treats action-style confirmations (`ok enviame`, `mandame`, `si espero`, etc.) as handoff confirmation in CTA context.
+- Validation: syntax checks, workflow regenerate, remote workflow update.
+- Rollback: restore remote backup above and revert this change set in `server.js` and tune script.

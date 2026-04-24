@@ -263,6 +263,7 @@ const compoundAffirmative = /^(ok|si|sii|dale|de acuerdo)\\s+(perfecto|gracias|d
   || /^(perfecto|listo)\\s+(gracias|ok)$/.test(textNorm);
 const phaticAck = /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(textNorm);
 const softPositive = /\\b(por favor|porfa|okey|oki|oka|vale|ya)\\b/.test(textNorm);
+const handoffActionIntent = /\\b(enviame|enviame|mandame|manda me|envia me|enviar|mandar|derivame|deriva me|contactame|contacta me|llamame|llama me|pasame con ejecutivo|pasame con asesor|quiero que me contacten|si espero|ok espero|oka espero)\\b/.test(textNorm);
 const lastAssistantHadCta = /\\b(ejecutivo|asesor)\\b/.test(lastAssistantNorm)
   && /\\b(contacta|contacto|contactamos|contactarte|llame|llamemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);
 const handoffContextActive = awaitingHandoffConfirmation || lastAssistantHadCta || pendingOfferFromServer;
@@ -293,7 +294,7 @@ if (security.is_prompt_injection) {
   reason = 'caso_sensible';
   needsHuman = true;
   handoffOutput = 'Perfecto, te puedo derivar con un ejecutivo para revisarlo bien. Te contactamos en 15-30 min.';
-} else if (!hasHumanNegation && handoffContextActive && (affirmative || compoundAffirmative || contextualAck)) {
+} else if (!hasHumanNegation && handoffContextActive && (affirmative || compoundAffirmative || contextualAck || handoffActionIntent)) {
   reason = 'confirmacion_handoff';
   needsHuman = true;
   handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';

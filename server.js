@@ -145,41 +145,69 @@ async function getN8nChatReply(payload) {
         return null;
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4500);
+    const MAX_ATTEMPTS = 2;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
 
-    try {
-        const response = await fetch(N8N_CHAT_WEBHOOK_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload),
-            signal: controller.signal
-        });
+        try {
+            const response = await fetch(N8N_CHAT_WEBHOOK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
 
-        const data = await response.json().catch(() => null);
-        if (!response.ok || !data) {
-            return null;
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                const shouldRetry = response.status >= 500 && attempt < MAX_ATTEMPTS;
+                console.warn('[n8n-chat] non-2xx response', {
+                    status: response.status,
+                    attempt,
+                    retrying: shouldRetry
+                });
+                if (shouldRetry) {
+                    continue;
+                }
+                return null;
+            }
+            if (!data) {
+                console.warn('[n8n-chat] invalid json response', { attempt });
+                return null;
+            }
+
+            const replyText = String(data.reply_text || '').trim();
+            if (!replyText) {
+                console.warn('[n8n-chat] empty reply_text', { attempt });
+                return null;
+            }
+
+            return {
+                replyText,
+                needsHuman: Boolean(data.needs_human),
+                handoffReason: String(data.handoff_reason || '').trim(),
+                optoutRequested: Boolean(data.optout_requested)
+            };
+        } catch (error) {
+            const isAbort = String(error?.name || '').toLowerCase() === 'aborterror';
+            const shouldRetry = attempt < MAX_ATTEMPTS;
+            console.warn('[n8n-chat] webhook call failed', {
+                reason: isAbort ? 'timeout' : 'network_error',
+                message: error?.message || String(error),
+                attempt,
+                retrying: shouldRetry
+            });
+            if (!shouldRetry) {
+                return null;
+            }
+        } finally {
+            clearTimeout(timeout);
         }
-
-        const replyText = String(data.reply_text || '').trim();
-        if (!replyText) {
-            return null;
-        }
-
-        return {
-            replyText,
-            needsHuman: Boolean(data.needs_human),
-            handoffReason: String(data.handoff_reason || '').trim(),
-            optoutRequested: Boolean(data.optout_requested)
-        };
-    } catch (error) {
-        console.warn('[n8n-chat] error calling webhook:', error?.message || error);
-        return null;
-    } finally {
-        clearTimeout(timeout);
     }
+
+    return null;
 }
 
 function isPhaticAckMessage(text = '') {
@@ -1910,7 +1938,7 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
         if (knownVehicles.length > 0) {
             reply = `Perfecto. Ya tengo registrado tu vehiculo (${knownVehicleSummary}). Si quieres, te contacta un ejecutivo en 15-30 min para orientarte mejor.`;
         } else {
-            reply = 'Perfecto. Para avanzar, dime: Marca, Modelo, Ano y Comuna.';
+            reply = 'Hola, gracias por tu interes en consignar con Queirolo Autos. Analizamos mercado, sugerimos precio y gestionamos la venta sin arriendo mensual y con seguro incluido. Si quieres, te contacto un ejecutivo en 15-30 min para orientarte mejor.';
         }
     } else if (upper === '2' || upper.includes('INFO')) {
         reply = 'Genial. Te cuento: consignamos, publicamos y gestionamos todo. Quieres que te llame un ejecutivo? (SI/NO)';
