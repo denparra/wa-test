@@ -175,6 +175,43 @@ function isPhaticAckMessage(text = '') {
     return /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(normalized);
 }
 
+function getActiveHandoffState(phone = '') {
+    if (!phone) {
+        return null;
+    }
+    const state = recentHandoffByPhone.get(phone);
+    if (!state) {
+        return null;
+    }
+    if ((Date.now() - Number(state.handoffAt || 0)) > HANDOFF_ACK_WINDOW_MS) {
+        recentHandoffByPhone.delete(phone);
+        return null;
+    }
+    return state;
+}
+
+function markHandoffStarted(phone = '') {
+    if (!phone) {
+        return;
+    }
+    recentHandoffByPhone.set(phone, {
+        handoffAt: Date.now(),
+        ackCount: 0,
+        lastAckAt: 0
+    });
+}
+
+function incrementHandoffAck(phone = '') {
+    const state = getActiveHandoffState(phone);
+    if (!state) {
+        return 0;
+    }
+    state.ackCount = Number(state.ackCount || 0) + 1;
+    state.lastAckAt = Date.now();
+    recentHandoffByPhone.set(phone, state);
+    return state.ackCount;
+}
+
 function normalizeScheduledAt(value) {
     if (!value) {
         return null;
@@ -1577,46 +1614,56 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
 
     // Si no es BAJA, intentamos respuesta IA via n8n (modo webhook bridge).
     if (!isBaja) {
-        const lastHandoffAt = phone ? Number(recentHandoffByPhone.get(phone) || 0) : 0;
-        const handoffWindowActive = lastHandoffAt > 0 && (Date.now() - lastHandoffAt) < HANDOFF_ACK_WINDOW_MS;
-        if (handoffWindowActive && isPhaticAckMessage(body)) {
-            reply = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+        const handoffState = phone ? getActiveHandoffState(phone) : null;
+        const isPhaticAck = isPhaticAckMessage(body);
+        let bypassAiForAck = false;
+
+        if (handoffState && isPhaticAck) {
+            const ackCount = incrementHandoffAck(phone);
+            if (ackCount === 1) {
+                reply = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+            } else if (ackCount === 2) {
+                reply = 'Listo 👍';
+            } else {
+                reply = '';
+            }
+            bypassAiForAck = true;
         }
 
-        const aiResult = await getN8nChatReply({
-            source: 'twilio',
-            phone,
-            message_text: body,
-            message_sid: req.body.MessageSid || null,
-            received_at: new Date().toISOString(),
-            context: {
-                is_opted_out: phone ? isOptedOut(phone) : false,
-                campaign_id: null
-            }
-        });
-
-        if (aiResult?.replyText && !(handoffWindowActive && isPhaticAckMessage(body))) {
-            reply = aiResult.replyText;
-        }
-
-        if (aiResult?.optoutRequested && phone) {
-            try {
-                insertOptOut(phone, 'user_request_ai');
-                updateContactStatus(phone, 'opted_out');
-                reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
-            } catch (error) {
-                console.warn('Opt-out from AI response failed:', error?.message || error);
-            }
-        }
-
-        if (aiResult?.needsHuman) {
-            if (phone) {
-                recentHandoffByPhone.set(phone, Date.now());
-            }
-            console.log('INBOUND-HANDOFF:', {
-                from: maskPhone(phone),
-                reason: aiResult.handoffReason || 'unspecified'
+        if (!bypassAiForAck) {
+            const aiResult = await getN8nChatReply({
+                source: 'twilio',
+                phone,
+                message_text: body,
+                message_sid: req.body.MessageSid || null,
+                received_at: new Date().toISOString(),
+                context: {
+                    is_opted_out: phone ? isOptedOut(phone) : false,
+                    campaign_id: null
+                }
             });
+
+            if (aiResult?.replyText) {
+                reply = aiResult.replyText;
+            }
+
+            if (aiResult?.optoutRequested && phone) {
+                try {
+                    insertOptOut(phone, 'user_request_ai');
+                    updateContactStatus(phone, 'opted_out');
+                    reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
+                } catch (error) {
+                    console.warn('Opt-out from AI response failed:', error?.message || error);
+                }
+            }
+
+            if (aiResult?.needsHuman) {
+                markHandoffStarted(phone);
+                console.log('INBOUND-HANDOFF:', {
+                    from: maskPhone(phone),
+                    reason: aiResult.handoffReason || 'unspecified'
+                });
+            }
         }
     }
 
@@ -1660,12 +1707,16 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
         isBaja
     });
 
+    const twimlMessage = reply
+        ? `<Message>${escapeXml(reply)}</Message>`
+        : '';
+
     res
         .status(200)
         .type('text/xml')
         .send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>${escapeXml(reply)}</Message>
+  ${twimlMessage}
 </Response>`);
 });
 
