@@ -1,0 +1,73 @@
+{
+    "name": "Handoff coherence baseline",
+    "mode": "twilio_inbound",
+    "baseUrl": "http://localhost:3000",
+    "defaultPhone": "+56911112222",
+    "defaultName": "Dennys QA",
+    "steps": [
+        {
+            "user": "Hola, me interesa consignar mi auto",
+            "expect": {
+                "containsAny": [
+                    "consign",
+                    "ejecutivo",
+                    "contact"
+                ]
+            }
+        },
+        {
+            "user": "si por favor que me contacten",
+            "expect": {
+                "containsAny": [
+                    "quedaste derivado",
+                    "te contactamos en 15-30"
+                ],
+                "notContainsAny": [
+                    "quieres que te contacte",
+                    "quieres que te contacten"
+                ]
+            }
+        },
+        {
+            "user": "si, mi correo es qa@example.com",
+            "expect": {
+                "notContainsAny": [
+                    "quieres que te contacte",
+                    "si quieres, te contacta un ejecutivo"
+                ]
+            }
+        },
+        {
+            "user": "ok gracias",
+            "expect": {
+                "containsAny": [
+                    "quedaste derivado",
+                    "listo"
+                ],
+                "notContainsAny": [
+                    "quieres que te contacte",
+                    "quieres que te contacten",
+                    "si quieres, te contacta un ejecutivo"
+                ]
+            }
+        }
+    ],
+    "conversationRules": [
+        {
+            "type": "forbid_after_trigger",
+            "triggerContains": "quedaste derivado",
+            "forbiddenContainsAny": [
+                "quieres que te contacte",
+                "quieres que te contacten",
+                "si quieres, te contacta un ejecutivo",
+                "te contacto un ejecutivo"
+            ]
+        },
+        {
+            "type": "max_substring_occurrences",
+            "source": "assistant",
+            "substring": "quieres que te contacte",
+            "max": 1
+        }
+    ]
+}

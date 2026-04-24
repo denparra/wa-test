@@ -1,0 +1,69 @@
+{
+    "name": "Handoff coherence (n8n direct)",
+    "mode": "n8n_webhook",
+    "defaultPhone": "+56911112222",
+    "defaultName": "Dennys QA",
+    "steps": [
+        {
+            "user": "Hola, me interesa consignar mi auto",
+            "expect": {
+                "containsAny": [
+                    "consign",
+                    "ejecutivo",
+                    "contact"
+                ]
+            }
+        },
+        {
+            "user": "si por favor que me contacten",
+            "context": {
+                "handoff_offer_pending": true
+            },
+            "expect": {
+                "containsAny": [
+                    "quedaste derivado",
+                    "te contactamos en 15-30"
+                ]
+            }
+        },
+        {
+            "user": "si, mi correo es qa@example.com",
+            "context": {
+                "handoff_active": true
+            },
+            "expect": {
+                "notContainsAny": [
+                    "quieres que te contacte",
+                    "si quieres, te contacta un ejecutivo"
+                ]
+            }
+        },
+        {
+            "user": "ok gracias",
+            "context": {
+                "handoff_active": true
+            },
+            "expect": {
+                "containsAny": [
+                    "quedaste derivado",
+                    "listo"
+                ],
+                "notContainsAny": [
+                    "quieres que te contacte",
+                    "si quieres, te contacta un ejecutivo"
+                ]
+            }
+        }
+    ],
+    "conversationRules": [
+        {
+            "type": "forbid_after_trigger",
+            "triggerContains": "quedaste derivado",
+            "forbiddenContainsAny": [
+                "quieres que te contacte",
+                "quieres que te contacten",
+                "si quieres, te contacta un ejecutivo"
+            ]
+        }
+    ]
+}

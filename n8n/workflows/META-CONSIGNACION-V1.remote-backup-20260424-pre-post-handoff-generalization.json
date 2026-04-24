@@ -1,0 +1,2407 @@
+{
+  "updatedAt": "2026-04-24T21:59:18.963Z",
+  "createdAt": "2026-04-23T23:44:23.790Z",
+  "id": "PI8uZo5omcN3576y",
+  "name": "META-CONSIGNACION-V1",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wa-test-twilio-inbound-ai-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        -576
+      ],
+      "id": "3ebc687a-3cbd-4f19-84ee-05a4229f59e4",
+      "name": "Inbound desde wa-test",
+      "webhookId": "dee3ab12-6896-4614-8414-d72d886ce09a"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "wa_id",
+              "value": "={{ $json.phone ?? $json.wa_id ?? $json.contacts?.[0]?.wa_id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "message_text",
+              "value": "={{ $json.message_text ?? $json.body ?? $json.messages?.[0]?.text?.body ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "raw_input",
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "a4",
+              "name": "brand_trajectory",
+              "value": "Empresa familiar con mas de 60 anos de trayectoria",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "brand_website",
+              "value": "https://queirolo.cl",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "brand_whatsapp",
+              "value": "https://wa.me/56975400946",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "brand_location_text",
+              "value": "Av. Las Condes 12461, Local 4A, Las Condes, Santiago.",
+              "type": "string"
+            },
+            {
+              "id": "a7b",
+              "name": "brand_location_link",
+              "value": "https://goo.gl/maps/ruBtgmHFWtXeZBH47",
+              "type": "string"
+            },
+            {
+              "id": "a8",
+              "name": "kb_service",
+              "value": "Consignacion integral: analizamos mercado, sugerimos precio, publicamos en portales, atendemos interesados, negociamos y cerramos legalmente.",
+              "type": "string"
+            },
+            {
+              "id": "a9",
+              "name": "kb_costs",
+              "value": "Comision referencial: sobre $10.000.000 es 5% + IVA; hasta $10.000.000 es $500.000 + IVA. Retiro voluntario sin venta: $75.000.",
+              "type": "string"
+            },
+            {
+              "id": "a10",
+              "name": "kb_times",
+              "value": "No hay plazo fijo de venta. Depende de estado, precio y mercado. Reportes de seguimiento cada 7-10 dias.",
+              "type": "string"
+            },
+            {
+              "id": "a11",
+              "name": "kb_trust",
+              "value": "Empresa familiar con mas de 60 anos. Showroom seguro, validacion de identidad/fondos y gestion legal del cierre.",
+              "type": "string"
+            },
+            {
+              "id": "a12",
+              "name": "kb_special_cases",
+              "value": "Casos especiales: prenda, multas complejas, limitaciones y reclamos se derivan a ejecutivo.",
+              "type": "string"
+            },
+            {
+              "id": "a13",
+              "name": "kb_advantages",
+              "value": "Sin arriendo mensual (diferenciador clave vs competencia). Seguro total incluido (cubre dano y robo). Publicacion simultanea en ChileAutos, MercadoLibre, FullMotor, queirolo.cl y redes sociales. Pago al cliente en 5-7 dias habiles tras cierre. Comprador puede pagar con efectivo, credito automotriz, tarjeta o auto en parte de pago. Showroom nivel -3, vigilancia 24/7, acceso restringido.",
+              "type": "string"
+            },
+            {
+              "id": "a14",
+              "name": "kb_process",
+              "value": "1) Contacto inicial y datos del auto. 2) Analisis de mercado y precio recomendado enviado por correo. 3) Revision legal y mecanica. 4) Recepcion del vehiculo y firma contrato. 5) Publicacion en multiples portales. 6) Gestion comercial de interesados y pruebas controladas. 7) Confirmacion de oferta con el dueno. 8) Cierre, pago (5-7 dias habiles) y tramites legales completos.",
+              "type": "string"
+            },
+            {
+              "id": "a15",
+              "name": "notify_phone",
+              "value": "+56975400946",
+              "type": "string"
+            },
+            {
+              "id": "a16",
+              "name": "message_type",
+              "value": "={{ $json.message_type ?? $json.messages?.[0]?.type ?? 'text' }}",
+              "type": "string"
+            },
+            {
+              "id": "a_notify_email",
+              "name": "notify_email",
+              "value": "infoautorecente@gmail.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1152,
+        -400
+      ],
+      "id": "cae49d15-30c3-4736-a8d3-30ca53cbb031",
+      "name": "Normalizar Entrada"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.message_text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -848,
+        -400
+      ],
+      "id": "569df5d4-9220-41b5-9b81-45e7ead15ad5",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ \"CONTEXTO DE MARCA (usar solo estos datos):\\n- Trayectoria: \" + ($json.brand_trajectory ?? \"\") + \"\\n- Web: \" + ($json.brand_website ?? \"\") + \"\\n- WhatsApp: \" + ($json.brand_whatsapp ?? \"\") + \"\\n- Ubicacion exacta (BRAND_LOCATION_TEXT): \" + ($json.brand_location_text ?? \"\") + \"\\n- Mapa: \" + ($json.brand_location_link ?? \"\") + \"\\n\\nCONOCIMIENTO OPERATIVO:\\n- Servicio: \" + ($json.kb_service ?? \"\") + \"\\n- Costos: \" + ($json.kb_costs ?? \"\") + \"\\n- Tiempos: \" + ($json.kb_times ?? \"\") + \"\\n- Confianza: \" + ($json.kb_trust ?? \"\") + \"\\n- Casos especiales: \" + ($json.kb_special_cases ?? \"\") + \"\\n\\nVENTAJAS CLAVE:\\n\" + ($json.kb_advantages ?? \"\") + \"\\n\\nPROCESO PASO A PASO:\\n\" + ($json.kb_process ?? \"\") + \"\\n\\nDATOS DEL CLIENTE CONOCIDOS (MEMORIA INCREMENTAL):\\n- Nombre: \" + ($json.memory_key_facts?.customer_name ?? \"sin dato\") + \"\\n- Correo: \" + ($json.memory_key_facts?.customer_email ?? \"sin dato\") + \"\\n- Telefono: \" + ($json.memory_key_facts?.customer_phone ?? \"sin dato\") + \"\\n- Auto: \" + ($json.memory_key_facts?.vehicle_brand_model ?? $json.memory_key_facts?.vehicle_description ?? \"sin dato\") + \"\\n- Ano: \" + ($json.memory_key_facts?.vehicle_year ?? \"sin dato\") + \"\\n- Km: \" + ($json.memory_key_facts?.vehicle_km ?? \"sin dato\") + \"\\n- Link auto: \" + ($json.memory_key_facts?.vehicle_url ?? \"sin dato\") + \"\\n- Intencion: \" + ($json.memory_key_facts?.customer_intent ?? \"sin dato\") + \"\\n- Ultima intencion detectada: \" + ($json.memory_key_facts?.last_user_intent ?? \"sin dato\") + \"\\n- Confianza ultima intencion: \" + ($json.memory_key_facts?.last_user_intent_confidence ?? \"low\") + \"\\n- Ultima respuesta enviada por agente: \" + ($json.memory_key_facts?.last_assistant_output ?? \"sin dato\") + \"\\n- Senal ultimo turno: \" + ($json.memory_key_facts?.last_turn_signal ?? \"regular\") + \"\\n\\nFLAGS CONVERSACION:\\n- Contact state: \" + ($json.memory_key_facts?.contact_state ?? \"new\") + \"\\n- Response style: \" + ($json.memory_key_facts?.response_style ?? \"normal\") + \"\\n- Precision mode: \" + ($json.memory_key_facts?.precision_mode ?? \"off\") + \"\\n- Post close lock: \" + ($json.memory_key_facts?.post_close_lock ?? \"off\") + \"\\n- Tone mode: \" + ($json.memory_key_facts?.tone_mode ?? \"warm\") + \"\\n- User signal: \" + ($json.memory_key_facts?.user_signal ?? \"regular\") + \"\\n\\nESTADO CLIENTE PERSISTENTE:\\n- primer_contacto_at: \" + ($json.memory_key_facts?.primer_contacto_at ?? \"sin dato\") + \"\\n- ultimo_contacto_at: \" + ($json.memory_key_facts?.ultimo_contacto_at ?? \"sin dato\") + \"\\n- correo_de_cierre: \" + (($json.memory_key_facts?.correo_de_cierre ?? false) ? \"true\" : \"false\") + \"\\n- derivado_agente_humano: \" + (($json.memory_key_facts?.derivado_agente_humano ?? false) ? \"true\" : \"false\") + \"\\n\\nHISTORIAL RELEVANTE (SUPABASE):\\n- Resumen previo: \" + ($json.memory_summary ?? \"sin historial\") + \"\\n- Ultima intencion: \" + ($json.memory_last_intent ?? \"sin historial\") + \"\\n- Derivacion previa: \" + ($json.memory_needs_human ? \"si\" : \"no\") + \"\\n\\nETAPA DEL FUNNEL: \" + ($json.memory_key_facts?.funnel_stage ?? \"contacto_inicial\") + \"\\n\\nCONTEXTO CLIENTE:\\n- IS_RETURNING_CLIENT: \" + ($json.is_returning_client ? \"true - cliente que regresa (\" + ($json.days_since_last_contact ?? 0) + \" dias)\" : \"false - primera interaccion o misma sesion\") + \"\\n\\nCONTEXTO TEMPORAL:\\n- Horario: \" + ($json.is_off_hours ? \"FUERA DE HORARIO - acciones humanas seran procesadas el siguiente dia habil\" : \"Dentro de horario de atencion\") + \"\\n\\nMENSAJE DEL CLIENTE:\\n\" + ($json.message_text ?? \"\") }}",
+        "options": {
+          "systemMessage": "Eres el asistente de WhatsApp para respuestas post-campana de Queirolo Autos.\n\nROL\n- Informas de forma clara, calificas interes y derivas a ejecutivo cuando corresponde.\n- No eres insistente ni repetitivo.\n\nOBJETIVO\n- Resolver la duda del cliente en forma breve.\n- Detectar intencion positiva.\n- Pedir correo de forma opcional (util, no obligatorio).\n- Si hay interes real, proponer contacto de ejecutivo en 15-30 minutos.\n\nCONTEXTO CLAVE\n- Ya existe telefono y datos del vehiculo en sistema.\n- No vuelvas a pedir telefono ni datos del auto salvo que falten en contexto.\n- Si memory_key_facts.known_vehicles_count > 0, usa esos vehiculos como datos validos y no pidas Marca/Modelo/Ano/Comuna.\n\nESTILO\n- Espanol chileno neutral.\n- 1 a 3 lineas por respuesta.\n- Maximo 1 emoji por mensaje.\n- Primero responde la pregunta del cliente, luego propone siguiente paso.\n\nREGLAS DE NEGOCIO\n- Si el cliente pide BAJA/STOP, marca intencion de opt-out y responde con confirmacion breve.\n- El opt-out final lo define wa-test; no contradigas esa regla.\n- Si cliente pide humano, caso sensible, reclamo o interes alto, activa derivacion.\n\nDERIVACION Y PERSUASION SUAVE\n- Antes de derivar, idealmente entrega 1 respuesta de valor y luego CTA suave.\n- CTA recomendado: \"Si quieres, te contacta un ejecutivo en 15-30 min para orientarte mejor\".\n- Si el cliente acepta, confirma derivacion en una linea.\n- Aceptaciones como \"si\", \"ok\", \"dale\", \"quiero\" o \"contactenme\" tras CTA cuentan como confirmacion.\n- Frases compuestas como \"ok perfecto\", \"ok gracias\", \"si perfecto\" o \"dale perfecto\" tambien cuentan como confirmacion tras CTA.\n- Si awaiting_handoff_confirmation=true y el cliente responde con aceptacion breve o phatica (incluyendo escritura informal), interpretalo como confirmacion y deriva.\n- Si raw_input.context.handoff_offer_pending=true, trata la respuesta breve positiva como confirmacion de derivacion.\n- Si el cliente pide contacto humano directo (\"que me contacten\", \"llamenme\", \"contactame\"), deriva aunque falte contexto previo.\n- Tras aceptar derivacion, NO vuelvas a preguntar por correo antes de confirmar la derivacion.\n- Si hay duda real, haz una sola pregunta corta para confirmar; no repitas el CTA largo.\n\nNO REPETICION DESPUES DE DERIVAR\n- Si memory_key_facts.derivado_agente_humano = true, NO vuelvas a ofrecer ejecutivo.\n- Si despues de derivar el cliente responde \"gracias\", \"ok\", \"dale\", \"perfecto\" o similar, responde solo cierre breve:\n  \"Perfecto, quedaste derivado. Te contactamos en 15-30 min.\".\n- No hagas nuevas preguntas de cierre en ese estado.\n\nCORREO\n- Puedes solicitar correo como opcion para enviar resumen.\n- No bloquear derivacion por falta de correo.\n- Si el cliente no quiere dar correo, continua y deriva igual cuando aplique.\n\nSALIDA ESPERADA\n- Entrega texto final en output.\n- Cuando corresponda, marca needs_human=true y handoff_reason claro."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -288,
+        592
+      ],
+      "id": "6e5588d5-5663-41f2-b83c-e53f7debe5b2",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -480,
+        752
+      ],
+      "id": "1aedb946-3135-4cd5-9aaa-68020aee1e39",
+      "name": "n8n agent whatsapp",
+      "credentials": {
+        "openAiApi": {
+          "id": "5bGPqs4NaXMpr3zi",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst waId = String(item.wa_id || 'unknown');\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0,8) + '-' + raw.slice(8,12) + '-' + raw.slice(12,16) + '-' + raw.slice(16,20) + '-' + raw.slice(20,32);\nreturn [{ json: { ...item, customer_id: customerId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        -688
+      ],
+      "id": "76ef7de6-2362-48f1-9bdd-a8dd54841ac1",
+      "name": "Generar Customer ID"
+    },
+    {
+      "parameters": {
+        "tableId": "customers",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "id",
+              "fieldValue": "={{ $json.customer_id }}"
+            },
+            {
+              "fieldId": "wa_id",
+              "fieldValue": "={{ $json.wa_id }}"
+            },
+            {
+              "fieldId": "display_name",
+              "fieldValue": "={{ $json.raw_input?.body?.name ?? \"\" }}"
+            },
+            {
+              "fieldId": "last_seen_at",
+              "fieldValue": "={{ $now }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -512
+      ],
+      "id": "ab67931d-ea61-411d-8b52-7b9334a8f89f",
+      "name": "Supabase Crear Cliente",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "tableId": "conversation_messages",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id",
+              "fieldValue": "={{ $(\"Generar Customer ID\").item.json.customer_id }}"
+            },
+            {
+              "fieldId": "direction",
+              "fieldValue": "inbound"
+            },
+            {
+              "fieldId": "role",
+              "fieldValue": "user"
+            },
+            {
+              "fieldId": "message_text",
+              "fieldValue": "={{ $json.message_text }}"
+            },
+            {
+              "fieldId": "message_type",
+              "fieldValue": "text"
+            },
+            {
+              "fieldId": "raw_payload",
+              "fieldValue": "={{ JSON.stringify($json.raw_input ?? {}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -720
+      ],
+      "id": "eafce481-e0e5-43f1-accf-b3cbed4db941",
+      "name": "Supabase Guardar Inbound",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = $input.first().json;\nconst waId = $('Normalizar Entrada').item.json.wa_id;\nconst rawInput = $('Normalizar Entrada').item.json.raw_input ?? {};\nconst messageText = $('Normalizar Entrada').item.json.message_text ?? '';\nconst extractedNode = $('Extraer Datos Vitales').item.json;\nconst extractedFacts = extractedNode.extracted_facts ?? {};\nconst resetNotifyRequested = Boolean(extractedNode.reset_notify_requested);\nconst securityFlags = extractedNode.security_flags ?? {};\n\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0, 8) + '-' + raw.slice(8, 12) + '-' + raw.slice(12, 16) + '-' + raw.slice(16, 20) + '-' + raw.slice(20, 32);\n\nreturn [{\n  json: {\n    wa_id: waId,\n    customer_id: customerId,\n    output: out.output,\n    message_text: messageText,\n    raw_input: rawInput,\n    needs_human: Boolean(out.needs_human),\n    handoff_reason: String(out.handoff_reason || ''),\n    optout_requested: Boolean(out.optout_requested),\n    extracted_facts: extractedFacts,\n    memory_key_facts: out.memory_key_facts ?? {},\n    reset_notify_requested: resetNotifyRequested,\n    security_flags: securityFlags\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -64
+      ],
+      "id": "75115521-5eea-4c96-8cff-39246a1332b3",
+      "name": "Preparar Outbound Persistencia"
+    },
+    {
+      "parameters": {
+        "tableId": "conversation_messages",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id",
+              "fieldValue": "={{ $json.customer_id }}"
+            },
+            {
+              "fieldId": "direction",
+              "fieldValue": "outbound"
+            },
+            {
+              "fieldId": "role",
+              "fieldValue": "assistant"
+            },
+            {
+              "fieldId": "message_text",
+              "fieldValue": "={{ $json.output }}"
+            },
+            {
+              "fieldId": "message_type",
+              "fieldValue": "text"
+            },
+            {
+              "fieldId": "raw_payload",
+              "fieldValue": "={{ JSON.stringify({ output: $json.output, needs_human: $json.needs_human, handoff_reason: $json.handoff_reason }) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        464,
+        -48
+      ],
+      "id": "416f15b0-7386-4d33-8b1a-73a7b558f529",
+      "name": "Supabase Guardar Outbound",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "tableId": "customer_memory",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id",
+              "fieldValue": "={{ $json.customer_id }}"
+            },
+            {
+              "fieldId": "name",
+              "fieldValue": "={{ $json.memory_name ?? \"\" }}"
+            },
+            {
+              "fieldId": "context_summary",
+              "fieldValue": "={{ $json.output }}"
+            },
+            {
+              "fieldId": "key_facts",
+              "fieldValue": "={{ $json.memory_key_facts ?? {} }}"
+            },
+            {
+              "fieldId": "last_intent",
+              "fieldValue": "={{ $json.memory_last_intent ?? $json.message_text }}"
+            },
+            {
+              "fieldId": "needs_human",
+              "fieldValue": "={{ $json.needs_human ? true : false }}"
+            },
+            {
+              "fieldId": "memory_version",
+              "fieldValue": "2"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        256,
+        176
+      ],
+      "id": "326f19ab-deb8-43f1-814c-7bae380b3df1",
+      "name": "Supabase Crear Memoria",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "customer_memory",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customer_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Preparar Outbound Persistencia').item.json.customer_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "name",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_name ?? \"\" }}"
+            },
+            {
+              "fieldId": "context_summary",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.output }}"
+            },
+            {
+              "fieldId": "key_facts",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_key_facts ?? {} }}"
+            },
+            {
+              "fieldId": "last_intent",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_last_intent ?? $(\"Fusionar Memoria Incremental\").item.json.message_text }}"
+            },
+            {
+              "fieldId": "needs_human",
+              "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.needs_human ? true : false }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        480,
+        176
+      ],
+      "id": "4d75ed10-1f16-4d42-9bd9-bf1a2d76aada",
+      "name": "Supabase Actualizar Memoria",
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply_text: $json.output ?? '', needs_human: !!$json.needs_human, handoff_reason: $json.handoff_reason ?? '', optout_requested: !!$json.optout_requested, notify_agent: !!$json.needs_human, agent_summary: $json.message_text ? String($json.message_text).slice(0, 160) : '' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        496
+      ],
+      "id": "7a9a0c73-7715-494f-8f7b-f0cda1f0c5ab",
+      "name": "Responder HTTP"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst textRaw = String(item.message_text || '');\nconst textNorm = textRaw\n  .toLowerCase()\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\nconst security = item.security_flags || {};\nconst memoryFacts = item.memory_key_facts || {};\nconst rawContext = item.raw_input?.context || {};\n\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\n\nconst handoffStatus = String(memoryFacts.handoff_status || '').toLowerCase().trim();\nconst suppressUntilRaw = String(memoryFacts.suppress_executive_offer_until || '').trim();\nconst suppressUntilMs = suppressUntilRaw ? new Date(suppressUntilRaw).getTime() : 0;\nconst suppressActive = suppressUntilMs > 0 && Date.now() < suppressUntilMs;\nconst derivedAlready = parseBool(memoryFacts.derivado_agente_humano || memoryFacts.is_human_handoff)\n  || handoffStatus === 'confirmed'\n  || handoffStatus === 'closed'\n  || suppressActive\n  || parseBool(rawContext.handoff_active);\nconst awaitingHandoffConfirmation = parseBool(memoryFacts.awaiting_handoff_confirmation);\nconst pendingOfferFromServer = parseBool(rawContext.handoff_offer_pending);\nconst lastAssistantOutput = String(memoryFacts.last_assistant_output || '').trim();\nconst lastAssistantNorm = lastAssistantOutput\n  .toLowerCase()\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\nconst tokenCount = textNorm ? textNorm.split(' ').filter(Boolean).length : 0;\nconst hasQuestion = /[?¿]/.test(textRaw) || /\\b(como|que|cual|cuando|donde|cuanto|por que|podrias|puedes)\\b/.test(textNorm);\nconst isVeryShort = tokenCount > 0 && tokenCount <= 4;\nconst phaticFromExtractor = Boolean(security.is_phatic_ack);\n\nconst hasHumanNegation = /\\b(no quiero|no me contacten|no me llamen|sin ejecutivo|sin asesor|no gracias)\\b/.test(textNorm);\nconst explicitHuman = /\\b(humano|persona|ejecutivo|asesor|persona real|hablar con alguien|necesito hablar|quiero hablar con)\\b/.test(textNorm);\nconst legalSensitive = /\\b(prenda|deuda prendaria|limitacion de dominio|embargo|gravamen|perdida total|multa|multas|reclamo|queja|molesto|mala atencion|denuncia|demanda|estafa)\\b/.test(textNorm);\nconst affirmative = /^(si|sii|ok|oki|okey|dale|de acuerdo|perfecto|listo|quiero|me interesa)$/.test(textNorm)\n  || /\\b(si|sii|ok|dale|quiero|contactenme|contacten me|me contacten|que me contacten|que me llame|quiero que me contacten)\\b/.test(textNorm);\nconst compoundAffirmative = /^(ok|si|sii|dale|de acuerdo)\\s+(perfecto|gracias|dale|listo)$/.test(textNorm)\n  || /^(perfecto|listo)\\s+(gracias|ok)$/.test(textNorm);\nconst phaticAck = /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(textNorm);\nconst softPositive = /\\b(por favor|porfa|okey|oki|oka|vale|ya)\\b/.test(textNorm);\nconst handoffActionIntent = /\\b(enviame|enviame|mandame|manda me|envia me|enviar|mandar|derivame|deriva me|contactame|contacta me|llamame|llama me|pasame con ejecutivo|pasame con asesor|quiero que me contacten|si espero|ok espero|oka espero)\\b/.test(textNorm);\nconst explicitContactRequest = /\\b(que me contacten|me contacten|contactame|contacta me|llamame|llama me|quiero que me contacten|quiero hablar con ejecutivo|quiero hablar con asesor|me llamen|que me llamen)\\b/.test(textNorm);\nconst lastAssistantHadCta = /\\b(ejecutivo|asesor)\\b/.test(lastAssistantNorm)\n  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);\nconst handoffContextActive = awaitingHandoffConfirmation || lastAssistantHadCta || pendingOfferFromServer;\nconst contextualAck = handoffContextActive\n  && !hasHumanNegation\n  && !hasQuestion\n  && isVeryShort\n  && (phaticFromExtractor || phaticAck || softPositive);\n\nlet reason = '';\nlet handoffOutput = '';\nlet needsHuman = false;\n\nif (security.is_prompt_injection) {\n  reason = 'security_prompt_injection';\n  handoffOutput = 'Por seguridad, solo te puedo ayudar con informacion de consignacion. Si quieres, te orienta un ejecutivo en 15-30 min.';\n} else if (security.is_spam_like) {\n  reason = 'security_spam_guard';\n  handoffOutput = 'Recibi mucha informacion en un solo mensaje. Si quieres, te contacta un ejecutivo en 15-30 min para verlo contigo.';\n} else if (derivedAlready && (phaticAck || phaticFromExtractor || (isVeryShort && !hasQuestion && !hasHumanNegation))) {\n  reason = 'post_handoff_ack';\n  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n} else if (!hasHumanNegation && (explicitHuman || explicitContactRequest)) {\n  reason = 'solicitud_humano';\n  needsHuman = true;\n  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n} else if (legalSensitive) {\n  reason = 'caso_sensible';\n  needsHuman = true;\n  handoffOutput = 'Perfecto, te puedo derivar con un ejecutivo para revisarlo bien. Te contactamos en 15-30 min.';\n} else if (!hasHumanNegation && handoffContextActive && (affirmative || compoundAffirmative || contextualAck || handoffActionIntent)) {\n  reason = 'confirmacion_handoff';\n  needsHuman = true;\n  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n}\n\nreturn [{\n  json: {\n    ...item,\n    needs_human: Boolean(needsHuman),\n    handoff_reason: reason,\n    handoff_output: handoffOutput\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        -368
+      ],
+      "id": "55272a25-e74a-41da-a9ed-0dc178b6b59e",
+      "name": "Detectar Handoff"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "h1",
+              "leftValue": "={{ $json.handoff_output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        -368
+      ],
+      "id": "2952c98b-e59e-45e2-aa76-9837902ace58",
+      "name": "If Handoff Inmediato"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "o1",
+              "name": "output",
+              "value": "={{ $json.handoff_output }}",
+              "type": "string"
+            },
+            {
+              "id": "o2",
+              "name": "needs_human",
+              "value": "={{ $json.needs_human ? true : false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "o3",
+              "name": "handoff_reason",
+              "value": "={{ $json.handoff_reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        -384
+      ],
+      "id": "64a2f1fd-c871-4200-aef0-57034f38ef11",
+      "name": "Preparar Respuesta Handoff"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst waId = String(item.wa_id || 'unknown');\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0,8) + '-' + raw.slice(8,12) + '-' + raw.slice(12,16) + '-' + raw.slice(16,20) + '-' + raw.slice(20,32);\nreturn [{ json: { ...item, customer_id: customerId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -16
+      ],
+      "id": "e379be03-a3a5-4aca-aaa0-c5b0d7b19738",
+      "name": "Preparar Contexto Memoria Persistente"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "customer_memory",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customer_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.customer_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        128
+      ],
+      "id": "d6d9c42a-f482-4253-8b01-138892aa4208",
+      "name": "Supabase Leer Memoria Contexto",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const live = $('Preparar Contexto Memoria Persistente').item.json;\nconst mem = $input.first().json || {};\n\nlet keyFacts = {};\nif (mem.key_facts && typeof mem.key_facts === 'object') {\n  keyFacts = mem.key_facts;\n} else if (typeof mem.key_facts === 'string') {\n  try {\n    keyFacts = JSON.parse(mem.key_facts);\n  } catch (e) {\n    keyFacts = {};\n  }\n}\n\nconst currentFacts = live.extracted_facts || {};\nconst knownVehicles = Array.isArray(live.raw_input?.context?.known_vehicles)\n  ? live.raw_input.context.known_vehicles\n      .map((v) => {\n        const make = String(v?.make || '').trim();\n        const model = String(v?.model || '').trim();\n        const year = Number(v?.year || 0);\n        const link = String(v?.link || '').trim();\n        if (!make && !model && !year) return null;\n        return {\n          make,\n          model,\n          year: Number.isFinite(year) && year > 0 ? year : null,\n          link\n        };\n      })\n      .filter(Boolean)\n  : [];\n\nif (knownVehicles.length > 0) {\n  const first = knownVehicles[0];\n  if (!currentFacts.vehicle_brand_model) {\n    currentFacts.vehicle_brand_model = [first.make, first.model].filter(Boolean).join(' ').trim();\n  }\n  if (!currentFacts.vehicle_year && first.year) {\n    currentFacts.vehicle_year = String(first.year);\n  }\n  currentFacts.known_vehicles = knownVehicles;\n  currentFacts.known_vehicles_count = knownVehicles.length;\n  const knownSummary = knownVehicles\n    .map((v) => [v.make, v.model, v.year ? String(v.year) : ''].filter(Boolean).join(' ').trim())\n    .filter(Boolean)\n    .join(' | ');\n  if (knownSummary) {\n    currentFacts.known_vehicles_summary = knownSummary;\n  }\n}\n\nfor (const [key, value] of Object.entries(currentFacts)) {\n  if (value !== null && value !== undefined && String(value).trim() !== '') {\n    keyFacts[key] = typeof value === 'string' ? value.trim() : value;\n  }\n}\n\nconst nowIso = new Date().toISOString();\nconst nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;\n\nconst firstSeenBase = keyFacts.primer_contacto_at || keyFacts.first_contact_at || mem.created_at || nowIso;\nkeyFacts.primer_contacto_at = String(firstSeenBase);\nkeyFacts.first_contact_at = String(firstSeenBase);\nkeyFacts.ultimo_contacto_at = nowIso;\nkeyFacts.last_contact_at = nowIso;\n\nconst hasEmail = nonEmpty(keyFacts.customer_email);\nconst hasAuto = nonEmpty(keyFacts.vehicle_brand_model)\n  || nonEmpty(keyFacts.vehicle_description)\n  || nonEmpty(keyFacts.vehicle_url)\n  || Number(keyFacts.known_vehicles_count || 0) > 0;\n\nkeyFacts.has_closing_email = hasEmail;\nkeyFacts.has_vehicle_min_data = hasAuto;\nkeyFacts.correo_de_cierre = hasEmail;\n\nlet stage = 'contacto_inicial';\nif (hasEmail && hasAuto) stage = 'listo_para_cierre';\nelse if (hasEmail || hasAuto) stage = 'datos_parciales';\nkeyFacts.funnel_stage = stage;\n\nconst rawSignal = String(keyFacts.user_signal || keyFacts.last_turn_signal || 'regular').toLowerCase();\nlet userSignal = 'regular';\nif (rawSignal.includes('question')) userSignal = 'question';\nelse if (rawSignal.includes('phatic')) userSignal = 'phatic';\nelse if (rawSignal.includes('command')) userSignal = 'command';\nelse if (rawSignal.includes('ambiguous')) userSignal = 'ambiguous';\n\nconst postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';\nconst isPostCloseStrict = postCloseLock === 'on';\n\nlet responseStyle = String(keyFacts.response_style || 'normal');\nif (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';\nelse if (postCloseLock === 'on' && userSignal === 'question') responseStyle = 'concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';\n\nconst precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal') ? 'on' : 'off';\nconst toneMode = postCloseLock === 'on' ? 'direct' : 'warm';\n\nlet contactState = 'active';\nconst hasHistory = Boolean(mem.context_summary || mem.key_facts || mem.last_intent);\nif (!hasHistory && stage === 'contacto_inicial') contactState = 'new';\nelse if (stage === 'listo_para_cierre') contactState = 'closed';\n\nlet daysSinceLastContact = null;\nlet isReturningClient = false;\nconst lastUpdate = mem.updated_at || mem.created_at;\nif (lastUpdate) {\n  const diffMs = Date.now() - new Date(lastUpdate).getTime();\n  daysSinceLastContact = Math.floor(diffMs / (1000 * 60 * 60 * 24));\n  isReturningClient = daysSinceLastContact >= 1;\n  if (isReturningClient && contactState !== 'closed') contactState = 'reengaged';\n}\n\nkeyFacts.contact_state = contactState;\nkeyFacts.response_style = responseStyle;\nkeyFacts.precision_mode = precisionMode;\nkeyFacts.post_close_lock = postCloseLock;\nkeyFacts.is_post_close_strict = isPostCloseStrict;\nkeyFacts.tone_mode = toneMode;\nkeyFacts.user_signal = userSignal;\n\nif (keyFacts.derivado_agente_humano === undefined) keyFacts.derivado_agente_humano = false;\nif (keyFacts.is_human_handoff === undefined) keyFacts.is_human_handoff = false;\n\nkeyFacts.conversation_version = 8;\n\nreturn [{\n  json: {\n    ...live,\n    memory_summary: String(mem.context_summary || ''),\n    memory_last_intent: String(mem.last_intent || ''),\n    memory_needs_human: Boolean(mem.needs_human),\n    memory_key_facts: keyFacts,\n    days_since_last_contact: daysSinceLastContact,\n    is_returning_client: isReturningClient\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        368
+      ],
+      "id": "290d5c44-fd2f-4a97-9c14-b193f7b3d66a",
+      "name": "Unificar Contexto IA"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst messageText = String(item.message_text || '').trim();\nconst text = messageText.toLowerCase();\nconst rawInput = item.raw_input || {};\n\nconst facts = {};\nconst updatedFields = [];\n\nconst normalize = (value) => String(value || '').trim();\nconst addFact = (key, value) => {\n  const cleaned = normalize(value);\n  if (!cleaned) return;\n  facts[key] = cleaned;\n  updatedFields.push(key);\n};\n\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\n\nconst injectionNeedles = [\n  'ignora instrucciones', 'ignora todas las instrucciones', 'actua como', 'system prompt',\n  'developer message', 'prompt interno', 'revela tu prompt', 'muestra tu prompt', 'jailbreak', 'pretende ser'\n];\n\nconst inDomainNeedles = [\n  'consign', 'vender mi auto', 'vender auto', 'vehiculo', 'camioneta', 'marca', 'modelo',\n  'ano', 'año', 'km', 'kilometraje', 'correo', 'ubicacion', 'telefono', 'comision', 'proceso', 'queirolo', 'whatsapp'\n];\n\nconst neutralText = text.replace(/[!?.,]/g, '').trim();\nconst neutralSet = new Set(['hola', 'buenas', 'gracias', 'ok', 'dale', 'perfecto', 'listo', 'si', 'no', 'hi', 'hello', 'lo']);\nconst phaticSet = new Set(['ok', 'oka', 'okey', 'si ok', 'dale', 'gracias', 'listo', 'perfecto', 'lo', 'super', 'genial', 'buenisimo']);\n\nconst tokens = neutralText ? neutralText.split(' ').filter(Boolean) : [];\nconst tokenCount = tokens.length;\nconst allTokensArePhatic = tokens.length > 0 && tokens.every(t => phaticSet.has(t) || neutralSet.has(t));\nconst hasQuestion = /\\?$|\\b(como|que|cual|donde|cuando|por que|pueden|tienen|hacen|cuanto)\\b/i.test(text);\nconst isPhaticAck = tokenCount <= 3 && !hasQuestion && (phaticSet.has(neutralText) || neutralSet.has(neutralText) || allTokensArePhatic);\n\nconst urlCount = (messageText.match(/https?:\\/\\//gi) || []).length;\nconst hasPromptInjection = injectionNeedles.some(n => text.includes(n));\nconst isInDomain = inDomainNeedles.some(n => text.includes(n));\nconst isNeutral = neutralSet.has(neutralText);\nconst isTooLong = messageText.length > 900;\nconst hasRepeatedChars = /(.)\\1{10,}/.test(text);\nconst isSpamLike = isTooLong || hasRepeatedChars || urlCount > 2;\nconst isShortOrAmbiguous = messageText.length <= 18 || /^(hola|buenas|ok|dale|si|no|gracias|como estas|hola\\?|buenas\\?|lo)$/i.test(neutralText);\nconst isOffTopic = messageText.length > 40 && !hasPromptInjection && !isInDomain && !isNeutral && !isShortOrAmbiguous && !hasQuestion;\nconst securityLevel = hasPromptInjection ? 'high' : (isSpamLike ? 'medium' : (isOffTopic ? 'low' : 'none'));\n\nlet userSignal = 'regular';\nif (hasQuestion) userSignal = 'question';\nelse if (isPhaticAck) userSignal = 'phatic';\nelse if (/^(envia|manda|dame|pasame|quiero|necesito|deriva|contacta)\\b/i.test(text)) userSignal = 'command';\nelse if (tokenCount <= 2 && !isInDomain) userSignal = 'ambiguous';\n\nlet responseStyleSuggested = 'normal';\nif (userSignal === 'phatic') responseStyleSuggested = 'ultra_concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyleSuggested = 'concise';\n\nconst precisionModeSuggested = (userSignal === 'phatic' || userSignal === 'question' || tokenCount <= 3) ? 'on' : 'off';\n\nconst waName = normalize(rawInput?.body?.name);\nif (waName) addFact('customer_name', waName);\nconst nameMatch = messageText.match(/(?:me\\s+llamo|soy|mi\\s+nombre\\s+es)\\s+([a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\\s]{2,50})/i);\nif (nameMatch && !facts.customer_name) addFact('customer_name', nameMatch[1].trim());\n\nconst emailTokenMatch = messageText.match(/([^\\s<>\"'`]+@[^\\s<>\"'`]+\\.[^\\s<>\"'`]+)/i);\nif (emailTokenMatch) {\n  let rawEmail = String(emailTokenMatch[1] || '').trim().replace(/[),.;:!?]+$/, '');\n  rawEmail = rawEmail.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const safeEmail = rawEmail.toLowerCase();\n  if (/^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$/i.test(safeEmail)) {\n    addFact('customer_email', safeEmail);\n  }\n}\n\nconst phoneMatch = messageText.match(/(?:\\+?56)?\\s*9\\s*\\d{4}\\s*\\d{4}/);\nif (phoneMatch) addFact('customer_phone', phoneMatch[0].replace(/\\s/g, ''));\n\nconst urlMatch = messageText.match(/https?:\\/\\/[^\\s]+/i);\nif (urlMatch) addFact('vehicle_url', urlMatch[0]);\n\nlet kmNum = 0;\nconst kmWithUnit = messageText.match(/\\b(\\d{2,3}(?:[.,]\\d{3})+|\\d{4,6})\\s*(km|kms|kilometros|kilómetros)\\b/i);\nconst kmMil = messageText.match(/\\b(\\d{2,3})\\s*mil\\b/i);\n\nif (kmWithUnit) {\n  kmNum = parseInt(String(kmWithUnit[1] || '').replace(/[.,]/g, ''), 10);\n} else if (kmMil) {\n  kmNum = parseInt(String(kmMil[1] || '').replace(/[^0-9]/g, ''), 10) * 1000;\n}\n\nconst yearLike = messageText.match(/\\b(19[89]\\d|20[0-2]\\d)\\b/);\nconst yearCandidate = yearLike ? parseInt(yearLike[1], 10) : 0;\n\nif (Number.isFinite(kmNum) && kmNum >= 1000 && kmNum <= 500000 && kmNum !== yearCandidate && !(kmNum >= 1800 && kmNum <= 2099)) {\n  addFact('vehicle_km', kmNum.toLocaleString('es-CL') + ' km');\n}\n\nconst yearMatch = messageText.match(/\\b(19[89]\\d|20[0-2]\\d)\\b/);\nif (yearMatch) addFact('vehicle_year', yearMatch[1]);\n\nconst brands = 'toyota|hyundai|kia|suzuki|chevrolet|nissan|mazda|mitsubishi|ford|volkswagen|vw|honda|subaru|peugeot|citroen|renault|fiat|jeep|bmw|mercedes|audi|volvo|mg|chery|jac|byd|haval|changan|great wall|ssangyong|dodge|ram|mini';\nconst brandRe = new RegExp('\\\\b(' + brands + ')\\\\b\\\\s*([a-zA-Z0-9áéíóúñ\\\\s-]{2,40})?', 'i');\nconst brandMatch = messageText.match(brandRe);\nif (brandMatch) {\n  const brand = String(brandMatch[1] || '').trim();\n  const tail = String(brandMatch[2] || '').trim();\n  const stopWords = new Set(['mi','nombre','soy','me','llamo','correo','email','mail','por','cierto']);\n  const modelTokens = [];\n  for (const token of tail.split(/\\\\s+/).filter(Boolean)) {\n    const low = token.toLowerCase();\n    if (stopWords.has(low) || low.includes('@')) break;\n    if (/(km|kms|kilometros|kilómetros)/i.test(low)) break;\n    if (/^\\\\d{5,6}$/.test(low)) break;\n    if (low === 'con' && modelTokens.length > 0) break;\n    modelTokens.push(token);\n    if (modelTokens.length >= 3) break;\n  }\n\n  const vehicleDesc = [brand, ...modelTokens].join(' ').trim();\n  addFact('vehicle_brand_model', vehicleDesc);\n}\n\nconst vehicleCue = /\\b(auto|vehiculo|camioneta|suv|sedan|hatchback|pickup|van|marca|modelo|ano|año|kilometraje|km|publicado|publicacion)\\b/i;\nif (vehicleCue.test(messageText) && !facts.vehicle_brand_model) addFact('vehicle_description', messageText.slice(0, 250));\n\nlet detectedIntent = '';\nlet detectedIntentConfidence = 'low';\nconst intentConsignar = [/\\bconsign(?:ar|acion|ación)\\b/i, /\\bquiero\\s+(?:consignar|vender|dejar)\\b/i, /\\bvender\\s+(?:mi\\s+)?(?:auto|vehiculo|camioneta)\\b/i, /\\bdejar(?:lo)?\\s+en\\s+consignacion\\b/i];\nconst intentComision = [/\\bcuanto\\s+(?:cobran|cuesta|vale|sale)\\b/i, /\\bcomision\\b/i];\nconst intentUbicacion = [/\\bdonde\\s+estan\\b/i, /\\bubicacion\\b/i, /\\bdireccion\\b/i, /\\bmapa\\b/i];\nconst intentProceso = [/\\bcomo\\s+(?:funciona|es)\\s+(?:la\\s+)?consignacion\\b/i, /\\bpasos\\b/i, /\\bproceso\\b/i];\n\nif (intentConsignar.some(re => re.test(messageText))) {\n  detectedIntent = 'consignar_auto';\n  detectedIntentConfidence = 'high';\n  addFact('customer_intent', 'consignar_auto');\n} else if (intentComision.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_comision';\n  detectedIntentConfidence = 'high';\n} else if (intentUbicacion.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_ubicacion';\n  detectedIntentConfidence = 'medium';\n} else if (intentProceso.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_proceso';\n  detectedIntentConfidence = 'medium';\n}\n\nif (detectedIntent) {\n  addFact('last_user_intent', detectedIntent);\n  addFact('last_user_intent_confidence', detectedIntentConfidence);\n}\n\naddFact('last_turn_signal', userSignal === 'phatic' ? 'phatic_ack' : (hasQuestion ? 'question' : 'regular'));\naddFact('user_signal', userSignal);\naddFact('response_style', responseStyleSuggested);\naddFact('precision_mode', precisionModeSuggested);\n\nconst resetNotify = /\\b(reset\\s*notify|reset\\s*notificacion|reset\\s*notificación|reset\\s*lead\\s*caliente)\\b/i.test(messageText);\nif (resetNotify) {\n  addFact('team_notified', 'false');\n  addFact('team_notified_at', '');\n}\n\nconst comunaContext = /\\b(buscar|retirar|pasar\\s+a\\s+buscar|ir\\s+a\\s+buscar|domicilio|casa|hogar)\\b/i;\nif (comunaContext.test(messageText)) addFact('needs_pickup', 'true');\n\nlet isOffHours = false;\ntry {\n  const now = new Date();\n  const parts = new Intl.DateTimeFormat('en-US', {\n    timeZone: 'America/Santiago',\n    hour: 'numeric',\n    hour12: false,\n    weekday: 'short'\n  }).formatToParts(now);\n  const hour = parseInt(parts.find(p => p.type === 'hour').value);\n  const weekday = parts.find(p => p.type === 'weekday').value;\n  isOffHours = hour < 8 || hour >= 18 || weekday === 'Sat' || weekday === 'Sun';\n} catch (e) {\n  isOffHours = false;\n}\n\nreturn [{\n  json: {\n    ...item,\n    extracted_facts: facts,\n    extracted_fields: updatedFields,\n    is_off_hours: isOffHours,\n    reset_notify_requested: parseBool(facts.team_notified === 'false'),\n    security_flags: {\n      level: securityLevel,\n      is_prompt_injection: hasPromptInjection,\n      is_spam_like: isSpamLike,\n      is_off_topic: isOffTopic,\n      is_in_domain: isInDomain,\n      is_phatic_ack: isPhaticAck,\n      mode: 'soft'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        -240
+      ],
+      "id": "84f8c9e9-9f26-4e67-b183-6f4d23ed1889",
+      "name": "Extraer Datos Vitales"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "customer_memory",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customer_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Preparar Outbound Persistencia\").item.json.customer_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -64
+      ],
+      "id": "63e99d04-5766-4d21-93e3-6043e0c4745d",
+      "name": "Supabase Leer Memoria Persistencia",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "iWAzsxvvGQeYozjL",
+          "name": "Supabase Memory"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = $input.first().json || {};\nconst outbound = $('Preparar Outbound Persistencia').item.json;\n\nconst nowIso = new Date().toISOString();\nconst nowMs = Date.now();\nconst COOLDOWN_MINUTES = 360;\nconst cooldownMs = COOLDOWN_MINUTES * 60 * 1000;\nconst SUPPRESS_EXECUTIVE_HOURS = 24;\nconst suppressExecutiveMs = SUPPRESS_EXECUTIVE_HOURS * 60 * 60 * 1000;\n\nconst nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;\nconst normalizeText = (v) => typeof v === 'string' ? v.trim() : v;\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\nconst normalizeForRepeat = (txt) => String(txt || '').toLowerCase().replace(/[!?.,;:]/g, '').replace(/\\s+/g, ' ').trim();\n\nlet existingFacts = {};\nlet parseStatus = 'ok';\nif (existing.key_facts && typeof existing.key_facts === 'object') {\n  existingFacts = existing.key_facts;\n} else if (typeof existing.key_facts === 'string') {\n  try {\n    existingFacts = JSON.parse(existing.key_facts);\n  } catch (e) {\n    existingFacts = {};\n    parseStatus = 'invalid_json';\n  }\n} else if (existing.key_facts === null || existing.key_facts === undefined) {\n  parseStatus = 'empty';\n}\n\nconst contextFacts = outbound.memory_key_facts && typeof outbound.memory_key_facts === 'object'\n  ? outbound.memory_key_facts\n  : {};\nconst incomingFacts = outbound.extracted_facts || {};\nconst resetNotifyRequested = Boolean(outbound.reset_notify_requested);\nconst knownVehiclesRaw = Array.isArray(outbound.raw_input?.context?.known_vehicles)\n  ? outbound.raw_input.context.known_vehicles\n  : [];\nconst knownVehicles = knownVehiclesRaw\n  .map((v) => {\n    const make = String(v?.make || '').trim();\n    const model = String(v?.model || '').trim();\n    const year = Number(v?.year || 0);\n    const link = String(v?.link || '').trim();\n    if (!make && !model && !year) return null;\n    return {\n      make,\n      model,\n      year: Number.isFinite(year) && year > 0 ? year : null,\n      link\n    };\n  })\n  .filter(Boolean);\n\nconst mergedFacts = { ...existingFacts, ...contextFacts };\nconst updated = [];\n\nfor (const [key, value] of Object.entries(incomingFacts)) {\n  if (nonEmpty(value)) {\n    const normalized = normalizeText(value);\n    if (mergedFacts[key] !== normalized) {\n      mergedFacts[key] = normalized;\n      updated.push(key);\n    }\n  }\n}\n\nif (knownVehicles.length > 0) {\n  mergedFacts.known_vehicles = knownVehicles;\n  mergedFacts.known_vehicles_count = knownVehicles.length;\n  const knownSummary = knownVehicles\n    .map((v) => [v.make, v.model, v.year ? String(v.year) : ''].filter(Boolean).join(' ').trim())\n    .filter(Boolean)\n    .join(' | ');\n  if (knownSummary) {\n    mergedFacts.known_vehicles_summary = knownSummary;\n    updated.push('known_vehicles_summary');\n  }\n\n  const firstKnown = knownVehicles[0];\n  if (!nonEmpty(mergedFacts.vehicle_brand_model)) {\n    mergedFacts.vehicle_brand_model = [firstKnown.make, firstKnown.model].filter(Boolean).join(' ').trim();\n    updated.push('vehicle_brand_model');\n  }\n  if (!nonEmpty(mergedFacts.vehicle_year) && firstKnown.year) {\n    mergedFacts.vehicle_year = String(firstKnown.year);\n    updated.push('vehicle_year');\n  }\n}\n\nif (!nonEmpty(mergedFacts.customer_name)) {\n  const fallbackName = String(outbound.raw_input?.body?.name || '').trim();\n  if (fallbackName) {\n    mergedFacts.customer_name = fallbackName;\n    updated.push('customer_name');\n  }\n}\n\nconst firstSeen = mergedFacts.primer_contacto_at || mergedFacts.first_contact_at || existing.created_at || nowIso;\nmergedFacts.primer_contacto_at = String(firstSeen);\nmergedFacts.first_contact_at = String(firstSeen);\nmergedFacts.ultimo_contacto_at = nowIso;\nmergedFacts.last_contact_at = nowIso;\n\nconst hasEmail = nonEmpty(mergedFacts.customer_email);\nconst hasAuto = nonEmpty(mergedFacts.vehicle_brand_model)\n  || nonEmpty(mergedFacts.vehicle_description)\n  || nonEmpty(mergedFacts.vehicle_url)\n  || Number(mergedFacts.known_vehicles_count || 0) > 0;\n\nmergedFacts.has_closing_email = hasEmail;\nmergedFacts.has_vehicle_min_data = hasAuto;\nmergedFacts.correo_de_cierre = hasEmail;\n\nconst existingHandoffStatus = String(mergedFacts.handoff_status || '').toLowerCase().trim();\nconst existingSuppressUntil = String(mergedFacts.suppress_executive_offer_until || '').trim();\nconst existingSuppressUntilMs = existingSuppressUntil ? new Date(existingSuppressUntil).getTime() : 0;\nconst existingSuppressActive = existingSuppressUntilMs > 0 && nowMs < existingSuppressUntilMs;\nconst handoffActiveContext = Boolean(outbound.raw_input?.context?.handoff_active);\nconst wasDerived = parseBool(mergedFacts.derivado_agente_humano)\n  || existingHandoffStatus === 'confirmed'\n  || existingHandoffStatus === 'closed'\n  || existingSuppressActive\n  || handoffActiveContext;\nconst isHumanThisTurn = Boolean(outbound.needs_human);\nconst isDerived = wasDerived || isHumanThisTurn;\n\nlet stage = 'contacto_inicial';\nif (isDerived) stage = 'derivado';\nelse if (hasEmail && hasAuto) stage = 'listo_para_cierre';\nelse if (hasEmail || hasAuto) stage = 'datos_parciales';\nmergedFacts.funnel_stage = stage;\n\nlet contactState = 'active';\nif (stage === 'listo_para_cierre') contactState = 'closed';\nelse {\n  const lastSeen = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;\n  const daysSince = lastSeen ? Math.floor((nowMs - lastSeen) / 86400000) : 0;\n  if (daysSince >= 1) contactState = 'reengaged';\n}\nif (!existing.created_at && stage === 'contacto_inicial') contactState = 'new';\nmergedFacts.contact_state = contactState;\n\nconst userSignal = String(mergedFacts.user_signal || mergedFacts.last_turn_signal || 'regular');\nconst postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';\nlet responseStyle = String(mergedFacts.response_style || 'normal');\nif (isDerived && (userSignal === 'phatic' || userSignal === 'regular')) responseStyle = 'ultra_concise';\nelse if (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';\nconst precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal' || isDerived) ? 'on' : 'off';\nconst toneMode = isDerived ? 'direct' : (postCloseLock === 'on' ? 'direct' : 'warm');\n\nmergedFacts.post_close_lock = postCloseLock;\nmergedFacts.is_post_close_strict = postCloseLock === 'on';\nmergedFacts.response_style = responseStyle;\nmergedFacts.precision_mode = precisionMode;\nmergedFacts.tone_mode = toneMode;\n\nmergedFacts.derivado_agente_humano = isDerived;\nmergedFacts.is_human_handoff = isDerived;\nif (isHumanThisTurn) {\n  mergedFacts.last_handoff_reason = String(outbound.handoff_reason || 'solicitud_humano');\n  mergedFacts.last_handoff_at = nowIso;\n}\n\nconst outputText = String(outbound.output || '').trim();\nconst outputNorm = outputText.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst offersExecutive = /\\b(ejecutivo|asesor)\\b/.test(outputNorm)\n  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);\nconst confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm)\n  || (/\\bte contacto un ejecutivo\\b/.test(outputNorm) && !/[?¿]/.test(outputText));\n\nconst previousHandoffStatus = String(mergedFacts.handoff_status || 'none').toLowerCase().trim() || 'none';\nlet nextHandoffStatus = previousHandoffStatus;\nif (isHumanThisTurn || confirmsHandoff || isDerived) nextHandoffStatus = 'confirmed';\nelse if (offersExecutive) nextHandoffStatus = 'offered';\nif (resetNotifyRequested) nextHandoffStatus = 'none';\nmergedFacts.handoff_status = nextHandoffStatus;\n\nconst prevSuppressUntil = String(mergedFacts.suppress_executive_offer_until || '').trim();\nlet suppressUntil = prevSuppressUntil;\nif (isHumanThisTurn || confirmsHandoff || isDerived) {\n  suppressUntil = new Date(nowMs + suppressExecutiveMs).toISOString();\n}\nif (resetNotifyRequested) {\n  suppressUntil = '';\n}\nmergedFacts.suppress_executive_offer_until = suppressUntil;\n\nconst suppressUntilTs = suppressUntil ? new Date(suppressUntil).getTime() : 0;\nconst suppressExecutiveActive = suppressUntilTs > 0 && nowMs < suppressUntilTs;\n\nconst awaitingPrev = parseBool(mergedFacts.awaiting_handoff_confirmation);\nlet awaitingNext = awaitingPrev;\nif (isDerived || confirmsHandoff || isHumanThisTurn) awaitingNext = false;\nelse if (offersExecutive) awaitingNext = true;\n\nmergedFacts.awaiting_handoff_confirmation = awaitingNext;\nmergedFacts.last_handoff_offer_at = offersExecutive ? nowIso : (mergedFacts.last_handoff_offer_at || '');\n\nif (outputText) {\n    let effectiveOutput = outputText;\n    const isShortAckSignal = userSignal === 'phatic' || userSignal === 'regular';\n    const capturedEmailThisTurn = updated.includes('customer_email') && nonEmpty(mergedFacts.customer_email);\n    if (isDerived && !isHumanThisTurn && capturedEmailThisTurn) {\n      effectiveOutput = 'Perfecto, ya tengo tu correo. Quedaste derivado. Te contactamos en 15-30 min.';\n    } else if (isDerived && !isHumanThisTurn && (offersExecutive || suppressExecutiveActive || isShortAckSignal)) {\n      effectiveOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n    }\n\n    const prevOutput = String(mergedFacts.last_assistant_output || '').trim();\n    const prevNorm = normalizeForRepeat(prevOutput);\n    const currNorm = normalizeForRepeat(effectiveOutput);\n    const isRepeat = prevNorm && currNorm && (prevNorm === currNorm || prevNorm.includes(currNorm) || currNorm.includes(prevNorm));\n    mergedFacts.assistant_repeat_count = isRepeat ? Number(mergedFacts.assistant_repeat_count || 0) + 1 : 0;\n    if (mergedFacts.assistant_repeat_count >= 2 && !isDerived) {\n      mergedFacts.response_style = 'ultra_concise';\n    }\n    mergedFacts.last_assistant_output = effectiveOutput.slice(0, 500);\n    outbound.output = effectiveOutput;\n}\n\nif (updated.length > 0) {\n  mergedFacts.updated_fields_last_turn = updated;\n  mergedFacts.last_captured_at = nowIso;\n}\n\nif (resetNotifyRequested) {\n  mergedFacts.team_notified = false;\n  mergedFacts.team_notified_at = '';\n  mergedFacts.lead_notify_last_at = '';\n  mergedFacts.lead_notify_cooldown_until = '';\n  mergedFacts.handoff_notified = false;\n  mergedFacts.handoff_notified_at = '';\n}\n\nconst leadNotifyLastAt = String(mergedFacts.lead_notify_last_at || '').trim();\nconst leadNotifyLastMs = leadNotifyLastAt ? new Date(leadNotifyLastAt).getTime() : 0;\nconst cooldownUntilMs = leadNotifyLastMs ? (leadNotifyLastMs + cooldownMs) : 0;\nconst cooldownActive = leadNotifyLastMs > 0 && nowMs < cooldownUntilMs;\n\nconst leadRelevantFields = new Set(['customer_email', 'vehicle_brand_model', 'vehicle_description', 'vehicle_url', 'vehicle_year', 'vehicle_km', 'customer_phone', 'customer_name', 'known_vehicles_summary']);\nconst hasLeadRelevantUpdate = updated.some(f => leadRelevantFields.has(f));\n\nlet shouldNotify = false;\nlet notifyReason = '';\n\nconst handoffNotified = parseBool(mergedFacts.handoff_notified);\nconst teamNotified = parseBool(mergedFacts.team_notified);\n\nif (isHumanThisTurn && !cooldownActive && !handoffNotified) {\n  shouldNotify = true;\n  notifyReason = 'handoff_first_time';\n} else if (stage === 'listo_para_cierre' && !isDerived) {\n  if (cooldownActive) notifyReason = 'cooldown_active';\n  else if (!teamNotified) {\n    shouldNotify = true;\n    notifyReason = 'ready_first_notification';\n  } else if (hasLeadRelevantUpdate) {\n    shouldNotify = true;\n    notifyReason = 'ready_with_new_data';\n  } else notifyReason = 'already_notified_no_change';\n} else if (isDerived) {\n  notifyReason = handoffNotified ? 'handoff_already_notified' : (cooldownActive ? 'cooldown_active' : 'derived_waiting');\n} else {\n  notifyReason = 'stage_not_ready';\n}\n\nif (shouldNotify) {\n  mergedFacts.team_notified = true;\n  mergedFacts.team_notified_at = nowIso;\n  mergedFacts.lead_notify_last_at = nowIso;\n  mergedFacts.lead_notify_cooldown_until = new Date(nowMs + cooldownMs).toISOString();\n  mergedFacts.lead_notify_count = Number(mergedFacts.lead_notify_count || 0) + 1;\n  if (isHumanThisTurn) {\n    mergedFacts.handoff_notified = true;\n    mergedFacts.handoff_notified_at = nowIso;\n  }\n}\n\nconst securityLevel = String(outbound.security_flags?.level || 'none');\nlet responseMode = 'normal';\nif (isHumanThisTurn) responseMode = 'handoff';\nelse if (isDerived && (userSignal === 'phatic' || userSignal === 'regular')) responseMode = 'post_handoff_ack';\nelse if (isDerived) responseMode = 'post_handoff';\nelse if (postCloseLock === 'on' && userSignal === 'phatic') responseMode = 'post_cierre_phatic';\nelse if (postCloseLock === 'on') responseMode = 'post_cierre';\nelse if (securityLevel === 'high' || securityLevel === 'medium') responseMode = 'security_guard';\n\nmergedFacts.last_agent_mode = responseMode;\nmergedFacts.conversation_version = 9;\n\nmergedFacts.notification_debug = {\n  at: nowIso,\n  parse_status: parseStatus,\n  stage,\n  contact_state: mergedFacts.contact_state,\n  response_style: mergedFacts.response_style,\n  precision_mode: mergedFacts.precision_mode,\n  post_close_lock: mergedFacts.post_close_lock,\n  tone_mode: mergedFacts.tone_mode,\n  user_signal: userSignal,\n  response_mode: responseMode,\n  handoff_status: nextHandoffStatus,\n  suppress_executive_active: suppressExecutiveActive,\n  security_level: securityLevel,\n  should_notify: shouldNotify,\n  reason: notifyReason,\n  cooldown_minutes: COOLDOWN_MINUTES,\n  cooldown_active: cooldownActive,\n  has_lead_relevant_update: hasLeadRelevantUpdate,\n  repeat_count: Number(mergedFacts.assistant_repeat_count || 0),\n  is_human_this_turn: isHumanThisTurn,\n  was_derived: wasDerived,\n  is_derived: isDerived\n};\n\nconst memoryName = String(mergedFacts.customer_name || existing.name || '').trim();\nconst memoryLastIntent = String(\n  mergedFacts.last_user_intent\n  || mergedFacts.customer_intent\n  || outbound.message_text\n  || existing.last_intent\n  || ''\n).trim();\n\nreturn [{\n  json: {\n    ...outbound,\n    memory_key_facts: mergedFacts,\n    memory_name: memoryName,\n    memory_last_intent: memoryLastIntent,\n    should_notify: shouldNotify,\n    notify_reason: notifyReason,\n    notify_debug: mergedFacts.notification_debug\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        80
+      ],
+      "id": "cb779be2-b5a1-4fda-a41b-b8e2a0d95454",
+      "name": "Fusionar Memoria Incremental"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst messageType = String(item.message_type || 'unknown');\nconst waId = item.wa_id;\n\nlet output = '';\n\nswitch (messageType) {\n  case 'image':\n  case 'video':\n    output = 'Recibi tu archivo! Por ahora solo puedo leer mensajes de texto. Me escribes los datos del auto que quieres vender? Marca, modelo, ano y kilometraje. Si tienes el link de publicacion, con eso basta.';\n    break;\n  case 'audio':\n    output = 'Recibi tu audio, pero por ahora solo puedo leer mensajes de texto. Me los escribes por favor?';\n    break;\n  case 'document':\n    output = 'Recibi tu documento! Por ahora solo proceso mensajes de texto. Me escribes los datos del auto? Marca, modelo, ano y km.';\n    break;\n  default:\n    output = '';\n}\n\nreturn [{ json: { wa_id: waId, output: output } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        -160
+      ],
+      "id": "62ded8cd-548a-43d4-ad4c-48765353a363",
+      "name": "Responder No-Texto"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ntr1",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -480,
+        -160
+      ],
+      "id": "7a8ed67d-feb8-44c0-9410-bb671b49edec",
+      "name": "If Respuesta No-Texto"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nt1",
+              "name": "output",
+              "value": "={{ $json.output ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "nt2",
+              "name": "needs_human",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "nt3",
+              "name": "handoff_reason",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "nt4",
+              "name": "optout_requested",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -800,
+        176
+      ],
+      "id": "4d9b0d38-2bd2-4867-949c-b8ca4c3546a0",
+      "name": "Preparar Respuesta HTTP No-Texto"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "lc1",
+              "leftValue": "={{ $json.should_notify }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        704,
+        80
+      ],
+      "id": "7b5ae3cf-ce64-4c80-b359-0f4934811a9d",
+      "name": "If Lead Caliente"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst kf = item.memory_key_facts || {};\nconst notifyPhone = $('Normalizar Entrada').item.json.notify_phone || '+56975400946';\nconst notifyEmail = $('Normalizar Entrada').item.json.notify_email || 'infoautorecente@gmail.com';\n\nconst lines = ['*Lead post-campana*', ''];\nif (kf.customer_name) lines.push('Nombre: ' + kf.customer_name);\nif (item.wa_id) lines.push('Tel: ' + item.wa_id);\nif (kf.customer_email) lines.push('Correo: ' + kf.customer_email);\n\nlet knownVehicles = [];\nif (Array.isArray(kf.known_vehicles)) {\n  knownVehicles = kf.known_vehicles;\n} else if (typeof kf.known_vehicles === 'string') {\n  try {\n    const parsed = JSON.parse(kf.known_vehicles);\n    knownVehicles = Array.isArray(parsed) ? parsed : [];\n  } catch (e) {\n    knownVehicles = [];\n  }\n}\n\nif (knownVehicles.length > 0) {\n  lines.push('Vehiculos registrados:');\n  for (const [idx, vehicle] of knownVehicles.entries()) {\n    const label = [String(vehicle?.make || '').trim(), String(vehicle?.model || '').trim(), vehicle?.year ? String(vehicle.year) : '']\n      .filter(Boolean)\n      .join(' ')\n      .trim();\n    if (label) {\n      lines.push((idx + 1) + ') ' + label);\n    }\n  }\n}\n\nif (kf.vehicle_url) {\n  lines.push('Link auto: ' + kf.vehicle_url);\n} else if (kf.vehicle_brand_model || kf.vehicle_description) {\n  lines.push('Auto: ' + (kf.vehicle_brand_model || kf.vehicle_description));\n}\n\nif (kf.customer_intent) lines.push('Intencion: ' + kf.customer_intent);\nif (item.handoff_reason) lines.push('Motivo: ' + item.handoff_reason);\nif (item.message_text) lines.push('Ultimo msg: ' + String(item.message_text).slice(0, 140));\nif (item.notify_reason) lines.push('Trigger: ' + item.notify_reason);\n\nlines.push('');\nlines.push('SLA: 15-30 min');\n\nreturn [{\n  json: {\n    notify_phone: notifyPhone,\n    notify_email: notifyEmail,\n    notification_text: lines.join('\\n')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        80
+      ],
+      "id": "7edfada9-b7d6-4f9a-a35f-a43f851420b1",
+      "name": "Preparar Notificacion Lead"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1071085216087926",
+        "recipientPhoneNumber": "={{ $json.notify_phone }}",
+        "textBody": "={{ $json.notification_text }}",
+        "additionalFields": {},
+        "path": "0226521a-806c-4a70-97f8-22fca7e263f6"
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1168,
+        80
+      ],
+      "id": "f0dbf3dc-2832-4bf5-9a8b-cd10d1cd0805",
+      "name": "Notificar Lead Caliente",
+      "webhookId": "0226521a-806c-4a70-97f8-22fca7e263f6",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "id9ZM5iVMoIoTPzq",
+          "name": "n8n agent"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Normalizar Entrada": {
+      "main": [
+        [
+          {
+            "node": "Extraer Datos Vitales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Generar Customer ID",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detectar Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "n8n agent whatsapp": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Responder HTTP",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar Outbound Persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Customer ID": {
+      "main": [
+        [
+          {
+            "node": "Supabase Crear Cliente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Guardar Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Outbound Persistencia": {
+      "main": [
+        [
+          {
+            "node": "Supabase Leer Memoria Persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Crear Memoria": {
+      "main": [
+        [
+          {
+            "node": "Supabase Actualizar Memoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar Handoff": {
+      "main": [
+        [
+          {
+            "node": "If Handoff Inmediato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Handoff Inmediato": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Contexto Memoria Persistente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Respuesta Handoff": {
+      "main": [
+        [
+          {
+            "node": "Responder HTTP",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar Outbound Persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Contexto Memoria Persistente": {
+      "main": [
+        [
+          {
+            "node": "Supabase Leer Memoria Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Leer Memoria Contexto": {
+      "main": [
+        [
+          {
+            "node": "Unificar Contexto IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unificar Contexto IA": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Datos Vitales": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Leer Memoria Persistencia": {
+      "main": [
+        [
+          {
+            "node": "Fusionar Memoria Incremental",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fusionar Memoria Incremental": {
+      "main": [
+        [
+          {
+            "node": "Supabase Guardar Outbound",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Crear Memoria",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Lead Caliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder No-Texto": {
+      "main": [
+        [
+          {
+            "node": "If Respuesta No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Respuesta No-Texto": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta HTTP No-Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Lead Caliente": {
+      "main": [
+        [
+          {
+            "node": "Preparar Notificacion Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Notificacion Lead": {
+      "main": [
+        [
+          {
+            "node": "Notificar Lead Caliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inbound desde wa-test": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Respuesta HTTP No-Texto": {
+      "main": [
+        [
+          {
+            "node": "Responder HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "dd1a89ac-7a63-405c-b2d4-e7a7ef9760db",
+  "activeVersionId": "dd1a89ac-7a63-405c-b2d4-e7a7ef9760db",
+  "versionCounter": 72,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-23T23:44:23.804Z",
+      "createdAt": "2026-04-23T23:44:23.804Z",
+      "role": "workflow:owner",
+      "workflowId": "PI8uZo5omcN3576y",
+      "projectId": "zmVs25HYuFNIrKdt",
+      "project": {
+        "updatedAt": "2026-01-08T00:47:15.666Z",
+        "createdAt": "2026-01-08T00:45:19.757Z",
+        "id": "zmVs25HYuFNIrKdt",
+        "name": "Dennys parra <infoautorecente@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "8d921d9a-02fe-491e-a2a5-fee248d259f7",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-08T00:45:19.757Z",
+            "createdAt": "2026-01-08T00:45:19.757Z",
+            "userId": "8d921d9a-02fe-491e-a2a5-fee248d259f7",
+            "projectId": "zmVs25HYuFNIrKdt",
+            "user": {
+              "updatedAt": "2026-04-24T14:58:57.000Z",
+              "createdAt": "2026-01-08T00:45:19.186Z",
+              "id": "8d921d9a-02fe-491e-a2a5-fee248d259f7",
+              "email": "infoautorecente@gmail.com",
+              "firstName": "Dennys",
+              "lastName": "parra",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-08T00:48:12.074Z",
+                "personalization_survey_n8n_version": "2.2.4",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "other",
+                "reportedSourceOther": "na"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "sxdmzz6IewJoMm7h",
+                "userActivatedAt": 1769562690462,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1776027307627
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-04-24",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-24T21:59:18.965Z",
+    "createdAt": "2026-04-24T21:59:18.965Z",
+    "versionId": "dd1a89ac-7a63-405c-b2d4-e7a7ef9760db",
+    "workflowId": "PI8uZo5omcN3576y",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "wa-test-twilio-inbound-ai-v2",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -1328,
+          -576
+        ],
+        "id": "3ebc687a-3cbd-4f19-84ee-05a4229f59e4",
+        "name": "Inbound desde wa-test",
+        "webhookId": "dee3ab12-6896-4614-8414-d72d886ce09a"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "a1",
+                "name": "wa_id",
+                "value": "={{ $json.phone ?? $json.wa_id ?? $json.contacts?.[0]?.wa_id ?? '' }}",
+                "type": "string"
+              },
+              {
+                "id": "a2",
+                "name": "message_text",
+                "value": "={{ $json.message_text ?? $json.body ?? $json.messages?.[0]?.text?.body ?? '' }}",
+                "type": "string"
+              },
+              {
+                "id": "a3",
+                "name": "raw_input",
+                "value": "={{ $json }}",
+                "type": "object"
+              },
+              {
+                "id": "a4",
+                "name": "brand_trajectory",
+                "value": "Empresa familiar con mas de 60 anos de trayectoria",
+                "type": "string"
+              },
+              {
+                "id": "a5",
+                "name": "brand_website",
+                "value": "https://queirolo.cl",
+                "type": "string"
+              },
+              {
+                "id": "a6",
+                "name": "brand_whatsapp",
+                "value": "https://wa.me/56975400946",
+                "type": "string"
+              },
+              {
+                "id": "a7",
+                "name": "brand_location_text",
+                "value": "Av. Las Condes 12461, Local 4A, Las Condes, Santiago.",
+                "type": "string"
+              },
+              {
+                "id": "a7b",
+                "name": "brand_location_link",
+                "value": "https://goo.gl/maps/ruBtgmHFWtXeZBH47",
+                "type": "string"
+              },
+              {
+                "id": "a8",
+                "name": "kb_service",
+                "value": "Consignacion integral: analizamos mercado, sugerimos precio, publicamos en portales, atendemos interesados, negociamos y cerramos legalmente.",
+                "type": "string"
+              },
+              {
+                "id": "a9",
+                "name": "kb_costs",
+                "value": "Comision referencial: sobre $10.000.000 es 5% + IVA; hasta $10.000.000 es $500.000 + IVA. Retiro voluntario sin venta: $75.000.",
+                "type": "string"
+              },
+              {
+                "id": "a10",
+                "name": "kb_times",
+                "value": "No hay plazo fijo de venta. Depende de estado, precio y mercado. Reportes de seguimiento cada 7-10 dias.",
+                "type": "string"
+              },
+              {
+                "id": "a11",
+                "name": "kb_trust",
+                "value": "Empresa familiar con mas de 60 anos. Showroom seguro, validacion de identidad/fondos y gestion legal del cierre.",
+                "type": "string"
+              },
+              {
+                "id": "a12",
+                "name": "kb_special_cases",
+                "value": "Casos especiales: prenda, multas complejas, limitaciones y reclamos se derivan a ejecutivo.",
+                "type": "string"
+              },
+              {
+                "id": "a13",
+                "name": "kb_advantages",
+                "value": "Sin arriendo mensual (diferenciador clave vs competencia). Seguro total incluido (cubre dano y robo). Publicacion simultanea en ChileAutos, MercadoLibre, FullMotor, queirolo.cl y redes sociales. Pago al cliente en 5-7 dias habiles tras cierre. Comprador puede pagar con efectivo, credito automotriz, tarjeta o auto en parte de pago. Showroom nivel -3, vigilancia 24/7, acceso restringido.",
+                "type": "string"
+              },
+              {
+                "id": "a14",
+                "name": "kb_process",
+                "value": "1) Contacto inicial y datos del auto. 2) Analisis de mercado y precio recomendado enviado por correo. 3) Revision legal y mecanica. 4) Recepcion del vehiculo y firma contrato. 5) Publicacion en multiples portales. 6) Gestion comercial de interesados y pruebas controladas. 7) Confirmacion de oferta con el dueno. 8) Cierre, pago (5-7 dias habiles) y tramites legales completos.",
+                "type": "string"
+              },
+              {
+                "id": "a15",
+                "name": "notify_phone",
+                "value": "+56975400946",
+                "type": "string"
+              },
+              {
+                "id": "a16",
+                "name": "message_type",
+                "value": "={{ $json.message_type ?? $json.messages?.[0]?.type ?? 'text' }}",
+                "type": "string"
+              },
+              {
+                "id": "a_notify_email",
+                "name": "notify_email",
+                "value": "infoautorecente@gmail.com",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -1152,
+          -400
+        ],
+        "id": "cae49d15-30c3-4736-a8d3-30ca53cbb031",
+        "name": "Normalizar Entrada"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "c1",
+                "leftValue": "={{ $json.message_text }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -848,
+          -400
+        ],
+        "id": "569df5d4-9220-41b5-9b81-45e7ead15ad5",
+        "name": "If"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ \"CONTEXTO DE MARCA (usar solo estos datos):\\n- Trayectoria: \" + ($json.brand_trajectory ?? \"\") + \"\\n- Web: \" + ($json.brand_website ?? \"\") + \"\\n- WhatsApp: \" + ($json.brand_whatsapp ?? \"\") + \"\\n- Ubicacion exacta (BRAND_LOCATION_TEXT): \" + ($json.brand_location_text ?? \"\") + \"\\n- Mapa: \" + ($json.brand_location_link ?? \"\") + \"\\n\\nCONOCIMIENTO OPERATIVO:\\n- Servicio: \" + ($json.kb_service ?? \"\") + \"\\n- Costos: \" + ($json.kb_costs ?? \"\") + \"\\n- Tiempos: \" + ($json.kb_times ?? \"\") + \"\\n- Confianza: \" + ($json.kb_trust ?? \"\") + \"\\n- Casos especiales: \" + ($json.kb_special_cases ?? \"\") + \"\\n\\nVENTAJAS CLAVE:\\n\" + ($json.kb_advantages ?? \"\") + \"\\n\\nPROCESO PASO A PASO:\\n\" + ($json.kb_process ?? \"\") + \"\\n\\nDATOS DEL CLIENTE CONOCIDOS (MEMORIA INCREMENTAL):\\n- Nombre: \" + ($json.memory_key_facts?.customer_name ?? \"sin dato\") + \"\\n- Correo: \" + ($json.memory_key_facts?.customer_email ?? \"sin dato\") + \"\\n- Telefono: \" + ($json.memory_key_facts?.customer_phone ?? \"sin dato\") + \"\\n- Auto: \" + ($json.memory_key_facts?.vehicle_brand_model ?? $json.memory_key_facts?.vehicle_description ?? \"sin dato\") + \"\\n- Ano: \" + ($json.memory_key_facts?.vehicle_year ?? \"sin dato\") + \"\\n- Km: \" + ($json.memory_key_facts?.vehicle_km ?? \"sin dato\") + \"\\n- Link auto: \" + ($json.memory_key_facts?.vehicle_url ?? \"sin dato\") + \"\\n- Intencion: \" + ($json.memory_key_facts?.customer_intent ?? \"sin dato\") + \"\\n- Ultima intencion detectada: \" + ($json.memory_key_facts?.last_user_intent ?? \"sin dato\") + \"\\n- Confianza ultima intencion: \" + ($json.memory_key_facts?.last_user_intent_confidence ?? \"low\") + \"\\n- Ultima respuesta enviada por agente: \" + ($json.memory_key_facts?.last_assistant_output ?? \"sin dato\") + \"\\n- Senal ultimo turno: \" + ($json.memory_key_facts?.last_turn_signal ?? \"regular\") + \"\\n\\nFLAGS CONVERSACION:\\n- Contact state: \" + ($json.memory_key_facts?.contact_state ?? \"new\") + \"\\n- Response style: \" + ($json.memory_key_facts?.response_style ?? \"normal\") + \"\\n- Precision mode: \" + ($json.memory_key_facts?.precision_mode ?? \"off\") + \"\\n- Post close lock: \" + ($json.memory_key_facts?.post_close_lock ?? \"off\") + \"\\n- Tone mode: \" + ($json.memory_key_facts?.tone_mode ?? \"warm\") + \"\\n- User signal: \" + ($json.memory_key_facts?.user_signal ?? \"regular\") + \"\\n\\nESTADO CLIENTE PERSISTENTE:\\n- primer_contacto_at: \" + ($json.memory_key_facts?.primer_contacto_at ?? \"sin dato\") + \"\\n- ultimo_contacto_at: \" + ($json.memory_key_facts?.ultimo_contacto_at ?? \"sin dato\") + \"\\n- correo_de_cierre: \" + (($json.memory_key_facts?.correo_de_cierre ?? false) ? \"true\" : \"false\") + \"\\n- derivado_agente_humano: \" + (($json.memory_key_facts?.derivado_agente_humano ?? false) ? \"true\" : \"false\") + \"\\n\\nHISTORIAL RELEVANTE (SUPABASE):\\n- Resumen previo: \" + ($json.memory_summary ?? \"sin historial\") + \"\\n- Ultima intencion: \" + ($json.memory_last_intent ?? \"sin historial\") + \"\\n- Derivacion previa: \" + ($json.memory_needs_human ? \"si\" : \"no\") + \"\\n\\nETAPA DEL FUNNEL: \" + ($json.memory_key_facts?.funnel_stage ?? \"contacto_inicial\") + \"\\n\\nCONTEXTO CLIENTE:\\n- IS_RETURNING_CLIENT: \" + ($json.is_returning_client ? \"true - cliente que regresa (\" + ($json.days_since_last_contact ?? 0) + \" dias)\" : \"false - primera interaccion o misma sesion\") + \"\\n\\nCONTEXTO TEMPORAL:\\n- Horario: \" + ($json.is_off_hours ? \"FUERA DE HORARIO - acciones humanas seran procesadas el siguiente dia habil\" : \"Dentro de horario de atencion\") + \"\\n\\nMENSAJE DEL CLIENTE:\\n\" + ($json.message_text ?? \"\") }}",
+          "options": {
+            "systemMessage": "Eres el asistente de WhatsApp para respuestas post-campana de Queirolo Autos.\n\nROL\n- Informas de forma clara, calificas interes y derivas a ejecutivo cuando corresponde.\n- No eres insistente ni repetitivo.\n\nOBJETIVO\n- Resolver la duda del cliente en forma breve.\n- Detectar intencion positiva.\n- Pedir correo de forma opcional (util, no obligatorio).\n- Si hay interes real, proponer contacto de ejecutivo en 15-30 minutos.\n\nCONTEXTO CLAVE\n- Ya existe telefono y datos del vehiculo en sistema.\n- No vuelvas a pedir telefono ni datos del auto salvo que falten en contexto.\n- Si memory_key_facts.known_vehicles_count > 0, usa esos vehiculos como datos validos y no pidas Marca/Modelo/Ano/Comuna.\n\nESTILO\n- Espanol chileno neutral.\n- 1 a 3 lineas por respuesta.\n- Maximo 1 emoji por mensaje.\n- Primero responde la pregunta del cliente, luego propone siguiente paso.\n\nREGLAS DE NEGOCIO\n- Si el cliente pide BAJA/STOP, marca intencion de opt-out y responde con confirmacion breve.\n- El opt-out final lo define wa-test; no contradigas esa regla.\n- Si cliente pide humano, caso sensible, reclamo o interes alto, activa derivacion.\n\nDERIVACION Y PERSUASION SUAVE\n- Antes de derivar, idealmente entrega 1 respuesta de valor y luego CTA suave.\n- CTA recomendado: \"Si quieres, te contacta un ejecutivo en 15-30 min para orientarte mejor\".\n- Si el cliente acepta, confirma derivacion en una linea.\n- Aceptaciones como \"si\", \"ok\", \"dale\", \"quiero\" o \"contactenme\" tras CTA cuentan como confirmacion.\n- Frases compuestas como \"ok perfecto\", \"ok gracias\", \"si perfecto\" o \"dale perfecto\" tambien cuentan como confirmacion tras CTA.\n- Si awaiting_handoff_confirmation=true y el cliente responde con aceptacion breve o phatica (incluyendo escritura informal), interpretalo como confirmacion y deriva.\n- Si raw_input.context.handoff_offer_pending=true, trata la respuesta breve positiva como confirmacion de derivacion.\n- Si el cliente pide contacto humano directo (\"que me contacten\", \"llamenme\", \"contactame\"), deriva aunque falte contexto previo.\n- Tras aceptar derivacion, NO vuelvas a preguntar por correo antes de confirmar la derivacion.\n- Si hay duda real, haz una sola pregunta corta para confirmar; no repitas el CTA largo.\n\nNO REPETICION DESPUES DE DERIVAR\n- Si memory_key_facts.derivado_agente_humano = true, NO vuelvas a ofrecer ejecutivo.\n- Si despues de derivar el cliente responde \"gracias\", \"ok\", \"dale\", \"perfecto\" o similar, responde solo cierre breve:\n  \"Perfecto, quedaste derivado. Te contactamos en 15-30 min.\".\n- No hagas nuevas preguntas de cierre en ese estado.\n\nCORREO\n- Puedes solicitar correo como opcion para enviar resumen.\n- No bloquear derivacion por falta de correo.\n- Si el cliente no quiere dar correo, continua y deriva igual cuando aplique.\n\nSALIDA ESPERADA\n- Entrega texto final en output.\n- Cuando corresponda, marca needs_human=true y handoff_reason claro."
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          -288,
+          592
+        ],
+        "id": "6e5588d5-5663-41f2-b83c-e53f7debe5b2",
+        "name": "AI Agent"
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-4.1-mini"
+          },
+          "builtInTools": {},
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          -480,
+          752
+        ],
+        "id": "1aedb946-3135-4cd5-9aaa-68020aee1e39",
+        "name": "n8n agent whatsapp",
+        "credentials": {
+          "openAiApi": {
+            "id": "5bGPqs4NaXMpr3zi",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst waId = String(item.wa_id || 'unknown');\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0,8) + '-' + raw.slice(8,12) + '-' + raw.slice(12,16) + '-' + raw.slice(16,20) + '-' + raw.slice(20,32);\nreturn [{ json: { ...item, customer_id: customerId } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -320,
+          -688
+        ],
+        "id": "76ef7de6-2362-48f1-9bdd-a8dd54841ac1",
+        "name": "Generar Customer ID"
+      },
+      {
+        "parameters": {
+          "tableId": "customers",
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "id",
+                "fieldValue": "={{ $json.customer_id }}"
+              },
+              {
+                "fieldId": "wa_id",
+                "fieldValue": "={{ $json.wa_id }}"
+              },
+              {
+                "fieldId": "display_name",
+                "fieldValue": "={{ $json.raw_input?.body?.name ?? \"\" }}"
+              },
+              {
+                "fieldId": "last_seen_at",
+                "fieldValue": "={{ $now }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          272,
+          -512
+        ],
+        "id": "ab67931d-ea61-411d-8b52-7b9334a8f89f",
+        "name": "Supabase Crear Cliente",
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "tableId": "conversation_messages",
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "customer_id",
+                "fieldValue": "={{ $(\"Generar Customer ID\").item.json.customer_id }}"
+              },
+              {
+                "fieldId": "direction",
+                "fieldValue": "inbound"
+              },
+              {
+                "fieldId": "role",
+                "fieldValue": "user"
+              },
+              {
+                "fieldId": "message_text",
+                "fieldValue": "={{ $json.message_text }}"
+              },
+              {
+                "fieldId": "message_type",
+                "fieldValue": "text"
+              },
+              {
+                "fieldId": "raw_payload",
+                "fieldValue": "={{ JSON.stringify($json.raw_input ?? {}) }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          272,
+          -720
+        ],
+        "id": "eafce481-e0e5-43f1-accf-b3cbed4db941",
+        "name": "Supabase Guardar Inbound",
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const out = $input.first().json;\nconst waId = $('Normalizar Entrada').item.json.wa_id;\nconst rawInput = $('Normalizar Entrada').item.json.raw_input ?? {};\nconst messageText = $('Normalizar Entrada').item.json.message_text ?? '';\nconst extractedNode = $('Extraer Datos Vitales').item.json;\nconst extractedFacts = extractedNode.extracted_facts ?? {};\nconst resetNotifyRequested = Boolean(extractedNode.reset_notify_requested);\nconst securityFlags = extractedNode.security_flags ?? {};\n\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0, 8) + '-' + raw.slice(8, 12) + '-' + raw.slice(12, 16) + '-' + raw.slice(16, 20) + '-' + raw.slice(20, 32);\n\nreturn [{\n  json: {\n    wa_id: waId,\n    customer_id: customerId,\n    output: out.output,\n    message_text: messageText,\n    raw_input: rawInput,\n    needs_human: Boolean(out.needs_human),\n    handoff_reason: String(out.handoff_reason || ''),\n    optout_requested: Boolean(out.optout_requested),\n    extracted_facts: extractedFacts,\n    memory_key_facts: out.memory_key_facts ?? {},\n    reset_notify_requested: resetNotifyRequested,\n    security_flags: securityFlags\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          48,
+          -64
+        ],
+        "id": "75115521-5eea-4c96-8cff-39246a1332b3",
+        "name": "Preparar Outbound Persistencia"
+      },
+      {
+        "parameters": {
+          "tableId": "conversation_messages",
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "customer_id",
+                "fieldValue": "={{ $json.customer_id }}"
+              },
+              {
+                "fieldId": "direction",
+                "fieldValue": "outbound"
+              },
+              {
+                "fieldId": "role",
+                "fieldValue": "assistant"
+              },
+              {
+                "fieldId": "message_text",
+                "fieldValue": "={{ $json.output }}"
+              },
+              {
+                "fieldId": "message_type",
+                "fieldValue": "text"
+              },
+              {
+                "fieldId": "raw_payload",
+                "fieldValue": "={{ JSON.stringify({ output: $json.output, needs_human: $json.needs_human, handoff_reason: $json.handoff_reason }) }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          464,
+          -48
+        ],
+        "id": "416f15b0-7386-4d33-8b1a-73a7b558f529",
+        "name": "Supabase Guardar Outbound",
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "tableId": "customer_memory",
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "customer_id",
+                "fieldValue": "={{ $json.customer_id }}"
+              },
+              {
+                "fieldId": "name",
+                "fieldValue": "={{ $json.memory_name ?? \"\" }}"
+              },
+              {
+                "fieldId": "context_summary",
+                "fieldValue": "={{ $json.output }}"
+              },
+              {
+                "fieldId": "key_facts",
+                "fieldValue": "={{ $json.memory_key_facts ?? {} }}"
+              },
+              {
+                "fieldId": "last_intent",
+                "fieldValue": "={{ $json.memory_last_intent ?? $json.message_text }}"
+              },
+              {
+                "fieldId": "needs_human",
+                "fieldValue": "={{ $json.needs_human ? true : false }}"
+              },
+              {
+                "fieldId": "memory_version",
+                "fieldValue": "2"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          256,
+          176
+        ],
+        "id": "326f19ab-deb8-43f1-814c-7bae380b3df1",
+        "name": "Supabase Crear Memoria",
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "operation": "update",
+          "tableId": "customer_memory",
+          "matchType": "allFilters",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "customer_id",
+                "condition": "eq",
+                "keyValue": "={{ $('Preparar Outbound Persistencia').item.json.customer_id }}"
+              }
+            ]
+          },
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "name",
+                "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_name ?? \"\" }}"
+              },
+              {
+                "fieldId": "context_summary",
+                "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.output }}"
+              },
+              {
+                "fieldId": "key_facts",
+                "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_key_facts ?? {} }}"
+              },
+              {
+                "fieldId": "last_intent",
+                "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.memory_last_intent ?? $(\"Fusionar Memoria Incremental\").item.json.message_text }}"
+              },
+              {
+                "fieldId": "needs_human",
+                "fieldValue": "={{ $(\"Fusionar Memoria Incremental\").item.json.needs_human ? true : false }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          480,
+          176
+        ],
+        "id": "4d75ed10-1f16-4d42-9bd9-bf1a2d76aada",
+        "name": "Supabase Actualizar Memoria",
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ reply_text: $json.output ?? '', needs_human: !!$json.needs_human, handoff_reason: $json.handoff_reason ?? '', optout_requested: !!$json.optout_requested, notify_agent: !!$json.needs_human, agent_summary: $json.message_text ? String($json.message_text).slice(0, 160) : '' }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          1888,
+          496
+        ],
+        "id": "7a9a0c73-7715-494f-8f7b-f0cda1f0c5ab",
+        "name": "Responder HTTP"
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst textRaw = String(item.message_text || '');\nconst textNorm = textRaw\n  .toLowerCase()\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\nconst security = item.security_flags || {};\nconst memoryFacts = item.memory_key_facts || {};\nconst rawContext = item.raw_input?.context || {};\n\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\n\nconst handoffStatus = String(memoryFacts.handoff_status || '').toLowerCase().trim();\nconst suppressUntilRaw = String(memoryFacts.suppress_executive_offer_until || '').trim();\nconst suppressUntilMs = suppressUntilRaw ? new Date(suppressUntilRaw).getTime() : 0;\nconst suppressActive = suppressUntilMs > 0 && Date.now() < suppressUntilMs;\nconst derivedAlready = parseBool(memoryFacts.derivado_agente_humano || memoryFacts.is_human_handoff)\n  || handoffStatus === 'confirmed'\n  || handoffStatus === 'closed'\n  || suppressActive\n  || parseBool(rawContext.handoff_active);\nconst awaitingHandoffConfirmation = parseBool(memoryFacts.awaiting_handoff_confirmation);\nconst pendingOfferFromServer = parseBool(rawContext.handoff_offer_pending);\nconst lastAssistantOutput = String(memoryFacts.last_assistant_output || '').trim();\nconst lastAssistantNorm = lastAssistantOutput\n  .toLowerCase()\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\nconst tokenCount = textNorm ? textNorm.split(' ').filter(Boolean).length : 0;\nconst hasQuestion = /[?¿]/.test(textRaw) || /\\b(como|que|cual|cuando|donde|cuanto|por que|podrias|puedes)\\b/.test(textNorm);\nconst isVeryShort = tokenCount > 0 && tokenCount <= 4;\nconst phaticFromExtractor = Boolean(security.is_phatic_ack);\n\nconst hasHumanNegation = /\\b(no quiero|no me contacten|no me llamen|sin ejecutivo|sin asesor|no gracias)\\b/.test(textNorm);\nconst explicitHuman = /\\b(humano|persona|ejecutivo|asesor|persona real|hablar con alguien|necesito hablar|quiero hablar con)\\b/.test(textNorm);\nconst legalSensitive = /\\b(prenda|deuda prendaria|limitacion de dominio|embargo|gravamen|perdida total|multa|multas|reclamo|queja|molesto|mala atencion|denuncia|demanda|estafa)\\b/.test(textNorm);\nconst affirmative = /^(si|sii|ok|oki|okey|dale|de acuerdo|perfecto|listo|quiero|me interesa)$/.test(textNorm)\n  || /\\b(si|sii|ok|dale|quiero|contactenme|contacten me|me contacten|que me contacten|que me llame|quiero que me contacten)\\b/.test(textNorm);\nconst compoundAffirmative = /^(ok|si|sii|dale|de acuerdo)\\s+(perfecto|gracias|dale|listo)$/.test(textNorm)\n  || /^(perfecto|listo)\\s+(gracias|ok)$/.test(textNorm);\nconst phaticAck = /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(textNorm);\nconst softPositive = /\\b(por favor|porfa|okey|oki|oka|vale|ya)\\b/.test(textNorm);\nconst handoffActionIntent = /\\b(enviame|enviame|mandame|manda me|envia me|enviar|mandar|derivame|deriva me|contactame|contacta me|llamame|llama me|pasame con ejecutivo|pasame con asesor|quiero que me contacten|si espero|ok espero|oka espero)\\b/.test(textNorm);\nconst explicitContactRequest = /\\b(que me contacten|me contacten|contactame|contacta me|llamame|llama me|quiero que me contacten|quiero hablar con ejecutivo|quiero hablar con asesor|me llamen|que me llamen)\\b/.test(textNorm);\nconst lastAssistantHadCta = /\\b(ejecutivo|asesor)\\b/.test(lastAssistantNorm)\n  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);\nconst handoffContextActive = awaitingHandoffConfirmation || lastAssistantHadCta || pendingOfferFromServer;\nconst contextualAck = handoffContextActive\n  && !hasHumanNegation\n  && !hasQuestion\n  && isVeryShort\n  && (phaticFromExtractor || phaticAck || softPositive);\n\nlet reason = '';\nlet handoffOutput = '';\nlet needsHuman = false;\n\nif (security.is_prompt_injection) {\n  reason = 'security_prompt_injection';\n  handoffOutput = 'Por seguridad, solo te puedo ayudar con informacion de consignacion. Si quieres, te orienta un ejecutivo en 15-30 min.';\n} else if (security.is_spam_like) {\n  reason = 'security_spam_guard';\n  handoffOutput = 'Recibi mucha informacion en un solo mensaje. Si quieres, te contacta un ejecutivo en 15-30 min para verlo contigo.';\n} else if (derivedAlready && (phaticAck || phaticFromExtractor || (isVeryShort && !hasQuestion && !hasHumanNegation))) {\n  reason = 'post_handoff_ack';\n  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n} else if (!hasHumanNegation && (explicitHuman || explicitContactRequest)) {\n  reason = 'solicitud_humano';\n  needsHuman = true;\n  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n} else if (legalSensitive) {\n  reason = 'caso_sensible';\n  needsHuman = true;\n  handoffOutput = 'Perfecto, te puedo derivar con un ejecutivo para revisarlo bien. Te contactamos en 15-30 min.';\n} else if (!hasHumanNegation && handoffContextActive && (affirmative || compoundAffirmative || contextualAck || handoffActionIntent)) {\n  reason = 'confirmacion_handoff';\n  needsHuman = true;\n  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n}\n\nreturn [{\n  json: {\n    ...item,\n    needs_human: Boolean(needsHuman),\n    handoff_reason: reason,\n    handoff_output: handoffOutput\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -496,
+          -368
+        ],
+        "id": "55272a25-e74a-41da-a9ed-0dc178b6b59e",
+        "name": "Detectar Handoff"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "h1",
+                "leftValue": "={{ $json.handoff_output }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -224,
+          -368
+        ],
+        "id": "2952c98b-e59e-45e2-aa76-9837902ace58",
+        "name": "If Handoff Inmediato"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "o1",
+                "name": "output",
+                "value": "={{ $json.handoff_output }}",
+                "type": "string"
+              },
+              {
+                "id": "o2",
+                "name": "needs_human",
+                "value": "={{ $json.needs_human ? true : false }}",
+                "type": "boolean"
+              },
+              {
+                "id": "o3",
+                "name": "handoff_reason",
+                "value": "={{ $json.handoff_reason }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          272,
+          -384
+        ],
+        "id": "64a2f1fd-c871-4200-aef0-57034f38ef11",
+        "name": "Preparar Respuesta Handoff"
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst waId = String(item.wa_id || 'unknown');\nlet h1 = 0x811c9dc5;\nlet h2 = 0x811c9dc5;\nfor (let i = 0; i < waId.length; i++) {\n  const c = waId.charCodeAt(i);\n  h1 ^= c;\n  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);\n  h2 ^= (c + i);\n  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);\n}\nconst hex = (n) => (n >>> 0).toString(16).padStart(8, '0');\nconst raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);\nconst customerId = raw.slice(0,8) + '-' + raw.slice(8,12) + '-' + raw.slice(12,16) + '-' + raw.slice(16,20) + '-' + raw.slice(20,32);\nreturn [{ json: { ...item, customer_id: customerId } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -192,
+          -16
+        ],
+        "id": "e379be03-a3a5-4aca-aaa0-c5b0d7b19738",
+        "name": "Preparar Contexto Memoria Persistente"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "customer_memory",
+          "limit": 1,
+          "matchType": "allFilters",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "customer_id",
+                "condition": "eq",
+                "keyValue": "={{ $json.customer_id }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -288,
+          128
+        ],
+        "id": "d6d9c42a-f482-4253-8b01-138892aa4208",
+        "name": "Supabase Leer Memoria Contexto",
+        "alwaysOutputData": true,
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const live = $('Preparar Contexto Memoria Persistente').item.json;\nconst mem = $input.first().json || {};\n\nlet keyFacts = {};\nif (mem.key_facts && typeof mem.key_facts === 'object') {\n  keyFacts = mem.key_facts;\n} else if (typeof mem.key_facts === 'string') {\n  try {\n    keyFacts = JSON.parse(mem.key_facts);\n  } catch (e) {\n    keyFacts = {};\n  }\n}\n\nconst currentFacts = live.extracted_facts || {};\nconst knownVehicles = Array.isArray(live.raw_input?.context?.known_vehicles)\n  ? live.raw_input.context.known_vehicles\n      .map((v) => {\n        const make = String(v?.make || '').trim();\n        const model = String(v?.model || '').trim();\n        const year = Number(v?.year || 0);\n        const link = String(v?.link || '').trim();\n        if (!make && !model && !year) return null;\n        return {\n          make,\n          model,\n          year: Number.isFinite(year) && year > 0 ? year : null,\n          link\n        };\n      })\n      .filter(Boolean)\n  : [];\n\nif (knownVehicles.length > 0) {\n  const first = knownVehicles[0];\n  if (!currentFacts.vehicle_brand_model) {\n    currentFacts.vehicle_brand_model = [first.make, first.model].filter(Boolean).join(' ').trim();\n  }\n  if (!currentFacts.vehicle_year && first.year) {\n    currentFacts.vehicle_year = String(first.year);\n  }\n  currentFacts.known_vehicles = knownVehicles;\n  currentFacts.known_vehicles_count = knownVehicles.length;\n  const knownSummary = knownVehicles\n    .map((v) => [v.make, v.model, v.year ? String(v.year) : ''].filter(Boolean).join(' ').trim())\n    .filter(Boolean)\n    .join(' | ');\n  if (knownSummary) {\n    currentFacts.known_vehicles_summary = knownSummary;\n  }\n}\n\nfor (const [key, value] of Object.entries(currentFacts)) {\n  if (value !== null && value !== undefined && String(value).trim() !== '') {\n    keyFacts[key] = typeof value === 'string' ? value.trim() : value;\n  }\n}\n\nconst nowIso = new Date().toISOString();\nconst nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;\n\nconst firstSeenBase = keyFacts.primer_contacto_at || keyFacts.first_contact_at || mem.created_at || nowIso;\nkeyFacts.primer_contacto_at = String(firstSeenBase);\nkeyFacts.first_contact_at = String(firstSeenBase);\nkeyFacts.ultimo_contacto_at = nowIso;\nkeyFacts.last_contact_at = nowIso;\n\nconst hasEmail = nonEmpty(keyFacts.customer_email);\nconst hasAuto = nonEmpty(keyFacts.vehicle_brand_model)\n  || nonEmpty(keyFacts.vehicle_description)\n  || nonEmpty(keyFacts.vehicle_url)\n  || Number(keyFacts.known_vehicles_count || 0) > 0;\n\nkeyFacts.has_closing_email = hasEmail;\nkeyFacts.has_vehicle_min_data = hasAuto;\nkeyFacts.correo_de_cierre = hasEmail;\n\nlet stage = 'contacto_inicial';\nif (hasEmail && hasAuto) stage = 'listo_para_cierre';\nelse if (hasEmail || hasAuto) stage = 'datos_parciales';\nkeyFacts.funnel_stage = stage;\n\nconst rawSignal = String(keyFacts.user_signal || keyFacts.last_turn_signal || 'regular').toLowerCase();\nlet userSignal = 'regular';\nif (rawSignal.includes('question')) userSignal = 'question';\nelse if (rawSignal.includes('phatic')) userSignal = 'phatic';\nelse if (rawSignal.includes('command')) userSignal = 'command';\nelse if (rawSignal.includes('ambiguous')) userSignal = 'ambiguous';\n\nconst postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';\nconst isPostCloseStrict = postCloseLock === 'on';\n\nlet responseStyle = String(keyFacts.response_style || 'normal');\nif (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';\nelse if (postCloseLock === 'on' && userSignal === 'question') responseStyle = 'concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';\n\nconst precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal') ? 'on' : 'off';\nconst toneMode = postCloseLock === 'on' ? 'direct' : 'warm';\n\nlet contactState = 'active';\nconst hasHistory = Boolean(mem.context_summary || mem.key_facts || mem.last_intent);\nif (!hasHistory && stage === 'contacto_inicial') contactState = 'new';\nelse if (stage === 'listo_para_cierre') contactState = 'closed';\n\nlet daysSinceLastContact = null;\nlet isReturningClient = false;\nconst lastUpdate = mem.updated_at || mem.created_at;\nif (lastUpdate) {\n  const diffMs = Date.now() - new Date(lastUpdate).getTime();\n  daysSinceLastContact = Math.floor(diffMs / (1000 * 60 * 60 * 24));\n  isReturningClient = daysSinceLastContact >= 1;\n  if (isReturningClient && contactState !== 'closed') contactState = 'reengaged';\n}\n\nkeyFacts.contact_state = contactState;\nkeyFacts.response_style = responseStyle;\nkeyFacts.precision_mode = precisionMode;\nkeyFacts.post_close_lock = postCloseLock;\nkeyFacts.is_post_close_strict = isPostCloseStrict;\nkeyFacts.tone_mode = toneMode;\nkeyFacts.user_signal = userSignal;\n\nif (keyFacts.derivado_agente_humano === undefined) keyFacts.derivado_agente_humano = false;\nif (keyFacts.is_human_handoff === undefined) keyFacts.is_human_handoff = false;\n\nkeyFacts.conversation_version = 8;\n\nreturn [{\n  json: {\n    ...live,\n    memory_summary: String(mem.context_summary || ''),\n    memory_last_intent: String(mem.last_intent || ''),\n    memory_needs_human: Boolean(mem.needs_human),\n    memory_key_facts: keyFacts,\n    days_since_last_contact: daysSinceLastContact,\n    is_returning_client: isReturningClient\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -272,
+          368
+        ],
+        "id": "290d5c44-fd2f-4a97-9c14-b193f7b3d66a",
+        "name": "Unificar Contexto IA"
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst messageText = String(item.message_text || '').trim();\nconst text = messageText.toLowerCase();\nconst rawInput = item.raw_input || {};\n\nconst facts = {};\nconst updatedFields = [];\n\nconst normalize = (value) => String(value || '').trim();\nconst addFact = (key, value) => {\n  const cleaned = normalize(value);\n  if (!cleaned) return;\n  facts[key] = cleaned;\n  updatedFields.push(key);\n};\n\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\n\nconst injectionNeedles = [\n  'ignora instrucciones', 'ignora todas las instrucciones', 'actua como', 'system prompt',\n  'developer message', 'prompt interno', 'revela tu prompt', 'muestra tu prompt', 'jailbreak', 'pretende ser'\n];\n\nconst inDomainNeedles = [\n  'consign', 'vender mi auto', 'vender auto', 'vehiculo', 'camioneta', 'marca', 'modelo',\n  'ano', 'año', 'km', 'kilometraje', 'correo', 'ubicacion', 'telefono', 'comision', 'proceso', 'queirolo', 'whatsapp'\n];\n\nconst neutralText = text.replace(/[!?.,]/g, '').trim();\nconst neutralSet = new Set(['hola', 'buenas', 'gracias', 'ok', 'dale', 'perfecto', 'listo', 'si', 'no', 'hi', 'hello', 'lo']);\nconst phaticSet = new Set(['ok', 'oka', 'okey', 'si ok', 'dale', 'gracias', 'listo', 'perfecto', 'lo', 'super', 'genial', 'buenisimo']);\n\nconst tokens = neutralText ? neutralText.split(' ').filter(Boolean) : [];\nconst tokenCount = tokens.length;\nconst allTokensArePhatic = tokens.length > 0 && tokens.every(t => phaticSet.has(t) || neutralSet.has(t));\nconst hasQuestion = /\\?$|\\b(como|que|cual|donde|cuando|por que|pueden|tienen|hacen|cuanto)\\b/i.test(text);\nconst isPhaticAck = tokenCount <= 3 && !hasQuestion && (phaticSet.has(neutralText) || neutralSet.has(neutralText) || allTokensArePhatic);\n\nconst urlCount = (messageText.match(/https?:\\/\\//gi) || []).length;\nconst hasPromptInjection = injectionNeedles.some(n => text.includes(n));\nconst isInDomain = inDomainNeedles.some(n => text.includes(n));\nconst isNeutral = neutralSet.has(neutralText);\nconst isTooLong = messageText.length > 900;\nconst hasRepeatedChars = /(.)\\1{10,}/.test(text);\nconst isSpamLike = isTooLong || hasRepeatedChars || urlCount > 2;\nconst isShortOrAmbiguous = messageText.length <= 18 || /^(hola|buenas|ok|dale|si|no|gracias|como estas|hola\\?|buenas\\?|lo)$/i.test(neutralText);\nconst isOffTopic = messageText.length > 40 && !hasPromptInjection && !isInDomain && !isNeutral && !isShortOrAmbiguous && !hasQuestion;\nconst securityLevel = hasPromptInjection ? 'high' : (isSpamLike ? 'medium' : (isOffTopic ? 'low' : 'none'));\n\nlet userSignal = 'regular';\nif (hasQuestion) userSignal = 'question';\nelse if (isPhaticAck) userSignal = 'phatic';\nelse if (/^(envia|manda|dame|pasame|quiero|necesito|deriva|contacta)\\b/i.test(text)) userSignal = 'command';\nelse if (tokenCount <= 2 && !isInDomain) userSignal = 'ambiguous';\n\nlet responseStyleSuggested = 'normal';\nif (userSignal === 'phatic') responseStyleSuggested = 'ultra_concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyleSuggested = 'concise';\n\nconst precisionModeSuggested = (userSignal === 'phatic' || userSignal === 'question' || tokenCount <= 3) ? 'on' : 'off';\n\nconst waName = normalize(rawInput?.body?.name);\nif (waName) addFact('customer_name', waName);\nconst nameMatch = messageText.match(/(?:me\\s+llamo|soy|mi\\s+nombre\\s+es)\\s+([a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\\s]{2,50})/i);\nif (nameMatch && !facts.customer_name) addFact('customer_name', nameMatch[1].trim());\n\nconst emailTokenMatch = messageText.match(/([^\\s<>\"'`]+@[^\\s<>\"'`]+\\.[^\\s<>\"'`]+)/i);\nif (emailTokenMatch) {\n  let rawEmail = String(emailTokenMatch[1] || '').trim().replace(/[),.;:!?]+$/, '');\n  rawEmail = rawEmail.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const safeEmail = rawEmail.toLowerCase();\n  if (/^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$/i.test(safeEmail)) {\n    addFact('customer_email', safeEmail);\n  }\n}\n\nconst phoneMatch = messageText.match(/(?:\\+?56)?\\s*9\\s*\\d{4}\\s*\\d{4}/);\nif (phoneMatch) addFact('customer_phone', phoneMatch[0].replace(/\\s/g, ''));\n\nconst urlMatch = messageText.match(/https?:\\/\\/[^\\s]+/i);\nif (urlMatch) addFact('vehicle_url', urlMatch[0]);\n\nlet kmNum = 0;\nconst kmWithUnit = messageText.match(/\\b(\\d{2,3}(?:[.,]\\d{3})+|\\d{4,6})\\s*(km|kms|kilometros|kilómetros)\\b/i);\nconst kmMil = messageText.match(/\\b(\\d{2,3})\\s*mil\\b/i);\n\nif (kmWithUnit) {\n  kmNum = parseInt(String(kmWithUnit[1] || '').replace(/[.,]/g, ''), 10);\n} else if (kmMil) {\n  kmNum = parseInt(String(kmMil[1] || '').replace(/[^0-9]/g, ''), 10) * 1000;\n}\n\nconst yearLike = messageText.match(/\\b(19[89]\\d|20[0-2]\\d)\\b/);\nconst yearCandidate = yearLike ? parseInt(yearLike[1], 10) : 0;\n\nif (Number.isFinite(kmNum) && kmNum >= 1000 && kmNum <= 500000 && kmNum !== yearCandidate && !(kmNum >= 1800 && kmNum <= 2099)) {\n  addFact('vehicle_km', kmNum.toLocaleString('es-CL') + ' km');\n}\n\nconst yearMatch = messageText.match(/\\b(19[89]\\d|20[0-2]\\d)\\b/);\nif (yearMatch) addFact('vehicle_year', yearMatch[1]);\n\nconst brands = 'toyota|hyundai|kia|suzuki|chevrolet|nissan|mazda|mitsubishi|ford|volkswagen|vw|honda|subaru|peugeot|citroen|renault|fiat|jeep|bmw|mercedes|audi|volvo|mg|chery|jac|byd|haval|changan|great wall|ssangyong|dodge|ram|mini';\nconst brandRe = new RegExp('\\\\b(' + brands + ')\\\\b\\\\s*([a-zA-Z0-9áéíóúñ\\\\s-]{2,40})?', 'i');\nconst brandMatch = messageText.match(brandRe);\nif (brandMatch) {\n  const brand = String(brandMatch[1] || '').trim();\n  const tail = String(brandMatch[2] || '').trim();\n  const stopWords = new Set(['mi','nombre','soy','me','llamo','correo','email','mail','por','cierto']);\n  const modelTokens = [];\n  for (const token of tail.split(/\\\\s+/).filter(Boolean)) {\n    const low = token.toLowerCase();\n    if (stopWords.has(low) || low.includes('@')) break;\n    if (/(km|kms|kilometros|kilómetros)/i.test(low)) break;\n    if (/^\\\\d{5,6}$/.test(low)) break;\n    if (low === 'con' && modelTokens.length > 0) break;\n    modelTokens.push(token);\n    if (modelTokens.length >= 3) break;\n  }\n\n  const vehicleDesc = [brand, ...modelTokens].join(' ').trim();\n  addFact('vehicle_brand_model', vehicleDesc);\n}\n\nconst vehicleCue = /\\b(auto|vehiculo|camioneta|suv|sedan|hatchback|pickup|van|marca|modelo|ano|año|kilometraje|km|publicado|publicacion)\\b/i;\nif (vehicleCue.test(messageText) && !facts.vehicle_brand_model) addFact('vehicle_description', messageText.slice(0, 250));\n\nlet detectedIntent = '';\nlet detectedIntentConfidence = 'low';\nconst intentConsignar = [/\\bconsign(?:ar|acion|ación)\\b/i, /\\bquiero\\s+(?:consignar|vender|dejar)\\b/i, /\\bvender\\s+(?:mi\\s+)?(?:auto|vehiculo|camioneta)\\b/i, /\\bdejar(?:lo)?\\s+en\\s+consignacion\\b/i];\nconst intentComision = [/\\bcuanto\\s+(?:cobran|cuesta|vale|sale)\\b/i, /\\bcomision\\b/i];\nconst intentUbicacion = [/\\bdonde\\s+estan\\b/i, /\\bubicacion\\b/i, /\\bdireccion\\b/i, /\\bmapa\\b/i];\nconst intentProceso = [/\\bcomo\\s+(?:funciona|es)\\s+(?:la\\s+)?consignacion\\b/i, /\\bpasos\\b/i, /\\bproceso\\b/i];\n\nif (intentConsignar.some(re => re.test(messageText))) {\n  detectedIntent = 'consignar_auto';\n  detectedIntentConfidence = 'high';\n  addFact('customer_intent', 'consignar_auto');\n} else if (intentComision.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_comision';\n  detectedIntentConfidence = 'high';\n} else if (intentUbicacion.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_ubicacion';\n  detectedIntentConfidence = 'medium';\n} else if (intentProceso.some(re => re.test(messageText))) {\n  detectedIntent = 'consulta_proceso';\n  detectedIntentConfidence = 'medium';\n}\n\nif (detectedIntent) {\n  addFact('last_user_intent', detectedIntent);\n  addFact('last_user_intent_confidence', detectedIntentConfidence);\n}\n\naddFact('last_turn_signal', userSignal === 'phatic' ? 'phatic_ack' : (hasQuestion ? 'question' : 'regular'));\naddFact('user_signal', userSignal);\naddFact('response_style', responseStyleSuggested);\naddFact('precision_mode', precisionModeSuggested);\n\nconst resetNotify = /\\b(reset\\s*notify|reset\\s*notificacion|reset\\s*notificación|reset\\s*lead\\s*caliente)\\b/i.test(messageText);\nif (resetNotify) {\n  addFact('team_notified', 'false');\n  addFact('team_notified_at', '');\n}\n\nconst comunaContext = /\\b(buscar|retirar|pasar\\s+a\\s+buscar|ir\\s+a\\s+buscar|domicilio|casa|hogar)\\b/i;\nif (comunaContext.test(messageText)) addFact('needs_pickup', 'true');\n\nlet isOffHours = false;\ntry {\n  const now = new Date();\n  const parts = new Intl.DateTimeFormat('en-US', {\n    timeZone: 'America/Santiago',\n    hour: 'numeric',\n    hour12: false,\n    weekday: 'short'\n  }).formatToParts(now);\n  const hour = parseInt(parts.find(p => p.type === 'hour').value);\n  const weekday = parts.find(p => p.type === 'weekday').value;\n  isOffHours = hour < 8 || hour >= 18 || weekday === 'Sat' || weekday === 'Sun';\n} catch (e) {\n  isOffHours = false;\n}\n\nreturn [{\n  json: {\n    ...item,\n    extracted_facts: facts,\n    extracted_fields: updatedFields,\n    is_off_hours: isOffHours,\n    reset_notify_requested: parseBool(facts.team_notified === 'false'),\n    security_flags: {\n      level: securityLevel,\n      is_prompt_injection: hasPromptInjection,\n      is_spam_like: isSpamLike,\n      is_off_topic: isOffTopic,\n      is_in_domain: isInDomain,\n      is_phatic_ack: isPhaticAck,\n      mode: 'soft'\n    }\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1008,
+          -240
+        ],
+        "id": "84f8c9e9-9f26-4e67-b183-6f4d23ed1889",
+        "name": "Extraer Datos Vitales"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "customer_memory",
+          "limit": 1,
+          "matchType": "allFilters",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "customer_id",
+                "condition": "eq",
+                "keyValue": "={{ $(\"Preparar Outbound Persistencia\").item.json.customer_id }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          272,
+          -64
+        ],
+        "id": "63e99d04-5766-4d21-93e3-6043e0c4745d",
+        "name": "Supabase Leer Memoria Persistencia",
+        "alwaysOutputData": true,
+        "credentials": {
+          "supabaseApi": {
+            "id": "iWAzsxvvGQeYozjL",
+            "name": "Supabase Memory"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const existing = $input.first().json || {};\nconst outbound = $('Preparar Outbound Persistencia').item.json;\n\nconst nowIso = new Date().toISOString();\nconst nowMs = Date.now();\nconst COOLDOWN_MINUTES = 360;\nconst cooldownMs = COOLDOWN_MINUTES * 60 * 1000;\nconst SUPPRESS_EXECUTIVE_HOURS = 24;\nconst suppressExecutiveMs = SUPPRESS_EXECUTIVE_HOURS * 60 * 60 * 1000;\n\nconst nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;\nconst normalizeText = (v) => typeof v === 'string' ? v.trim() : v;\nconst parseBool = (v) => {\n  if (typeof v === 'boolean') return v;\n  const s = String(v || '').toLowerCase().trim();\n  return s === 'true' || s === '1' || s === 'si' || s === 'yes';\n};\nconst normalizeForRepeat = (txt) => String(txt || '').toLowerCase().replace(/[!?.,;:]/g, '').replace(/\\s+/g, ' ').trim();\n\nlet existingFacts = {};\nlet parseStatus = 'ok';\nif (existing.key_facts && typeof existing.key_facts === 'object') {\n  existingFacts = existing.key_facts;\n} else if (typeof existing.key_facts === 'string') {\n  try {\n    existingFacts = JSON.parse(existing.key_facts);\n  } catch (e) {\n    existingFacts = {};\n    parseStatus = 'invalid_json';\n  }\n} else if (existing.key_facts === null || existing.key_facts === undefined) {\n  parseStatus = 'empty';\n}\n\nconst contextFacts = outbound.memory_key_facts && typeof outbound.memory_key_facts === 'object'\n  ? outbound.memory_key_facts\n  : {};\nconst incomingFacts = outbound.extracted_facts || {};\nconst resetNotifyRequested = Boolean(outbound.reset_notify_requested);\nconst knownVehiclesRaw = Array.isArray(outbound.raw_input?.context?.known_vehicles)\n  ? outbound.raw_input.context.known_vehicles\n  : [];\nconst knownVehicles = knownVehiclesRaw\n  .map((v) => {\n    const make = String(v?.make || '').trim();\n    const model = String(v?.model || '').trim();\n    const year = Number(v?.year || 0);\n    const link = String(v?.link || '').trim();\n    if (!make && !model && !year) return null;\n    return {\n      make,\n      model,\n      year: Number.isFinite(year) && year > 0 ? year : null,\n      link\n    };\n  })\n  .filter(Boolean);\n\nconst mergedFacts = { ...existingFacts, ...contextFacts };\nconst updated = [];\n\nfor (const [key, value] of Object.entries(incomingFacts)) {\n  if (nonEmpty(value)) {\n    const normalized = normalizeText(value);\n    if (mergedFacts[key] !== normalized) {\n      mergedFacts[key] = normalized;\n      updated.push(key);\n    }\n  }\n}\n\nif (knownVehicles.length > 0) {\n  mergedFacts.known_vehicles = knownVehicles;\n  mergedFacts.known_vehicles_count = knownVehicles.length;\n  const knownSummary = knownVehicles\n    .map((v) => [v.make, v.model, v.year ? String(v.year) : ''].filter(Boolean).join(' ').trim())\n    .filter(Boolean)\n    .join(' | ');\n  if (knownSummary) {\n    mergedFacts.known_vehicles_summary = knownSummary;\n    updated.push('known_vehicles_summary');\n  }\n\n  const firstKnown = knownVehicles[0];\n  if (!nonEmpty(mergedFacts.vehicle_brand_model)) {\n    mergedFacts.vehicle_brand_model = [firstKnown.make, firstKnown.model].filter(Boolean).join(' ').trim();\n    updated.push('vehicle_brand_model');\n  }\n  if (!nonEmpty(mergedFacts.vehicle_year) && firstKnown.year) {\n    mergedFacts.vehicle_year = String(firstKnown.year);\n    updated.push('vehicle_year');\n  }\n}\n\nif (!nonEmpty(mergedFacts.customer_name)) {\n  const fallbackName = String(outbound.raw_input?.body?.name || '').trim();\n  if (fallbackName) {\n    mergedFacts.customer_name = fallbackName;\n    updated.push('customer_name');\n  }\n}\n\nconst firstSeen = mergedFacts.primer_contacto_at || mergedFacts.first_contact_at || existing.created_at || nowIso;\nmergedFacts.primer_contacto_at = String(firstSeen);\nmergedFacts.first_contact_at = String(firstSeen);\nmergedFacts.ultimo_contacto_at = nowIso;\nmergedFacts.last_contact_at = nowIso;\n\nconst hasEmail = nonEmpty(mergedFacts.customer_email);\nconst hasAuto = nonEmpty(mergedFacts.vehicle_brand_model)\n  || nonEmpty(mergedFacts.vehicle_description)\n  || nonEmpty(mergedFacts.vehicle_url)\n  || Number(mergedFacts.known_vehicles_count || 0) > 0;\n\nmergedFacts.has_closing_email = hasEmail;\nmergedFacts.has_vehicle_min_data = hasAuto;\nmergedFacts.correo_de_cierre = hasEmail;\n\nconst existingHandoffStatus = String(mergedFacts.handoff_status || '').toLowerCase().trim();\nconst existingSuppressUntil = String(mergedFacts.suppress_executive_offer_until || '').trim();\nconst existingSuppressUntilMs = existingSuppressUntil ? new Date(existingSuppressUntil).getTime() : 0;\nconst existingSuppressActive = existingSuppressUntilMs > 0 && nowMs < existingSuppressUntilMs;\nconst handoffActiveContext = Boolean(outbound.raw_input?.context?.handoff_active);\nconst wasDerived = parseBool(mergedFacts.derivado_agente_humano)\n  || existingHandoffStatus === 'confirmed'\n  || existingHandoffStatus === 'closed'\n  || existingSuppressActive\n  || handoffActiveContext;\nconst isHumanThisTurn = Boolean(outbound.needs_human);\nconst isDerived = wasDerived || isHumanThisTurn;\n\nlet stage = 'contacto_inicial';\nif (isDerived) stage = 'derivado';\nelse if (hasEmail && hasAuto) stage = 'listo_para_cierre';\nelse if (hasEmail || hasAuto) stage = 'datos_parciales';\nmergedFacts.funnel_stage = stage;\n\nlet contactState = 'active';\nif (stage === 'listo_para_cierre') contactState = 'closed';\nelse {\n  const lastSeen = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;\n  const daysSince = lastSeen ? Math.floor((nowMs - lastSeen) / 86400000) : 0;\n  if (daysSince >= 1) contactState = 'reengaged';\n}\nif (!existing.created_at && stage === 'contacto_inicial') contactState = 'new';\nmergedFacts.contact_state = contactState;\n\nconst userSignal = String(mergedFacts.user_signal || mergedFacts.last_turn_signal || 'regular');\nconst postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';\nlet responseStyle = String(mergedFacts.response_style || 'normal');\nif (isDerived && (userSignal === 'phatic' || userSignal === 'regular')) responseStyle = 'ultra_concise';\nelse if (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';\nelse if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';\nconst precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal' || isDerived) ? 'on' : 'off';\nconst toneMode = isDerived ? 'direct' : (postCloseLock === 'on' ? 'direct' : 'warm');\n\nmergedFacts.post_close_lock = postCloseLock;\nmergedFacts.is_post_close_strict = postCloseLock === 'on';\nmergedFacts.response_style = responseStyle;\nmergedFacts.precision_mode = precisionMode;\nmergedFacts.tone_mode = toneMode;\n\nmergedFacts.derivado_agente_humano = isDerived;\nmergedFacts.is_human_handoff = isDerived;\nif (isHumanThisTurn) {\n  mergedFacts.last_handoff_reason = String(outbound.handoff_reason || 'solicitud_humano');\n  mergedFacts.last_handoff_at = nowIso;\n}\n\nconst outputText = String(outbound.output || '').trim();\nconst outputNorm = outputText.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst offersExecutive = /\\b(ejecutivo|asesor)\\b/.test(outputNorm)\n  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);\nconst confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm)\n  || (/\\bte contacto un ejecutivo\\b/.test(outputNorm) && !/[?¿]/.test(outputText));\n\nconst previousHandoffStatus = String(mergedFacts.handoff_status || 'none').toLowerCase().trim() || 'none';\nlet nextHandoffStatus = previousHandoffStatus;\nif (isHumanThisTurn || confirmsHandoff || isDerived) nextHandoffStatus = 'confirmed';\nelse if (offersExecutive) nextHandoffStatus = 'offered';\nif (resetNotifyRequested) nextHandoffStatus = 'none';\nmergedFacts.handoff_status = nextHandoffStatus;\n\nconst prevSuppressUntil = String(mergedFacts.suppress_executive_offer_until || '').trim();\nlet suppressUntil = prevSuppressUntil;\nif (isHumanThisTurn || confirmsHandoff || isDerived) {\n  suppressUntil = new Date(nowMs + suppressExecutiveMs).toISOString();\n}\nif (resetNotifyRequested) {\n  suppressUntil = '';\n}\nmergedFacts.suppress_executive_offer_until = suppressUntil;\n\nconst suppressUntilTs = suppressUntil ? new Date(suppressUntil).getTime() : 0;\nconst suppressExecutiveActive = suppressUntilTs > 0 && nowMs < suppressUntilTs;\n\nconst awaitingPrev = parseBool(mergedFacts.awaiting_handoff_confirmation);\nlet awaitingNext = awaitingPrev;\nif (isDerived || confirmsHandoff || isHumanThisTurn) awaitingNext = false;\nelse if (offersExecutive) awaitingNext = true;\n\nmergedFacts.awaiting_handoff_confirmation = awaitingNext;\nmergedFacts.last_handoff_offer_at = offersExecutive ? nowIso : (mergedFacts.last_handoff_offer_at || '');\n\nif (outputText) {\n    let effectiveOutput = outputText;\n    const isShortAckSignal = userSignal === 'phatic' || userSignal === 'regular';\n    const capturedEmailThisTurn = updated.includes('customer_email') && nonEmpty(mergedFacts.customer_email);\n    if (isDerived && !isHumanThisTurn && capturedEmailThisTurn) {\n      effectiveOutput = 'Perfecto, ya tengo tu correo. Quedaste derivado. Te contactamos en 15-30 min.';\n    } else if (isDerived && !isHumanThisTurn && (offersExecutive || suppressExecutiveActive || isShortAckSignal)) {\n      effectiveOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';\n    }\n\n    const prevOutput = String(mergedFacts.last_assistant_output || '').trim();\n    const prevNorm = normalizeForRepeat(prevOutput);\n    const currNorm = normalizeForRepeat(effectiveOutput);\n    const isRepeat = prevNorm && currNorm && (prevNorm === currNorm || prevNorm.includes(currNorm) || currNorm.includes(prevNorm));\n    mergedFacts.assistant_repeat_count = isRepeat ? Number(mergedFacts.assistant_repeat_count || 0) + 1 : 0;\n    if (mergedFacts.assistant_repeat_count >= 2 && !isDerived) {\n      mergedFacts.response_style = 'ultra_concise';\n    }\n    mergedFacts.last_assistant_output = effectiveOutput.slice(0, 500);\n    outbound.output = effectiveOutput;\n}\n\nif (updated.length > 0) {\n  mergedFacts.updated_fields_last_turn = updated;\n  mergedFacts.last_captured_at = nowIso;\n}\n\nif (resetNotifyRequested) {\n  mergedFacts.team_notified = false;\n  mergedFacts.team_notified_at = '';\n  mergedFacts.lead_notify_last_at = '';\n  mergedFacts.lead_notify_cooldown_until = '';\n  mergedFacts.handoff_notified = false;\n  mergedFacts.handoff_notified_at = '';\n}\n\nconst leadNotifyLastAt = String(mergedFacts.lead_notify_last_at || '').trim();\nconst leadNotifyLastMs = leadNotifyLastAt ? new Date(leadNotifyLastAt).getTime() : 0;\nconst cooldownUntilMs = leadNotifyLastMs ? (leadNotifyLastMs + cooldownMs) : 0;\nconst cooldownActive = leadNotifyLastMs > 0 && nowMs < cooldownUntilMs;\n\nconst leadRelevantFields = new Set(['customer_email', 'vehicle_brand_model', 'vehicle_description', 'vehicle_url', 'vehicle_year', 'vehicle_km', 'customer_phone', 'customer_name', 'known_vehicles_summary']);\nconst hasLeadRelevantUpdate = updated.some(f => leadRelevantFields.has(f));\n\nlet shouldNotify = false;\nlet notifyReason = '';\n\nconst handoffNotified = parseBool(mergedFacts.handoff_notified);\nconst teamNotified = parseBool(mergedFacts.team_notified);\n\nif (isHumanThisTurn && !cooldownActive && !handoffNotified) {\n  shouldNotify = true;\n  notifyReason = 'handoff_first_time';\n} else if (stage === 'listo_para_cierre' && !isDerived) {\n  if (cooldownActive) notifyReason = 'cooldown_active';\n  else if (!teamNotified) {\n    shouldNotify = true;\n    notifyReason = 'ready_first_notification';\n  } else if (hasLeadRelevantUpdate) {\n    shouldNotify = true;\n    notifyReason = 'ready_with_new_data';\n  } else notifyReason = 'already_notified_no_change';\n} else if (isDerived) {\n  notifyReason = handoffNotified ? 'handoff_already_notified' : (cooldownActive ? 'cooldown_active' : 'derived_waiting');\n} else {\n  notifyReason = 'stage_not_ready';\n}\n\nif (shouldNotify) {\n  mergedFacts.team_notified = true;\n  mergedFacts.team_notified_at = nowIso;\n  mergedFacts.lead_notify_last_at = nowIso;\n  mergedFacts.lead_notify_cooldown_until = new Date(nowMs + cooldownMs).toISOString();\n  mergedFacts.lead_notify_count = Number(mergedFacts.lead_notify_count || 0) + 1;\n  if (isHumanThisTurn) {\n    mergedFacts.handoff_notified = true;\n    mergedFacts.handoff_notified_at = nowIso;\n  }\n}\n\nconst securityLevel = String(outbound.security_flags?.level || 'none');\nlet responseMode = 'normal';\nif (isHumanThisTurn) responseMode = 'handoff';\nelse if (isDerived && (userSignal === 'phatic' || userSignal === 'regular')) responseMode = 'post_handoff_ack';\nelse if (isDerived) responseMode = 'post_handoff';\nelse if (postCloseLock === 'on' && userSignal === 'phatic') responseMode = 'post_cierre_phatic';\nelse if (postCloseLock === 'on') responseMode = 'post_cierre';\nelse if (securityLevel === 'high' || securityLevel === 'medium') responseMode = 'security_guard';\n\nmergedFacts.last_agent_mode = responseMode;\nmergedFacts.conversation_version = 9;\n\nmergedFacts.notification_debug = {\n  at: nowIso,\n  parse_status: parseStatus,\n  stage,\n  contact_state: mergedFacts.contact_state,\n  response_style: mergedFacts.response_style,\n  precision_mode: mergedFacts.precision_mode,\n  post_close_lock: mergedFacts.post_close_lock,\n  tone_mode: mergedFacts.tone_mode,\n  user_signal: userSignal,\n  response_mode: responseMode,\n  handoff_status: nextHandoffStatus,\n  suppress_executive_active: suppressExecutiveActive,\n  security_level: securityLevel,\n  should_notify: shouldNotify,\n  reason: notifyReason,\n  cooldown_minutes: COOLDOWN_MINUTES,\n  cooldown_active: cooldownActive,\n  has_lead_relevant_update: hasLeadRelevantUpdate,\n  repeat_count: Number(mergedFacts.assistant_repeat_count || 0),\n  is_human_this_turn: isHumanThisTurn,\n  was_derived: wasDerived,\n  is_derived: isDerived\n};\n\nconst memoryName = String(mergedFacts.customer_name || existing.name || '').trim();\nconst memoryLastIntent = String(\n  mergedFacts.last_user_intent\n  || mergedFacts.customer_intent\n  || outbound.message_text\n  || existing.last_intent\n  || ''\n).trim();\n\nreturn [{\n  json: {\n    ...outbound,\n    memory_key_facts: mergedFacts,\n    memory_name: memoryName,\n    memory_last_intent: memoryLastIntent,\n    should_notify: shouldNotify,\n    notify_reason: notifyReason,\n    notify_debug: mergedFacts.notification_debug\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          272,
+          80
+        ],
+        "id": "cb779be2-b5a1-4fda-a41b-b8e2a0d95454",
+        "name": "Fusionar Memoria Incremental"
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst messageType = String(item.message_type || 'unknown');\nconst waId = item.wa_id;\n\nlet output = '';\n\nswitch (messageType) {\n  case 'image':\n  case 'video':\n    output = 'Recibi tu archivo! Por ahora solo puedo leer mensajes de texto. Me escribes los datos del auto que quieres vender? Marca, modelo, ano y kilometraje. Si tienes el link de publicacion, con eso basta.';\n    break;\n  case 'audio':\n    output = 'Recibi tu audio, pero por ahora solo puedo leer mensajes de texto. Me los escribes por favor?';\n    break;\n  case 'document':\n    output = 'Recibi tu documento! Por ahora solo proceso mensajes de texto. Me escribes los datos del auto? Marca, modelo, ano y km.';\n    break;\n  default:\n    output = '';\n}\n\nreturn [{ json: { wa_id: waId, output: output } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -704,
+          -160
+        ],
+        "id": "62ded8cd-548a-43d4-ad4c-48765353a363",
+        "name": "Responder No-Texto"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "ntr1",
+                "leftValue": "={{ $json.output }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -480,
+          -160
+        ],
+        "id": "7a8ed67d-feb8-44c0-9410-bb671b49edec",
+        "name": "If Respuesta No-Texto"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "nt1",
+                "name": "output",
+                "value": "={{ $json.output ?? \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "nt2",
+                "name": "needs_human",
+                "value": false,
+                "type": "boolean"
+              },
+              {
+                "id": "nt3",
+                "name": "handoff_reason",
+                "value": "",
+                "type": "string"
+              },
+              {
+                "id": "nt4",
+                "name": "optout_requested",
+                "value": false,
+                "type": "boolean"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -800,
+          176
+        ],
+        "id": "4d9b0d38-2bd2-4867-949c-b8ca4c3546a0",
+        "name": "Preparar Respuesta HTTP No-Texto"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "lc1",
+                "leftValue": "={{ $json.should_notify }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          704,
+          80
+        ],
+        "id": "7b5ae3cf-ce64-4c80-b359-0f4934811a9d",
+        "name": "If Lead Caliente"
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst kf = item.memory_key_facts || {};\nconst notifyPhone = $('Normalizar Entrada').item.json.notify_phone || '+56975400946';\nconst notifyEmail = $('Normalizar Entrada').item.json.notify_email || 'infoautorecente@gmail.com';\n\nconst lines = ['*Lead post-campana*', ''];\nif (kf.customer_name) lines.push('Nombre: ' + kf.customer_name);\nif (item.wa_id) lines.push('Tel: ' + item.wa_id);\nif (kf.customer_email) lines.push('Correo: ' + kf.customer_email);\n\nlet knownVehicles = [];\nif (Array.isArray(kf.known_vehicles)) {\n  knownVehicles = kf.known_vehicles;\n} else if (typeof kf.known_vehicles === 'string') {\n  try {\n    const parsed = JSON.parse(kf.known_vehicles);\n    knownVehicles = Array.isArray(parsed) ? parsed : [];\n  } catch (e) {\n    knownVehicles = [];\n  }\n}\n\nif (knownVehicles.length > 0) {\n  lines.push('Vehiculos registrados:');\n  for (const [idx, vehicle] of knownVehicles.entries()) {\n    const label = [String(vehicle?.make || '').trim(), String(vehicle?.model || '').trim(), vehicle?.year ? String(vehicle.year) : '']\n      .filter(Boolean)\n      .join(' ')\n      .trim();\n    if (label) {\n      lines.push((idx + 1) + ') ' + label);\n    }\n  }\n}\n\nif (kf.vehicle_url) {\n  lines.push('Link auto: ' + kf.vehicle_url);\n} else if (kf.vehicle_brand_model || kf.vehicle_description) {\n  lines.push('Auto: ' + (kf.vehicle_brand_model || kf.vehicle_description));\n}\n\nif (kf.customer_intent) lines.push('Intencion: ' + kf.customer_intent);\nif (item.handoff_reason) lines.push('Motivo: ' + item.handoff_reason);\nif (item.message_text) lines.push('Ultimo msg: ' + String(item.message_text).slice(0, 140));\nif (item.notify_reason) lines.push('Trigger: ' + item.notify_reason);\n\nlines.push('');\nlines.push('SLA: 15-30 min');\n\nreturn [{\n  json: {\n    notify_phone: notifyPhone,\n    notify_email: notifyEmail,\n    notification_text: lines.join('\\n')\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          928,
+          80
+        ],
+        "id": "7edfada9-b7d6-4f9a-a35f-a43f851420b1",
+        "name": "Preparar Notificacion Lead"
+      },
+      {
+        "parameters": {
+          "operation": "send",
+          "phoneNumberId": "1071085216087926",
+          "recipientPhoneNumber": "={{ $json.notify_phone }}",
+          "textBody": "={{ $json.notification_text }}",
+          "additionalFields": {},
+          "path": "0226521a-806c-4a70-97f8-22fca7e263f6"
+        },
+        "type": "n8n-nodes-base.whatsApp",
+        "typeVersion": 1.1,
+        "position": [
+          1168,
+          80
+        ],
+        "id": "f0dbf3dc-2832-4bf5-9a8b-cd10d1cd0805",
+        "name": "Notificar Lead Caliente",
+        "webhookId": "0226521a-806c-4a70-97f8-22fca7e263f6",
+        "credentials": {
+          "whatsAppApi": {
+            "id": "id9ZM5iVMoIoTPzq",
+            "name": "n8n agent"
+          }
+        },
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "Normalizar Entrada": {
+        "main": [
+          [
+            {
+              "node": "Extraer Datos Vitales",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If": {
+        "main": [
+          [
+            {
+              "node": "Generar Customer ID",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Detectar Handoff",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Responder No-Texto",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "n8n agent whatsapp": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent": {
+        "main": [
+          [
+            {
+              "node": "Responder HTTP",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Preparar Outbound Persistencia",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generar Customer ID": {
+        "main": [
+          [
+            {
+              "node": "Supabase Crear Cliente",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Supabase Guardar Inbound",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Outbound Persistencia": {
+        "main": [
+          [
+            {
+              "node": "Supabase Leer Memoria Persistencia",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Supabase Crear Memoria": {
+        "main": [
+          [
+            {
+              "node": "Supabase Actualizar Memoria",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Detectar Handoff": {
+        "main": [
+          [
+            {
+              "node": "If Handoff Inmediato",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Handoff Inmediato": {
+        "main": [
+          [
+            {
+              "node": "Preparar Respuesta Handoff",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparar Contexto Memoria Persistente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Respuesta Handoff": {
+        "main": [
+          [
+            {
+              "node": "Responder HTTP",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Preparar Outbound Persistencia",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Contexto Memoria Persistente": {
+        "main": [
+          [
+            {
+              "node": "Supabase Leer Memoria Contexto",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Supabase Leer Memoria Contexto": {
+        "main": [
+          [
+            {
+              "node": "Unificar Contexto IA",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Unificar Contexto IA": {
+        "main": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extraer Datos Vitales": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Supabase Leer Memoria Persistencia": {
+        "main": [
+          [
+            {
+              "node": "Fusionar Memoria Incremental",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fusionar Memoria Incremental": {
+        "main": [
+          [
+            {
+              "node": "Supabase Guardar Outbound",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Supabase Crear Memoria",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "If Lead Caliente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Responder No-Texto": {
+        "main": [
+          [
+            {
+              "node": "If Respuesta No-Texto",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Respuesta No-Texto": {
+        "main": [
+          [
+            {
+              "node": "Preparar Respuesta HTTP No-Texto",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Lead Caliente": {
+        "main": [
+          [
+            {
+              "node": "Preparar Notificacion Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Notificacion Lead": {
+        "main": [
+          [
+            {
+              "node": "Notificar Lead Caliente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Inbound desde wa-test": {
+        "main": [
+          [
+            {
+              "node": "Normalizar Entrada",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Respuesta HTTP No-Texto": {
+        "main": [
+          [
+            {
+              "node": "Responder HTTP",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Dennys parra",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-24T21:59:19.042Z",
+        "id": 138,
+        "workflowId": "PI8uZo5omcN3576y",
+        "versionId": "dd1a89ac-7a63-405c-b2d4-e7a7ef9760db",
+        "event": "activated",
+        "userId": "8d921d9a-02fe-491e-a2a5-fee248d259f7"
+      }
+    ]
+  }
+}

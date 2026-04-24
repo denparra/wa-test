@@ -52,6 +52,8 @@ DERIVACION Y PERSUASION SUAVE
 - Frases compuestas como "ok perfecto", "ok gracias", "si perfecto" o "dale perfecto" tambien cuentan como confirmacion tras CTA.
 - Si awaiting_handoff_confirmation=true y el cliente responde con aceptacion breve o phatica (incluyendo escritura informal), interpretalo como confirmacion y deriva.
 - Si raw_input.context.handoff_offer_pending=true, trata la respuesta breve positiva como confirmacion de derivacion.
+- Si el cliente pide contacto humano directo ("que me contacten", "llamenme", "contactame"), deriva aunque falte contexto previo.
+- Tras aceptar derivacion, NO vuelvas a preguntar por correo antes de confirmar la derivacion.
 - Si hay duda real, haz una sola pregunta corta para confirmar; no repitas el CTA largo.
 
 NO REPETICION DESPUES DE DERIVAR
@@ -264,8 +266,9 @@ const compoundAffirmative = /^(ok|si|sii|dale|de acuerdo)\\s+(perfecto|gracias|d
 const phaticAck = /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(textNorm);
 const softPositive = /\\b(por favor|porfa|okey|oki|oka|vale|ya)\\b/.test(textNorm);
 const handoffActionIntent = /\\b(enviame|enviame|mandame|manda me|envia me|enviar|mandar|derivame|deriva me|contactame|contacta me|llamame|llama me|pasame con ejecutivo|pasame con asesor|quiero que me contacten|si espero|ok espero|oka espero)\\b/.test(textNorm);
+const explicitContactRequest = /\\b(que me contacten|me contacten|contactame|contacta me|llamame|llama me|quiero que me contacten|quiero hablar con ejecutivo|quiero hablar con asesor|me llamen|que me llamen)\\b/.test(textNorm);
 const lastAssistantHadCta = /\\b(ejecutivo|asesor)\\b/.test(lastAssistantNorm)
-  && /\\b(contacta|contacto|contactamos|contactarte|llame|llamemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);
+  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15 30|min|minutos)\\b/.test(lastAssistantNorm);
 const handoffContextActive = awaitingHandoffConfirmation || lastAssistantHadCta || pendingOfferFromServer;
 const contextualAck = handoffContextActive
   && !hasHumanNegation
@@ -283,10 +286,10 @@ if (security.is_prompt_injection) {
 } else if (security.is_spam_like) {
   reason = 'security_spam_guard';
   handoffOutput = 'Recibi mucha informacion en un solo mensaje. Si quieres, te contacta un ejecutivo en 15-30 min para verlo contigo.';
-} else if (derivedAlready && (phaticAck || phaticFromExtractor || (isVeryShort && !hasQuestion && !hasHumanNegation))) {
+} else if (derivedAlready && !hasHumanNegation && !hasQuestion) {
   reason = 'post_handoff_ack';
   handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
-} else if (!hasHumanNegation && explicitHuman) {
+} else if (!hasHumanNegation && (explicitHuman || explicitContactRequest)) {
   reason = 'solicitud_humano';
   needsHuman = true;
   handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
@@ -468,7 +471,16 @@ mergedFacts.has_closing_email = hasEmail;
 mergedFacts.has_vehicle_min_data = hasAuto;
 mergedFacts.correo_de_cierre = hasEmail;
 
-const wasDerived = parseBool(mergedFacts.derivado_agente_humano);
+const existingHandoffStatus = String(mergedFacts.handoff_status || '').toLowerCase().trim();
+const existingSuppressUntil = String(mergedFacts.suppress_executive_offer_until || '').trim();
+const existingSuppressUntilMs = existingSuppressUntil ? new Date(existingSuppressUntil).getTime() : 0;
+const existingSuppressActive = existingSuppressUntilMs > 0 && nowMs < existingSuppressUntilMs;
+const handoffActiveContext = Boolean(outbound.raw_input?.context?.handoff_active);
+const wasDerived = parseBool(mergedFacts.derivado_agente_humano)
+  || existingHandoffStatus === 'confirmed'
+  || existingHandoffStatus === 'closed'
+  || existingSuppressActive
+  || handoffActiveContext;
 const isHumanThisTurn = Boolean(outbound.needs_human);
 const isDerived = wasDerived || isHumanThisTurn;
 
@@ -513,8 +525,9 @@ if (isHumanThisTurn) {
 const outputText = String(outbound.output || '').trim();
 const outputNorm = outputText.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
 const offersExecutive = /\\b(ejecutivo|asesor)\\b/.test(outputNorm)
-  && /\\b(contacta|contacto|contactamos|contactarte|llame|llamemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);
-const confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm);
+  && /\\b(contacta|contacto|contacte|contacten|contactamos|contactarte|llame|llamemos|15-30|15 30|min|minutos)\\b/.test(outputNorm);
+const confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm)
+  || (/\\bte contacto un ejecutivo\\b/.test(outputNorm) && !/[?¿]/.test(outputText));
 
 const previousHandoffStatus = String(mergedFacts.handoff_status || 'none').toLowerCase().trim() || 'none';
 let nextHandoffStatus = previousHandoffStatus;
@@ -547,7 +560,10 @@ mergedFacts.last_handoff_offer_at = offersExecutive ? nowIso : (mergedFacts.last
 if (outputText) {
     let effectiveOutput = outputText;
     const isShortAckSignal = userSignal === 'phatic' || userSignal === 'regular';
-    if (isDerived && !isHumanThisTurn && (offersExecutive || suppressExecutiveActive || isShortAckSignal)) {
+    const capturedEmailThisTurn = updated.includes('customer_email') && nonEmpty(mergedFacts.customer_email);
+    if (isDerived && !isHumanThisTurn && capturedEmailThisTurn) {
+      effectiveOutput = 'Perfecto, ya tengo tu correo. Quedaste derivado. Te contactamos en 15-30 min.';
+    } else if (isDerived && !isHumanThisTurn && (offersExecutive || suppressExecutiveActive || isShortAckSignal)) {
       effectiveOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
     }
 

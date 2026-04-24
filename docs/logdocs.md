@@ -71,3 +71,43 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
   - `Detectar Handoff` now treats action-style confirmations (`ok enviame`, `mandame`, `si espero`, etc.) as handoff confirmation in CTA context.
 - Validation: syntax checks, workflow regenerate, remote workflow update.
 - Rollback: restore remote backup above and revert this change set in `server.js` and tune script.
+
+### 2026-04-24 18:48 - Coherence fix for direct contact requests and post-acceptance behavior
+
+- Scope: strengthen handoff intent detection so direct contact phrases derive immediately and avoid incoherent CTA/email loops.
+- Why: real chat showed `si por favor que me contacten` and `ok enviame` did not reliably trigger derivation, causing repeated CTA prompts.
+- Files: `scripts/n8n/tune-meta-agent-handoff.js`, `n8n/workflows/META-CONSIGNACION-V1.json`.
+- n8n workflow: id `PI8uZo5omcN3576y`, name `META-CONSIGNACION-V1`.
+- Backup artifact: `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-coherence-fix.json`.
+- Runtime impact:
+  - `Detectar Handoff` now derives on explicit direct-contact requests even without prior CTA context.
+  - CTA-context detector expanded to include conjugations like `contacte/contacten` in prior assistant output.
+  - Fusion now treats affirmative non-question statements like `te contacto un ejecutivo...` as effective handoff confirmation state.
+  - Prompt guardrail updated to avoid asking for email before confirming derivation once contact intent is accepted.
+- Validation: syntax check on tune script, regenerate workflow JSON, update remote workflow.
+- Rollback: restore remote backup above and re-run update.
+
+### 2026-04-24 18:58 - Chat regression harness for faster QA
+
+- Scope: add local scripted conversation testing harness to validate WhatsApp bot behavior without real WhatsApp sends.
+- Why: repeated conversational regressions required faster deterministic testing before production validation.
+- Files: `scripts/harness/chat-regression.js`, `scenarios/harness/chat-regression.default.json`, `docs/ops/chat-harness.md`, `package.json`.
+- Runtime impact: new command `npm run harness:chat` executes multi-turn conversation checks with assertions and conversation-level anti-loop rules.
+- Validation: script syntax check and dry-run invocation documented.
+- Rollback: remove harness files and npm script entry.
+
+### 2026-04-24 19:00 - Harness-driven hardening for post-handoff email turn
+
+- Scope: fix incoherent follow-up after confirmed handoff when user sends email in next turn.
+- Why: harness exposed loop where assistant re-opened executive CTA after already derived.
+- Files: `server.js`, `scripts/n8n/tune-meta-agent-handoff.js`, `n8n/workflows/META-CONSIGNACION-V1.json`, `scenarios/harness/chat-regression.n8n.json`.
+- n8n workflow: id `PI8uZo5omcN3576y`, name `META-CONSIGNACION-V1`.
+- Backup artifact: `n8n/workflows/META-CONSIGNACION-V1.remote-backup-20260424-pre-harness-hardening.json`.
+- Runtime impact:
+  - server applies a deterministic post-handoff guard: if handoff is active and user provides email, closes with derived confirmation instead of reopening CTA.
+  - server blocks CTA re-open when handoff is active and AI outputs another executive offer.
+  - fusion logic now treats `handoff_active` context and persistent handoff flags as derived state source.
+- Validation:
+  - `npm run harness:chat` (twilio_inbound) -> `PASSED`.
+  - direct n8n scenario available in `scenarios/harness/chat-regression.n8n.json`.
+- Rollback: restore remote backup above and revert server/tune changes.

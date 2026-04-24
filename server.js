@@ -223,6 +223,10 @@ function isHandoffOfferText(text = '') {
     return hasExecutive && (hasContactAction || hasEta);
 }
 
+function hasEmailInText(text = '') {
+    return /([^\s<>"'`]+@[^\s<>"'`]+\.[^\s<>"'`]+)/i.test(String(text || ''));
+}
+
 function normalizeIntentText(text = '') {
     return String(text || '')
         .toLowerCase()
@@ -1985,6 +1989,14 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
 
             if (aiResult?.replyText) {
                 reply = aiResult.replyText;
+            }
+
+            if (handoffState && !aiResult?.needsHuman) {
+                if (hasEmailInText(body)) {
+                    reply = 'Perfecto, ya tengo tu correo. Quedaste derivado. Te contactamos en 15-30 min.';
+                } else if (isHandoffOfferText(reply)) {
+                    reply = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+                }
             }
 
             if (aiResult?.optoutRequested && phone) {
