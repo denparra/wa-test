@@ -121,6 +121,8 @@ const schedulerState = { running: false };
 const STATUS_CALLBACK_URL = process.env.STATUS_CALLBACK_URL
     || (process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/twilio/status-callback` : null);
 const N8N_CHAT_WEBHOOK_URL = String(process.env.N8N_CHAT_WEBHOOK_URL || '').trim();
+const HANDOFF_ACK_WINDOW_MS = 6 * 60 * 60 * 1000;
+const recentHandoffByPhone = new Map();
 
 if (!N8N_CHAT_WEBHOOK_URL) {
     console.warn('[startup] N8N_CHAT_WEBHOOK_URL no configurada: /twilio/inbound usara respuesta local fallback');
@@ -166,6 +168,11 @@ async function getN8nChatReply(payload) {
     } finally {
         clearTimeout(timeout);
     }
+}
+
+function isPhaticAckMessage(text = '') {
+    const normalized = String(text || '').toLowerCase().replace(/[!?.,;:]/g, '').trim();
+    return /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(normalized);
 }
 
 function normalizeScheduledAt(value) {
@@ -1570,6 +1577,12 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
 
     // Si no es BAJA, intentamos respuesta IA via n8n (modo webhook bridge).
     if (!isBaja) {
+        const lastHandoffAt = phone ? Number(recentHandoffByPhone.get(phone) || 0) : 0;
+        const handoffWindowActive = lastHandoffAt > 0 && (Date.now() - lastHandoffAt) < HANDOFF_ACK_WINDOW_MS;
+        if (handoffWindowActive && isPhaticAckMessage(body)) {
+            reply = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+        }
+
         const aiResult = await getN8nChatReply({
             source: 'twilio',
             phone,
@@ -1582,7 +1595,7 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
             }
         });
 
-        if (aiResult?.replyText) {
+        if (aiResult?.replyText && !(handoffWindowActive && isPhaticAckMessage(body))) {
             reply = aiResult.replyText;
         }
 
@@ -1597,6 +1610,9 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
         }
 
         if (aiResult?.needsHuman) {
+            if (phone) {
+                recentHandoffByPhone.set(phone, Date.now());
+            }
             console.log('INBOUND-HANDOFF:', {
                 from: maskPhone(phone),
                 reason: aiResult.handoffReason || 'unspecified'
@@ -1616,6 +1632,18 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                 messageSid: req.body.MessageSid || null, // RENAMED
                 status: 'received'
             });
+
+            if (reply) {
+                insertMessage({
+                    contactId: contact?.id || null,
+                    campaignId: null,
+                    direction: 'outbound',
+                    phone,
+                    body: reply,
+                    messageSid: null,
+                    status: 'sent'
+                });
+            }
 
             if (isBaja) {
                 insertOptOut(phone, 'user_request');

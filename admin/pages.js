@@ -470,6 +470,17 @@ export function renderMessagesPage({ messages, direction, offset, limit }) {
     o busca por nombre, teléfono o contenido.`
   );
 
+  function getDisplayBody(msg) {
+    const body = String(msg?.body || '').trim();
+    if (body) {
+      return body;
+    }
+    if (msg?.direction === 'outbound') {
+      return msg?.campaign_name ? '[Plantilla de campana enviada]' : '[Mensaje saliente sin cuerpo]';
+    }
+    return '[Mensaje sin contenido]';
+  }
+
   // ---- Agrupación por contacto (sin tocar persistencia) ----
   const groupsMap = new Map();
   for (const msg of messages) {
@@ -482,7 +493,7 @@ export function renderMessagesPage({ messages, direction, offset, limit }) {
         name: msg.contact_name || '',
         messages: [],
         lastAt: msg.created_at,
-        lastBody: msg.body || '',
+        lastBody: getDisplayBody(msg),
         lastDirection: msg.direction,
         lastStatus: msg.status,
         campaigns: new Set(),
@@ -492,7 +503,11 @@ export function renderMessagesPage({ messages, direction, offset, limit }) {
       };
       groupsMap.set(key, group);
     }
-    group.messages.push(msg);
+    const normalizedMsg = {
+      ...msg,
+      body: getDisplayBody(msg)
+    };
+    group.messages.push(normalizedMsg);
     if (msg.campaign_name) {
       group.campaigns.add(msg.campaign_name);
     }
@@ -504,7 +519,7 @@ export function renderMessagesPage({ messages, direction, offset, limit }) {
     // Primera aparición == más reciente porque listMessages ordena DESC.
     if (!group.lastAt || String(msg.created_at || '') > String(group.lastAt)) {
       group.lastAt = msg.created_at;
-      group.lastBody = msg.body || '';
+      group.lastBody = getDisplayBody(msg);
       group.lastDirection = msg.direction;
       group.lastStatus = msg.status;
     }
