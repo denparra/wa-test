@@ -55,3 +55,8 @@
 ## Security and Configuration Notes
 - Never commit `.env` or Twilio credentials.
 - Ensure webhook responses return `Content-Type: text/xml` with valid TwiML.
+
+## Documentation Trace Policy
+- Maintain `docs/logdocs.md` as the running implementation trace for bot and workflow changes.
+- For every non-trivial change, add one entry with: scope, reason, files, runtime impact, validation, rollback.
+- If a change touches n8n workflows, include the workflow id/name and backup artifact path when applicable.

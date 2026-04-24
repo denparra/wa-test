@@ -72,7 +72,7 @@ function formatDateTimeLocal(value) {
 export function renderDashboardPage({ stats }) {
   const cards = [
     { label: 'Contactos', value: stats.contacts, link: '/admin/contacts', desc: 'Total de contactos en la base', icon: 'users', kicker: 'Base activa' },
-    { label: 'Vehiculos', value: stats.vehicles, desc: 'Vehículos asociados a contactos', icon: 'car', kicker: 'Inventario asociado' },
+    { label: 'Vehiculos', value: stats.vehicles, link: '/admin/vehicles', desc: 'Vehículos asociados a contactos', icon: 'car', kicker: 'Inventario asociado' },
     { label: 'Opt-outs', value: stats.optOuts, link: '/admin/opt-outs', desc: 'Usuarios que pidieron BAJA', icon: 'user-x', kicker: 'Excluidos de envíos' },
     { label: 'Campañas', value: stats.campaigns, link: '/admin/campaigns', desc: 'Campañas creadas en total', icon: 'send', kicker: 'Todos los estados' },
     { label: 'Destinatarios', value: stats.campaignRecipients, desc: 'Registros de destino en campañas', icon: 'inbox', kicker: 'Acumulado' },
@@ -275,21 +275,39 @@ export function renderContactEditPage({ contact = null, error = null, vehicles =
 
   const vehiclesSection = contact ? `
     <section class="panel" style="margin-top:20px;">
-      <div class="panel-header"><h2>Vehículos asociados</h2></div>
+      <div class="panel-header">
+        <h3>Vehículos asociados</h3>
+        <a href="/admin/vehicles/new?phone=${encodeURIComponent(contact.phone)}&back=/admin/contacts/${contact.id}/edit" class="action-btn primary">
+          ${renderIcon('plus', 13)} Agregar vehículo
+        </a>
+      </div>
       ${vehicles.length > 0 ? `
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${vehicles.map(v => `
-            <div style="padding:12px;background:#f8f5f1;border-radius:8px;display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="padding:12px;background:var(--surface-1);border:1px solid var(--ink-100);border-radius:var(--radius-md);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
               <div>
                 <strong>${escapeHtml(v.make)} ${escapeHtml(v.model)} ${v.year}</strong>
-                ${v.price != null ? `<div class="muted" style="font-size:13px;">$${Number(v.price).toLocaleString('es-CL')}</div>` : ''}
-                ${v.origin ? `<span style="display:inline-block;padding:2px 8px;background:#e8e0d5;border-radius:4px;font-size:11px;margin-top:4px;">${escapeHtml(v.origin)}</span>` : ''}
-                ${v.external_id ? `<span class="muted" style="font-size:11px;margin-left:6px;">${escapeHtml(v.external_id)}</span>` : ''}
+                ${v.price != null ? `<div style="font-size:13px;font-feature-settings:'tnum';color:var(--ink-700);">$${Number(v.price).toLocaleString('es-CL')}</div>` : ''}
+                <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
+                  ${v.origin ? renderBadge(v.origin, v.origin === 'manual' ? 'info' : 'muted') : ''}
+                  ${v.external_id ? `<span class="muted" style="font-size:11px;font-family:var(--font-mono);">${escapeHtml(v.external_id)}</span>` : ''}
+                </div>
               </div>
-              ${v.link ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" style="font-size:12px;white-space:nowrap;">Ver pub.</a>` : ''}
+              <div class="row-actions" style="flex-shrink:0;">
+                ${v.link ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación">${renderIcon('arrow-up-right', 12)}</a>` : ''}
+                <a href="/admin/vehicles/${v.id}/edit?back=/admin/contacts/${contact.id}/edit" class="action-btn">${renderIcon('edit', 12)} Editar</a>
+                <form method="POST" action="/admin/vehicles/${v.id}/delete" style="display:inline;" onsubmit="return confirm('¿Eliminar este vehículo? No se puede deshacer.')">
+                  <input type="hidden" name="back" value="/admin/contacts/${contact.id}/edit" />
+                  <button type="submit" class="action-btn danger">${renderIcon('trash', 12)}</button>
+                </form>
+              </div>
             </div>
           `).join('')}
-        </div>` : '<p class="muted">Sin vehículos registrados</p>'}
+        </div>` : `
+        <div class="empty" style="padding:18px 22px;">
+          <div class="muted">Sin vehículos registrados.</div>
+          <a href="/admin/vehicles/new?phone=${encodeURIComponent(contact.phone)}&back=/admin/contacts/${contact.id}/edit" class="empty-cta" style="margin-top:10px;">${renderIcon('plus', 13)} Agregar vehículo</a>
+        </div>`}
     </section>` : '';
 
   return renderLayout({ title, content: form + vehiclesSection, active: 'contacts' });
@@ -2537,4 +2555,258 @@ export function renderTemplateFormPage({ template = null, error = null }) {
   `;
 
   return renderLayout({ title, content: form, active: 'templates' });
+}
+
+// ============================================================
+// Vehicles: Lista e inventario
+// ============================================================
+
+export function renderVehiclesPage({ vehicles, vehicleStats, makes, filters = {}, offset, limit, total }) {
+  const { make = '', yearMin = '', yearMax = '', search = '' } = filters;
+  const hasNext = offset + limit < total;
+
+  const helpText = renderHelpText(
+    `<strong>Inventario de vehículos:</strong> todos los autos registrados en el sistema.
+    Filtra por marca, modelo o rango de año. Haz clic en <strong>Editar</strong> para modificar un vehículo o en el nombre del contacto para ir a su perfil.`
+  );
+
+  const kpiCards = [
+    { label: 'Total', value: vehicleStats.total ?? 0, icon: 'car', accent: true },
+    { label: 'Marcas', value: vehicleStats.makes ?? 0, icon: 'filter', accent: false },
+    { label: 'Contactos con auto', value: vehicleStats.contacts_with_vehicles ?? 0, icon: 'users', accent: false },
+    { label: 'Con publicación', value: vehicleStats.with_link ?? 0, icon: 'arrow-up-right', accent: false }
+  ].map(c => `
+    <div class="card${c.accent ? ' card-accent' : ''}">
+      <h2>${renderIcon(c.icon, 14)}<span>${escapeHtml(c.label)}</span></h2>
+      <p>${Number(c.value).toLocaleString('es-CL')}</p>
+    </div>`).join('');
+
+  const makeOptions = [
+    `<option value="">Todas las marcas</option>`,
+    ...makes.map(m => `<option value="${escapeHtml(m.make)}" ${make === m.make ? 'selected' : ''}>${escapeHtml(m.make)} (${m.vehicles})</option>`)
+  ].join('');
+
+  const filtersHtml = `
+    <form method="GET" action="/admin/vehicles" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+      <div class="search-box">
+        <span class="search-icon">${renderIcon('search', 14)}</span>
+        <input type="text" name="search" value="${escapeHtml(search)}" placeholder="Buscar marca, modelo o contacto…" style="min-width:210px;" />
+      </div>
+      <select name="make" style="min-width:150px;">${makeOptions}</select>
+      <input type="number" name="year_min" value="${escapeHtml(String(yearMin))}" placeholder="Año desde" style="width:110px;" min="1960" max="2030" />
+      <input type="number" name="year_max" value="${escapeHtml(String(yearMax))}" placeholder="Año hasta" style="width:110px;" min="1960" max="2030" />
+      <button type="submit">Filtrar</button>
+      ${(make || yearMin || yearMax || search) ? `<a href="/admin/vehicles" class="action-btn ghost">Limpiar</a>` : ''}
+    </form>`;
+
+  // --- Table view ---
+  const tableRows = vehicles.map(v => {
+    const priceText = v.price ? `$${Number(v.price).toLocaleString('es-CL')}` : '—';
+    const originBadge = v.origin ? renderBadge(v.origin, v.origin === 'manual' ? 'info' : 'muted') : '';
+    const linkBtn = v.link
+      ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación">${renderIcon('arrow-up-right', 12)}</a>`
+      : '';
+    const statusBadge = v.contact_status === 'opted_out' ? ` ${renderBadge('baja', 'bad')}` : '';
+    return `<tr>
+      <td><strong>${escapeHtml(v.make)}</strong> ${originBadge}</td>
+      <td>${escapeHtml(v.model)}</td>
+      <td>${v.year}</td>
+      <td class="mono" style="color:var(--ink-700);">${priceText}</td>
+      <td><a href="/admin/contacts/${v.contact_id}/edit" style="color:var(--brand-500);text-decoration:none;font-weight:600;">${escapeHtml(v.contact_name || '—')}</a>${statusBadge}</td>
+      <td class="mono" style="font-size:12px;">${escapeHtml(v.contact_phone)}</td>
+      <td>${linkBtn}</td>
+      <td>
+        <div class="row-actions">
+          <a href="/admin/vehicles/${v.id}/edit" class="action-btn">${renderIcon('edit', 12)} Editar</a>
+          <form method="POST" action="/admin/vehicles/${v.id}/delete" style="display:inline;" onsubmit="return confirm('¿Eliminar este vehículo? No se puede deshacer.')">
+            <button type="submit" class="action-btn danger">${renderIcon('trash', 12)}</button>
+          </form>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const tableHtml = vehicles.length > 0 ? `
+    <div id="vehicle-table-view" style="overflow:auto;border-radius:var(--radius-md);">
+      <table>
+        <thead><tr>
+          <th>Marca</th><th>Modelo</th><th>Año</th><th>Precio</th>
+          <th>Contacto</th><th>Teléfono</th><th>Pub.</th><th>Acciones</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>` : `<div class="empty" id="vehicle-table-view"><div class="empty-title">Sin vehículos</div><div>No hay resultados para los filtros actuales.</div>${(make || yearMin || yearMax || search) ? `<a href="/admin/vehicles" class="empty-cta">Limpiar filtros</a>` : `<a href="/admin/vehicles/new" class="empty-cta">${renderIcon('plus', 13)} Agregar el primero</a>`}</div>`;
+
+  // --- Card view ---
+  const cardsHtml = vehicles.length > 0 ? `
+    <div id="vehicle-card-view" style="display:none;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
+      ${vehicles.map(v => `
+        <div class="card card-accent" style="gap:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div>
+              <div style="font-size:11px;color:var(--ink-400);text-transform:uppercase;letter-spacing:1px;font-weight:600;">${escapeHtml(v.make)}</div>
+              <div style="font-size:19px;font-weight:700;letter-spacing:-0.3px;line-height:1.2;">${escapeHtml(v.model)}</div>
+              <div style="font-size:13px;color:var(--ink-500);">${v.year}</div>
+            </div>
+            ${v.link ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación" style="padding:6px;flex-shrink:0;">${renderIcon('arrow-up-right', 14)}</a>` : ''}
+          </div>
+          ${v.price ? `<div style="font-size:16px;font-weight:700;color:var(--brand-500);font-feature-settings:'tnum';">$${Number(v.price).toLocaleString('es-CL')}</div>` : '<div style="font-size:13px;color:var(--ink-400);">Sin precio</div>'}
+          <div style="border-top:1px solid var(--ink-100);padding-top:8px;">
+            <a href="/admin/contacts/${v.contact_id}/edit" style="font-size:12px;font-weight:600;color:var(--brand-500);text-decoration:none;">${escapeHtml(v.contact_name || '—')}</a>
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-400);margin-top:2px;">${escapeHtml(v.contact_phone)}</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <a href="/admin/vehicles/${v.id}/edit" class="action-btn" style="flex:1;justify-content:center;">${renderIcon('edit', 12)} Editar</a>
+            <form method="POST" action="/admin/vehicles/${v.id}/delete" style="display:inline;" onsubmit="return confirm('¿Eliminar este vehículo? No se puede deshacer.')">
+              <button type="submit" class="action-btn danger">${renderIcon('trash', 12)}</button>
+            </form>
+          </div>
+        </div>`).join('')}
+    </div>` : '';
+
+  const pager = vehicles.length > 0
+    ? renderPager({ basePath: '/admin/vehicles', query: { make, year_min: yearMin, year_max: yearMax, search }, offset, limit, hasNext })
+    : '';
+
+  const toggleScript = `<script>
+    (function() {
+      var tableView = document.getElementById('vehicle-table-view');
+      var cardView = document.getElementById('vehicle-card-view');
+      var btnTable = document.getElementById('btn-view-table');
+      var btnCards = document.getElementById('btn-view-cards');
+      if (!tableView || !cardView) return;
+      function setView(v) {
+        if (v === 'cards') {
+          tableView.style.display = 'none';
+          cardView.style.display = 'grid';
+          btnTable.classList.remove('active');
+          btnCards.classList.add('active');
+        } else {
+          tableView.style.display = '';
+          cardView.style.display = 'none';
+          btnTable.classList.add('active');
+          btnCards.classList.remove('active');
+        }
+        try { localStorage.setItem('vehicleView', v); } catch(e) {}
+      }
+      btnTable.addEventListener('click', function() { setView('table'); });
+      btnCards.addEventListener('click', function() { setView('cards'); });
+      var saved = 'table';
+      try { saved = localStorage.getItem('vehicleView') || 'table'; } catch(e) {}
+      setView(saved);
+    })();
+  </script>`;
+
+  const content = `
+    <section class="panel">
+      <div class="panel-header">
+        <h1>Vehículos ${total > 0 ? `<span style="font-size:14px;color:var(--ink-400);font-weight:400;">(${Number(total).toLocaleString('es-CL')})</span>` : ''}</h1>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="chip-group">
+            <button type="button" class="chip active" id="btn-view-table">${renderIcon('filter', 12)} Lista</button>
+            <button type="button" class="chip" id="btn-view-cards">${renderIcon('car', 12)} Cards</button>
+          </div>
+          <a href="/admin/vehicles/new" class="action-btn primary">${renderIcon('plus', 13)} Nuevo vehículo</a>
+        </div>
+      </div>
+      ${helpText}
+      <div class="cards" style="margin-bottom:18px;">${kpiCards}</div>
+      ${filtersHtml}
+      ${tableHtml}
+      ${cardsHtml}
+      ${pager}
+    </section>
+    ${toggleScript}`;
+
+  return renderLayout({ title: 'Vehículos', content, active: 'vehicles' });
+}
+
+// ============================================================
+// Vehicles: Formulario crear/editar
+// ============================================================
+
+export function renderVehicleFormPage({ vehicle = null, error = null, formData = {}, back = '/admin/vehicles' }) {
+  const isNew = !vehicle;
+  const title = isNew ? 'Nuevo Vehículo' : `Editar · ${vehicle.make} ${vehicle.model} ${vehicle.year}`;
+  const action = isNew ? '/admin/vehicles' : `/admin/vehicles/${vehicle.id}`;
+  const backUrl = escapeHtml(formData.back ?? back);
+
+  const fPhone = escapeHtml(formData.contact_phone ?? vehicle?.contact_phone ?? '');
+  const fMake  = escapeHtml(formData.make  ?? vehicle?.make  ?? '');
+  const fModel = escapeHtml(formData.model ?? vehicle?.model ?? '');
+  const fYear  = escapeHtml(String(formData.year  ?? vehicle?.year  ?? ''));
+  const fPrice = escapeHtml(String(formData.price ?? vehicle?.price ?? ''));
+  const fLink  = escapeHtml(formData.link  ?? vehicle?.link  ?? '');
+
+  const helpText = renderHelpText(
+    `<strong>${isNew ? 'Nuevo vehículo' : 'Editar vehículo'}:</strong>
+    El teléfono del contacto propietario debe existir en la base de datos.
+    Si el contacto aún no existe, <a href="/admin/contacts/new" style="color:var(--brand-500);">créalo primero</a>.`
+  );
+
+  const errorHtml = error
+    ? `<div style="color:var(--danger-500);background:var(--danger-50);border:1px solid #f5c3c3;padding:10px 14px;border-radius:var(--radius-md);margin-bottom:14px;">${escapeHtml(error)}</div>`
+    : '';
+
+  const currentContactInfo = !isNew && vehicle
+    ? `<div class="muted" style="font-size:12px;margin-top:4px;">Contacto actual: <strong>${escapeHtml(vehicle.contact_name || vehicle.contact_phone)}</strong> — cambia el teléfono para reasignar el vehículo.</div>`
+    : '';
+
+  const content = `
+    <section class="panel" style="max-width:580px;">
+      <div class="panel-header">
+        <h1>${escapeHtml(title)}</h1>
+        <a href="${backUrl}" class="action-btn">${renderIcon('arrow-left', 13)} Volver</a>
+      </div>
+      ${helpText}
+      ${errorHtml}
+      <form method="POST" action="${action}">
+        <input type="hidden" name="back" value="${backUrl}" />
+
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-weight:600;margin-bottom:5px;">Teléfono del contacto (E.164) *</label>
+          <input type="text" name="contact_phone" value="${fPhone}" required
+                 pattern="^\\+[1-9]\\d{1,14}$"
+                 placeholder="+56975400946"
+                 style="width:100%;" />
+          ${currentContactInfo}
+          <div class="muted" style="font-size:12px;margin-top:4px;">Formato: +56912345678</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Marca *</label>
+            <input type="text" name="make" value="${fMake}" required placeholder="Toyota" style="width:100%;" />
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Modelo *</label>
+            <input type="text" name="model" value="${fModel}" required placeholder="Corolla" style="width:100%;" />
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Año *</label>
+            <input type="number" name="year" value="${fYear}" required placeholder="2018" min="1960" max="2030" style="width:100%;" />
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Precio (CLP)</label>
+            <input type="number" name="price" value="${fPrice}" placeholder="8900000" min="0" step="1000" style="width:100%;" />
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block;font-weight:600;margin-bottom:5px;">Link publicación</label>
+          <input type="url" name="link" value="${fLink}" placeholder="https://..." style="width:100%;" />
+          <div class="muted" style="font-size:12px;margin-top:4px;">URL de la publicación del vehículo (opcional).</div>
+        </div>
+
+        <div style="display:flex;gap:10px;">
+          <button type="submit">${isNew ? 'Crear vehículo' : 'Guardar cambios'}</button>
+          <a href="${backUrl}" class="action-btn">Cancelar</a>
+        </div>
+      </form>
+    </section>`;
+
+  return renderLayout({ title, content, active: 'vehicles' });
 }

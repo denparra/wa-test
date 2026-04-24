@@ -1290,3 +1290,101 @@ export function getVehiclesByContactId(contactId) {
     `).all(contactId);
 }
 
+// ============================================================
+// Fase 5: Vehicle CRUD
+// ============================================================
+
+export function listVehicles({ make = null, model = null, yearMin = null, yearMax = null, search = null, limit = 50, offset = 0 } = {}) {
+    const conditions = [];
+    const params = [];
+
+    if (make) { conditions.push('v.make = ?'); params.push(make); }
+    if (model) { conditions.push('v.model LIKE ?'); params.push(`%${model}%`); }
+    if (yearMin) { conditions.push('v.year >= ?'); params.push(Number(yearMin)); }
+    if (yearMax) { conditions.push('v.year <= ?'); params.push(Number(yearMax)); }
+    if (search) {
+        conditions.push('(v.make LIKE ? OR v.model LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)');
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    return db.prepare(`
+        SELECT v.id, v.make, v.model, v.year, v.price, v.link, v.origin, v.external_id,
+               v.created_at, v.contact_id,
+               c.name AS contact_name, c.phone AS contact_phone, c.status AS contact_status
+        FROM vehicles v
+        JOIN contacts c ON c.id = v.contact_id
+        ${where}
+        ORDER BY v.created_at DESC
+        LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+}
+
+export function countVehicles({ make = null, model = null, yearMin = null, yearMax = null, search = null } = {}) {
+    const conditions = [];
+    const params = [];
+
+    if (make) { conditions.push('v.make = ?'); params.push(make); }
+    if (model) { conditions.push('v.model LIKE ?'); params.push(`%${model}%`); }
+    if (yearMin) { conditions.push('v.year >= ?'); params.push(Number(yearMin)); }
+    if (yearMax) { conditions.push('v.year <= ?'); params.push(Number(yearMax)); }
+    if (search) {
+        conditions.push('(v.make LIKE ? OR v.model LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)');
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    return (db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM vehicles v
+        JOIN contacts c ON c.id = v.contact_id
+        ${where}
+    `).get(...params))?.total ?? 0;
+}
+
+export function getVehicleStats() {
+    return db.prepare(`
+        SELECT
+            COUNT(*) AS total,
+            COUNT(DISTINCT make) AS makes,
+            COUNT(DISTINCT contact_id) AS contacts_with_vehicles,
+            ROUND(AVG(CASE WHEN price > 0 THEN price END)) AS avg_price,
+            COUNT(CASE WHEN link IS NOT NULL AND link != '' THEN 1 END) AS with_link
+        FROM vehicles
+    `).get();
+}
+
+export function getVehicleById(id) {
+    return db.prepare(`
+        SELECT v.id, v.make, v.model, v.year, v.price, v.link, v.origin, v.external_id,
+               v.created_at, v.updated_at, v.contact_id,
+               c.name AS contact_name, c.phone AS contact_phone
+        FROM vehicles v
+        JOIN contacts c ON c.id = v.contact_id
+        WHERE v.id = ?
+    `).get(id);
+}
+
+export function createVehicle({ contact_id, make, model, year, price = null, link = null }) {
+    const result = db.prepare(`
+        INSERT INTO vehicles (contact_id, make, model, year, price, link, origin, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'manual', datetime('now','localtime'), datetime('now','localtime'))
+    `).run(contact_id, make, model, year, price ?? null, link ?? null);
+    return result.lastInsertRowid;
+}
+
+export function updateVehicle(id, { contact_id, make, model, year, price = null, link = null }) {
+    const result = db.prepare(`
+        UPDATE vehicles
+        SET contact_id = ?, make = ?, model = ?, year = ?, price = ?, link = ?
+        WHERE id = ?
+    `).run(contact_id, make, model, year, price ?? null, link ?? null, id);
+    return result.changes > 0;
+}
+
+export function deleteVehicle(id) {
+    return db.prepare('DELETE FROM vehicles WHERE id = ?').run(id).changes > 0;
+}
+

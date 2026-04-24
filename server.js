@@ -48,6 +48,13 @@ import {
     listVehicleMakes,
     listContactsByMake,
     getVehiclesByContactId,
+    listVehicles,
+    countVehicles,
+    getVehicleStats,
+    getVehicleById,
+    createVehicle,
+    updateVehicle,
+    deleteVehicle as dbDeleteVehicle,
     updateOptOut,
     deleteOptOut,
     getOptOutByPhone,
@@ -79,7 +86,9 @@ import {
     renderCampaignFollowUpPage,
     renderConversationPage,
     renderTemplatesPage,
-    renderTemplateFormPage
+    renderTemplateFormPage,
+    renderVehiclesPage,
+    renderVehicleFormPage
 } from './admin/pages.js';
 import { sendOneRecipient } from './lib/twilio-sender.js';
 import {
@@ -123,7 +132,9 @@ const STATUS_CALLBACK_URL = process.env.STATUS_CALLBACK_URL
     || (process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/twilio/status-callback` : null);
 const N8N_CHAT_WEBHOOK_URL = String(process.env.N8N_CHAT_WEBHOOK_URL || '').trim();
 const HANDOFF_ACK_WINDOW_MS = 6 * 60 * 60 * 1000;
+const HANDOFF_OFFER_WINDOW_MS = 20 * 60 * 1000;
 const recentHandoffByPhone = new Map();
+const recentHandoffOfferByPhone = new Map();
 
 if (!N8N_CHAT_WEBHOOK_URL) {
     console.warn('[startup] N8N_CHAT_WEBHOOK_URL no configurada: /twilio/inbound usara respuesta local fallback');
@@ -174,6 +185,14 @@ async function getN8nChatReply(payload) {
 function isPhaticAckMessage(text = '') {
     const normalized = String(text || '').toLowerCase().replace(/[!?.,;:]/g, '').trim();
     return /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(normalized);
+}
+
+function isHandoffOfferText(text = '') {
+    const normalized = normalizeIntentText(text);
+    const hasExecutive = /\b(ejecutivo|asesor)\b/.test(normalized);
+    const hasContactAction = /\b(contacta|contacto|contactamos|contactarte|llame|llamemos)\b/.test(normalized);
+    const hasEta = /\b(15-30|15 30|min|minutos)\b/.test(normalized);
+    return hasExecutive && (hasContactAction || hasEta);
 }
 
 function normalizeIntentText(text = '') {
@@ -256,6 +275,37 @@ function markHandoffStarted(phone = '') {
         ackCount: 0,
         lastAckAt: 0
     });
+}
+
+function getActiveHandoffOfferState(phone = '') {
+    if (!phone) {
+        return null;
+    }
+    const state = recentHandoffOfferByPhone.get(phone);
+    if (!state) {
+        return null;
+    }
+    if ((Date.now() - Number(state.offeredAt || 0)) > HANDOFF_OFFER_WINDOW_MS) {
+        recentHandoffOfferByPhone.delete(phone);
+        return null;
+    }
+    return state;
+}
+
+function markHandoffOffer(phone = '') {
+    if (!phone) {
+        return;
+    }
+    recentHandoffOfferByPhone.set(phone, {
+        offeredAt: Date.now()
+    });
+}
+
+function clearHandoffOffer(phone = '') {
+    if (!phone) {
+        return;
+    }
+    recentHandoffOfferByPhone.delete(phone);
 }
 
 function incrementHandoffAck(phone = '') {
@@ -496,6 +546,183 @@ app.post('/admin/contacts', adminAuth, express.urlencoded({ extended: true }), (
                 formData: { phone, name, status, has_vehicle, make, model, year, price, link }
             })
         );
+    }
+});
+
+// ============================================================
+// Vehicles admin routes
+// ============================================================
+
+app.get('/admin/vehicles', (req, res) => {
+    const { limit, offset } = getPaging(req);
+    const make   = String(req.query.make   || '').trim();
+    const search = String(req.query.search || '').trim();
+    const yearMin = req.query.year_min ? Number(req.query.year_min) : null;
+    const yearMax = req.query.year_max ? Number(req.query.year_max) : null;
+
+    const filters = {
+        make: make || null,
+        yearMin: yearMin || null,
+        yearMax: yearMax || null,
+        search: search || null
+    };
+
+    const vehicles    = listVehicles({ ...filters, limit, offset });
+    const total       = countVehicles(filters);
+    const vehicleStats = getVehicleStats();
+    const makes       = listVehicleMakes();
+
+    res.status(200).type('text/html').send(renderVehiclesPage({
+        vehicles, vehicleStats, makes,
+        filters: { make, yearMin: yearMin || '', yearMax: yearMax || '', search },
+        offset, limit, total
+    }));
+});
+
+app.get('/admin/vehicles/new', (req, res) => {
+    const prePhone = String(req.query.phone || '').trim();
+    const back = String(req.query.back || '/admin/vehicles');
+    res.status(200).type('text/html').send(renderVehicleFormPage({
+        vehicle: null,
+        formData: { contact_phone: prePhone, back }
+    }));
+});
+
+app.post('/admin/vehicles', express.urlencoded({ extended: true }), (req, res) => {
+    const { contact_phone, make, model, year, price, link, back } = req.body;
+    const backUrl = String(back || '/admin/vehicles');
+
+    const phone = normalizePhone(String(contact_phone || '').trim());
+    if (!phone) {
+        return res.status(400).type('text/html').send(renderVehicleFormPage({
+            error: 'Teléfono inválido. Debe estar en formato E.164 (ej: +56975400946).',
+            formData: req.body
+        }));
+    }
+
+    const contact = getContactByPhone(phone);
+    if (!contact) {
+        return res.status(400).type('text/html').send(renderVehicleFormPage({
+            error: `No existe ningún contacto con el teléfono ${phone}. Créalo primero desde Contactos.`,
+            formData: req.body
+        }));
+    }
+
+    const trimMake  = String(make  || '').trim();
+    const trimModel = String(model || '').trim();
+    const parsedYear = parseInt(year);
+
+    if (!trimMake || !trimModel || !parsedYear || parsedYear < 1960 || parsedYear > 2030) {
+        return res.status(400).type('text/html').send(renderVehicleFormPage({
+            error: 'Marca, modelo y año válido son obligatorios.',
+            formData: req.body
+        }));
+    }
+
+    try {
+        createVehicle({
+            contact_id: contact.id,
+            make: trimMake,
+            model: trimModel,
+            year: parsedYear,
+            price: price ? parseFloat(price) : null,
+            link: String(link || '').trim() || null
+        });
+        res.redirect(backUrl);
+    } catch (err) {
+        console.error('Vehicle create error:', err);
+        res.status(500).type('text/html').send(renderVehicleFormPage({
+            error: err.message,
+            formData: req.body
+        }));
+    }
+});
+
+app.get('/admin/vehicles/:id/edit', (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).send('Invalid vehicle ID');
+
+    const vehicle = getVehicleById(id);
+    if (!vehicle) return res.status(404).send('Vehicle not found');
+
+    const back = String(req.query.back || '/admin/vehicles');
+    res.status(200).type('text/html').send(renderVehicleFormPage({ vehicle, formData: { back } }));
+});
+
+app.post('/admin/vehicles/:id', express.urlencoded({ extended: true }), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).send('Invalid vehicle ID');
+
+    const { contact_phone, make, model, year, price, link, back } = req.body;
+    const backUrl = String(back || '/admin/vehicles');
+
+    const phone = normalizePhone(String(contact_phone || '').trim());
+    if (!phone) {
+        const vehicle = getVehicleById(id);
+        return res.status(400).type('text/html').send(renderVehicleFormPage({
+            vehicle,
+            error: 'Teléfono inválido. Debe estar en formato E.164 (ej: +56975400946).',
+            formData: req.body
+        }));
+    }
+
+    const contact = getContactByPhone(phone);
+    if (!contact) {
+        const vehicle = getVehicleById(id);
+        return res.status(400).type('text/html').send(renderVehicleFormPage({
+            vehicle,
+            error: `No existe ningún contacto con el teléfono ${phone}.`,
+            formData: req.body
+        }));
+    }
+
+    const trimMake  = String(make  || '').trim();
+    const trimModel = String(model || '').trim();
+    const parsedYear = parseInt(year);
+
+    if (!trimMake || !trimModel || !parsedYear || parsedYear < 1960 || parsedYear > 2030) {
+        const vehicle = getVehicleById(id);
+        return res.status(400).type('text/html').send(renderVehicleFormPage({
+            vehicle,
+            error: 'Marca, modelo y año válido son obligatorios.',
+            formData: req.body
+        }));
+    }
+
+    try {
+        updateVehicle(id, {
+            contact_id: contact.id,
+            make: trimMake,
+            model: trimModel,
+            year: parsedYear,
+            price: price ? parseFloat(price) : null,
+            link: String(link || '').trim() || null
+        });
+        res.redirect(backUrl);
+    } catch (err) {
+        console.error('Vehicle update error:', err);
+        const vehicle = getVehicleById(id);
+        res.status(500).type('text/html').send(renderVehicleFormPage({
+            vehicle,
+            error: err.message,
+            formData: req.body
+        }));
+    }
+});
+
+app.post('/admin/vehicles/:id/delete', express.urlencoded({ extended: true }), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).send('Invalid vehicle ID');
+
+    const backUrl = String(req.body.back || '/admin/vehicles');
+
+    try {
+        const deleted = dbDeleteVehicle(id);
+        if (!deleted) return res.status(404).send('Vehicle not found');
+        res.redirect(backUrl);
+    } catch (err) {
+        console.error('Vehicle delete error:', err);
+        res.status(500).send('Failed to delete vehicle: ' + err.message);
     }
 });
 
@@ -1692,8 +1919,10 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
     // Si no es BAJA, intentamos respuesta IA via n8n (modo webhook bridge).
     if (!isBaja) {
         const handoffState = phone ? getActiveHandoffState(phone) : null;
+        const handoffOfferState = phone ? getActiveHandoffOfferState(phone) : null;
         const isPhaticAck = isPhaticAckMessage(body);
         let bypassAiForAck = false;
+        let aiResult = null;
 
         if (handoffState && isPhaticAck) {
             const ackCount = incrementHandoffAck(phone);
@@ -1708,7 +1937,7 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
         }
 
         if (!bypassAiForAck) {
-            const aiResult = await getN8nChatReply({
+            aiResult = await getN8nChatReply({
                 source: 'twilio',
                 phone,
                 message_text: body,
@@ -1719,6 +1948,7 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                     campaign_id: null,
                     contact_id: existingContact?.id || null,
                     contact_name: existingContact?.name || null,
+                    handoff_offer_pending: Boolean(handoffOfferState),
                     known_vehicle_count: knownVehicles.length,
                     known_vehicles: knownVehicles
                 }
@@ -1740,12 +1970,21 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
 
             if (aiResult?.needsHuman) {
                 markHandoffStarted(phone);
+                clearHandoffOffer(phone);
                 console.log('INBOUND-HANDOFF:', {
                     from: maskPhone(phone),
                     reason: aiResult.handoffReason || 'unspecified'
                 });
             }
+
+            if (!aiResult?.needsHuman && isHandoffOfferText(reply)) {
+                markHandoffOffer(phone);
+            }
+        } else {
+            clearHandoffOffer(phone);
         }
+    } else {
+        clearHandoffOffer(phone);
     }
 
     try {

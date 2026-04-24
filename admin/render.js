@@ -1,6 +1,7 @@
 const NAV_ITEMS = [
   { key: 'home', label: 'Resumen', href: '/admin', icon: 'bar-chart' },
   { key: 'contacts', label: 'Contactos', href: '/admin/contacts', icon: 'users' },
+  { key: 'vehicles', label: 'Vehículos', href: '/admin/vehicles', icon: 'car' },
   { key: 'messages', label: 'Mensajes', href: '/admin/messages', icon: 'message-square' },
   { key: 'campaigns', label: 'Campanas', href: '/admin/campaigns', icon: 'send' },
   { key: 'templates', label: 'Templates', href: '/admin/templates', icon: 'file-text' },
