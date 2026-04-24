@@ -19,6 +19,7 @@ import {
     listOptOuts,
     normalizePhone,
     upsertContact,
+    getContactByPhone,
     getContactById,
     updateContact,
     deleteContact as dbDeleteContact,
@@ -182,6 +183,53 @@ function normalizeIntentText(text = '') {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function toVehicleContextList(vehicles = []) {
+    if (!Array.isArray(vehicles)) {
+        return [];
+    }
+
+    return vehicles
+        .map((vehicle) => {
+            const make = String(vehicle?.make || '').trim();
+            const model = String(vehicle?.model || '').trim();
+            const year = Number(vehicle?.year || 0);
+            const link = String(vehicle?.link || '').trim();
+            if (!make && !model && !year) {
+                return null;
+            }
+            return {
+                make,
+                model,
+                year: Number.isFinite(year) && year > 0 ? year : null,
+                link
+            };
+        })
+        .filter(Boolean);
+}
+
+function formatVehicleLine(vehicle = {}) {
+    const make = String(vehicle.make || '').trim();
+    const model = String(vehicle.model || '').trim();
+    const year = vehicle.year ? String(vehicle.year) : '';
+    return [make, model, year].filter(Boolean).join(' ').trim();
+}
+
+function formatVehicleShortSummary(vehicles = []) {
+    if (!Array.isArray(vehicles) || vehicles.length === 0) {
+        return '';
+    }
+
+    const labels = vehicles.map(formatVehicleLine).filter(Boolean);
+    if (!labels.length) {
+        return '';
+    }
+    if (labels.length === 1) {
+        return labels[0];
+    }
+
+    return `${labels[0]} (+${labels.length - 1} mas)`;
 }
 
 function getActiveHandoffState(phone = '') {
@@ -1605,6 +1653,11 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
     const phone = normalizePhone(from); // Renamed internal var for clarity, though not strictly required
     const normalizedBody = normalizeIntentText(body);
     const upper = body.toUpperCase();
+    const existingContact = phone ? getContactByPhone(phone) : null;
+    const knownVehicles = existingContact?.id
+        ? toVehicleContextList(getVehiclesByContactId(existingContact.id))
+        : [];
+    const knownVehicleSummary = formatVehicleShortSummary(knownVehicles);
 
     // Quick Win #8: Expanded opt-out keywords for better compliance
     const OPTOUT_KEYWORDS = ['baja', 'stop', 'unsubscribe', 'cancelar', 'remover', 'salir'];
@@ -1627,7 +1680,11 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
     if (isBaja) {
         reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
     } else if (upper === '1' || upper.includes('CONSIGN')) {
-        reply = 'Perfecto. Para avanzar, dime: Marca, Modelo, Ano y Comuna.';
+        if (knownVehicles.length > 0) {
+            reply = `Perfecto. Ya tengo registrado tu vehiculo (${knownVehicleSummary}). Si quieres, te contacta un ejecutivo en 15-30 min para orientarte mejor.`;
+        } else {
+            reply = 'Perfecto. Para avanzar, dime: Marca, Modelo, Ano y Comuna.';
+        }
     } else if (upper === '2' || upper.includes('INFO')) {
         reply = 'Genial. Te cuento: consignamos, publicamos y gestionamos todo. Quieres que te llame un ejecutivo? (SI/NO)';
     }
@@ -1659,7 +1716,11 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
                 received_at: new Date().toISOString(),
                 context: {
                     is_opted_out: phone ? isOptedOut(phone) : false,
-                    campaign_id: null
+                    campaign_id: null,
+                    contact_id: existingContact?.id || null,
+                    contact_name: existingContact?.name || null,
+                    known_vehicle_count: knownVehicles.length,
+                    known_vehicles: knownVehicles
                 }
             });
 

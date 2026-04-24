@@ -31,6 +31,7 @@ OBJETIVO
 CONTEXTO CLAVE
 - Ya existe telefono y datos del vehiculo en sistema.
 - No vuelvas a pedir telefono ni datos del auto salvo que falten en contexto.
+- Si memory_key_facts.known_vehicles_count > 0, usa esos vehiculos como datos validos y no pidas Marca/Modelo/Ano/Comuna.
 
 ESTILO
 - Espanol chileno neutral.
@@ -63,6 +64,147 @@ CORREO
 SALIDA ESPERADA
 - Entrega texto final en output.
 - Cuando corresponda, marca needs_human=true y handoff_reason claro.`;
+
+    const unificarNode = getNode(workflow, 'Unificar Contexto IA');
+    unificarNode.parameters.jsCode = `const live = $('Preparar Contexto Memoria Persistente').item.json;
+const mem = $input.first().json || {};
+
+let keyFacts = {};
+if (mem.key_facts && typeof mem.key_facts === 'object') {
+  keyFacts = mem.key_facts;
+} else if (typeof mem.key_facts === 'string') {
+  try {
+    keyFacts = JSON.parse(mem.key_facts);
+  } catch (e) {
+    keyFacts = {};
+  }
+}
+
+const currentFacts = live.extracted_facts || {};
+const knownVehicles = Array.isArray(live.raw_input?.context?.known_vehicles)
+  ? live.raw_input.context.known_vehicles
+      .map((v) => {
+        const make = String(v?.make || '').trim();
+        const model = String(v?.model || '').trim();
+        const year = Number(v?.year || 0);
+        const link = String(v?.link || '').trim();
+        if (!make && !model && !year) return null;
+        return {
+          make,
+          model,
+          year: Number.isFinite(year) && year > 0 ? year : null,
+          link
+        };
+      })
+      .filter(Boolean)
+  : [];
+
+if (knownVehicles.length > 0) {
+  const first = knownVehicles[0];
+  if (!currentFacts.vehicle_brand_model) {
+    currentFacts.vehicle_brand_model = [first.make, first.model].filter(Boolean).join(' ').trim();
+  }
+  if (!currentFacts.vehicle_year && first.year) {
+    currentFacts.vehicle_year = String(first.year);
+  }
+  currentFacts.known_vehicles = knownVehicles;
+  currentFacts.known_vehicles_count = knownVehicles.length;
+  const knownSummary = knownVehicles
+    .map((v) => [v.make, v.model, v.year ? String(v.year) : ''].filter(Boolean).join(' ').trim())
+    .filter(Boolean)
+    .join(' | ');
+  if (knownSummary) {
+    currentFacts.known_vehicles_summary = knownSummary;
+  }
+}
+
+for (const [key, value] of Object.entries(currentFacts)) {
+  if (value !== null && value !== undefined && String(value).trim() !== '') {
+    keyFacts[key] = typeof value === 'string' ? value.trim() : value;
+  }
+}
+
+const nowIso = new Date().toISOString();
+const nonEmpty = (v) => typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined;
+
+const firstSeenBase = keyFacts.primer_contacto_at || keyFacts.first_contact_at || mem.created_at || nowIso;
+keyFacts.primer_contacto_at = String(firstSeenBase);
+keyFacts.first_contact_at = String(firstSeenBase);
+keyFacts.ultimo_contacto_at = nowIso;
+keyFacts.last_contact_at = nowIso;
+
+const hasEmail = nonEmpty(keyFacts.customer_email);
+const hasAuto = nonEmpty(keyFacts.vehicle_brand_model)
+  || nonEmpty(keyFacts.vehicle_description)
+  || nonEmpty(keyFacts.vehicle_url)
+  || Number(keyFacts.known_vehicles_count || 0) > 0;
+
+keyFacts.has_closing_email = hasEmail;
+keyFacts.has_vehicle_min_data = hasAuto;
+keyFacts.correo_de_cierre = hasEmail;
+
+let stage = 'contacto_inicial';
+if (hasEmail && hasAuto) stage = 'listo_para_cierre';
+else if (hasEmail || hasAuto) stage = 'datos_parciales';
+keyFacts.funnel_stage = stage;
+
+const rawSignal = String(keyFacts.user_signal || keyFacts.last_turn_signal || 'regular').toLowerCase();
+let userSignal = 'regular';
+if (rawSignal.includes('question')) userSignal = 'question';
+else if (rawSignal.includes('phatic')) userSignal = 'phatic';
+else if (rawSignal.includes('command')) userSignal = 'command';
+else if (rawSignal.includes('ambiguous')) userSignal = 'ambiguous';
+
+const postCloseLock = stage === 'listo_para_cierre' ? 'on' : 'off';
+const isPostCloseStrict = postCloseLock === 'on';
+
+let responseStyle = String(keyFacts.response_style || 'normal');
+if (postCloseLock === 'on' && userSignal === 'phatic') responseStyle = 'ultra_concise';
+else if (postCloseLock === 'on' && userSignal === 'question') responseStyle = 'concise';
+else if (userSignal === 'question' || userSignal === 'command') responseStyle = 'concise';
+
+const precisionMode = (postCloseLock === 'on' || responseStyle !== 'normal') ? 'on' : 'off';
+const toneMode = postCloseLock === 'on' ? 'direct' : 'warm';
+
+let contactState = 'active';
+const hasHistory = Boolean(mem.context_summary || mem.key_facts || mem.last_intent);
+if (!hasHistory && stage === 'contacto_inicial') contactState = 'new';
+else if (stage === 'listo_para_cierre') contactState = 'closed';
+
+let daysSinceLastContact = null;
+let isReturningClient = false;
+const lastUpdate = mem.updated_at || mem.created_at;
+if (lastUpdate) {
+  const diffMs = Date.now() - new Date(lastUpdate).getTime();
+  daysSinceLastContact = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  isReturningClient = daysSinceLastContact >= 1;
+  if (isReturningClient && contactState !== 'closed') contactState = 'reengaged';
+}
+
+keyFacts.contact_state = contactState;
+keyFacts.response_style = responseStyle;
+keyFacts.precision_mode = precisionMode;
+keyFacts.post_close_lock = postCloseLock;
+keyFacts.is_post_close_strict = isPostCloseStrict;
+keyFacts.tone_mode = toneMode;
+keyFacts.user_signal = userSignal;
+
+if (keyFacts.derivado_agente_humano === undefined) keyFacts.derivado_agente_humano = false;
+if (keyFacts.is_human_handoff === undefined) keyFacts.is_human_handoff = false;
+
+keyFacts.conversation_version = 8;
+
+return [{
+  json: {
+    ...live,
+    memory_summary: String(mem.context_summary || ''),
+    memory_last_intent: String(mem.last_intent || ''),
+    memory_needs_human: Boolean(mem.needs_human),
+    memory_key_facts: keyFacts,
+    days_since_last_contact: daysSinceLastContact,
+    is_returning_client: isReturningClient
+  }
+}];`;
 
     const handoffNode = getNode(workflow, 'Detectar Handoff');
     handoffNode.parameters.jsCode = `const item = $input.first().json;
@@ -206,6 +348,24 @@ const contextFacts = outbound.memory_key_facts && typeof outbound.memory_key_fac
   ? outbound.memory_key_facts
   : {};
 const incomingFacts = outbound.extracted_facts || {};
+const knownVehiclesRaw = Array.isArray(outbound.raw_input?.context?.known_vehicles)
+  ? outbound.raw_input.context.known_vehicles
+  : [];
+const knownVehicles = knownVehiclesRaw
+  .map((v) => {
+    const make = String(v?.make || '').trim();
+    const model = String(v?.model || '').trim();
+    const year = Number(v?.year || 0);
+    const link = String(v?.link || '').trim();
+    if (!make && !model && !year) return null;
+    return {
+      make,
+      model,
+      year: Number.isFinite(year) && year > 0 ? year : null,
+      link
+    };
+  })
+  .filter(Boolean);
 
 const mergedFacts = { ...existingFacts, ...contextFacts };
 const updated = [];
@@ -217,6 +377,29 @@ for (const [key, value] of Object.entries(incomingFacts)) {
       mergedFacts[key] = normalized;
       updated.push(key);
     }
+  }
+}
+
+if (knownVehicles.length > 0) {
+  mergedFacts.known_vehicles = knownVehicles;
+  mergedFacts.known_vehicles_count = knownVehicles.length;
+  const knownSummary = knownVehicles
+    .map((v) => [v.make, v.model, v.year ? String(v.year) : ''].filter(Boolean).join(' ').trim())
+    .filter(Boolean)
+    .join(' | ');
+  if (knownSummary) {
+    mergedFacts.known_vehicles_summary = knownSummary;
+    updated.push('known_vehicles_summary');
+  }
+
+  const firstKnown = knownVehicles[0];
+  if (!nonEmpty(mergedFacts.vehicle_brand_model)) {
+    mergedFacts.vehicle_brand_model = [firstKnown.make, firstKnown.model].filter(Boolean).join(' ').trim();
+    updated.push('vehicle_brand_model');
+  }
+  if (!nonEmpty(mergedFacts.vehicle_year) && firstKnown.year) {
+    mergedFacts.vehicle_year = String(firstKnown.year);
+    updated.push('vehicle_year');
   }
 }
 
@@ -237,7 +420,8 @@ mergedFacts.last_contact_at = nowIso;
 const hasEmail = nonEmpty(mergedFacts.customer_email);
 const hasAuto = nonEmpty(mergedFacts.vehicle_brand_model)
   || nonEmpty(mergedFacts.vehicle_description)
-  || nonEmpty(mergedFacts.vehicle_url);
+  || nonEmpty(mergedFacts.vehicle_url)
+  || Number(mergedFacts.known_vehicles_count || 0) > 0;
 
 mergedFacts.has_closing_email = hasEmail;
 mergedFacts.has_vehicle_min_data = hasAuto;
@@ -331,7 +515,7 @@ const leadNotifyLastMs = leadNotifyLastAt ? new Date(leadNotifyLastAt).getTime()
 const cooldownUntilMs = leadNotifyLastMs ? (leadNotifyLastMs + cooldownMs) : 0;
 const cooldownActive = leadNotifyLastMs > 0 && nowMs < cooldownUntilMs;
 
-const leadRelevantFields = new Set(['customer_email', 'vehicle_brand_model', 'vehicle_description', 'vehicle_url', 'vehicle_year', 'vehicle_km', 'customer_phone', 'customer_name']);
+const leadRelevantFields = new Set(['customer_email', 'vehicle_brand_model', 'vehicle_description', 'vehicle_url', 'vehicle_year', 'vehicle_km', 'customer_phone', 'customer_name', 'known_vehicles_summary']);
 const hasLeadRelevantUpdate = updated.some(f => leadRelevantFields.has(f));
 
 let shouldNotify = false;
@@ -436,6 +620,31 @@ const lines = ['*Lead post-campana*', ''];
 if (kf.customer_name) lines.push('Nombre: ' + kf.customer_name);
 if (item.wa_id) lines.push('Tel: ' + item.wa_id);
 if (kf.customer_email) lines.push('Correo: ' + kf.customer_email);
+
+let knownVehicles = [];
+if (Array.isArray(kf.known_vehicles)) {
+  knownVehicles = kf.known_vehicles;
+} else if (typeof kf.known_vehicles === 'string') {
+  try {
+    const parsed = JSON.parse(kf.known_vehicles);
+    knownVehicles = Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    knownVehicles = [];
+  }
+}
+
+if (knownVehicles.length > 0) {
+  lines.push('Vehiculos registrados:');
+  for (const [idx, vehicle] of knownVehicles.entries()) {
+    const label = [String(vehicle?.make || '').trim(), String(vehicle?.model || '').trim(), vehicle?.year ? String(vehicle.year) : '']
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (label) {
+      lines.push((idx + 1) + ') ' + label);
+    }
+  }
+}
 
 if (kf.vehicle_url) {
   lines.push('Link auto: ' + kf.vehicle_url);

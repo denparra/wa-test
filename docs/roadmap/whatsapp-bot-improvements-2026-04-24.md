@@ -130,3 +130,43 @@ If behavior drifts again, inspect first:
 3. `server.js` inbound opt-out block under `/twilio/inbound`.
 
 This document is the operational baseline for handoff + opt-out behavior as of 2026-04-24.
+
+## Addendum: Campaign-Reply + wa-test Vehicle Memory (2026-04-24)
+
+Additional upgrade requested after production validation:
+
+- Primary flow is campaign-first (business sends first from Meta/WhatsApp campaign).
+- Customer replies should not be asked again for vehicle basics if wa-test already has vehicle records.
+- Human handoff notification must include all customer vehicles (make/model/year).
+
+### Implemented
+
+1. `wa-test` now enriches n8n inbound payload with DB memory:
+   - `context.contact_id`
+   - `context.contact_name`
+   - `context.known_vehicle_count`
+   - `context.known_vehicles[]` (make/model/year/link)
+
+2. Local fallback reply for consignation was updated:
+   - If known vehicles exist, bot no longer asks `Marca/Modelo/Ano/Comuna`.
+   - It acknowledges known vehicle context and proposes executive CTA directly.
+
+3. n8n context unification now consumes `raw_input.context.known_vehicles` and sets:
+   - `memory_key_facts.known_vehicles`
+   - `memory_key_facts.known_vehicles_count`
+   - `memory_key_facts.known_vehicles_summary`
+   - fallback `vehicle_brand_model` / `vehicle_year` from first known vehicle when missing.
+
+4. AI system message rule hardened:
+   - If `known_vehicles_count > 0`, do not ask again for `Marca/Modelo/Ano/Comuna`.
+
+5. Handoff notification now includes all registered vehicles:
+   - Section `Vehiculos registrados:`
+   - one line per vehicle (`1) Make Model Year`, etc.)
+
+### Files touched in this addendum
+
+- `db/index.js`
+- `server.js`
+- `scripts/n8n/tune-meta-agent-handoff.js`
+- `n8n/workflows/META-CONSIGNACION-V1.json`

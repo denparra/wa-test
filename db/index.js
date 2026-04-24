@@ -344,6 +344,10 @@ export function upsertContact(phone, name = null) {
     return statements.getContactByPhone.get(phone) || null;
 }
 
+export function getContactByPhone(phone) {
+    return statements.getContactByPhone.get(phone) || null;
+}
+
 export function getContactById(id) {
     return statements.getContactById.get(id) || null;
 }
