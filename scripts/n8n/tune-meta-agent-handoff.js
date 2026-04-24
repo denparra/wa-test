@@ -47,6 +47,7 @@ DERIVACION Y PERSUASION SUAVE
 - Antes de derivar, idealmente entrega 1 respuesta de valor y luego CTA suave.
 - CTA recomendado: "Si quieres, te contacta un ejecutivo en 15-30 min para orientarte mejor".
 - Si el cliente acepta, confirma derivacion en una linea.
+- Aceptaciones como "si", "ok", "dale", "quiero" o "contactenme" tras CTA cuentan como confirmacion.
 
 NO REPETICION DESPUES DE DERIVAR
 - Si memory_key_facts.derivado_agente_humano = true, NO vuelvas a ofrecer ejecutivo.
@@ -62,6 +63,111 @@ CORREO
 SALIDA ESPERADA
 - Entrega texto final en output.
 - Cuando corresponda, marca needs_human=true y handoff_reason claro.`;
+
+    const handoffNode = getNode(workflow, 'Detectar Handoff');
+    handoffNode.parameters.jsCode = `const item = $input.first().json;
+const textRaw = String(item.message_text || '');
+const textNorm = textRaw
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\\u0300-\\u036f]/g, '')
+  .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')
+  .replace(/\\s+/g, ' ')
+  .trim();
+const security = item.security_flags || {};
+const memoryFacts = item.memory_key_facts || {};
+
+const parseBool = (v) => {
+  if (typeof v === 'boolean') return v;
+  const s = String(v || '').toLowerCase().trim();
+  return s === 'true' || s === '1' || s === 'si' || s === 'yes';
+};
+
+const derivedAlready = parseBool(memoryFacts.derivado_agente_humano || memoryFacts.is_human_handoff);
+const awaitingHandoffConfirmation = parseBool(memoryFacts.awaiting_handoff_confirmation);
+
+const hasHumanNegation = /\\b(no quiero|no me contacten|no me llamen|sin ejecutivo|sin asesor|no gracias)\\b/.test(textNorm);
+const explicitHuman = /\\b(humano|persona|ejecutivo|asesor|persona real|hablar con alguien|necesito hablar|quiero hablar con)\\b/.test(textNorm);
+const legalSensitive = /\\b(prenda|deuda prendaria|limitacion de dominio|embargo|gravamen|perdida total|multa|multas|reclamo|queja|molesto|mala atencion|denuncia|demanda|estafa)\\b/.test(textNorm);
+const affirmative = /^(si|sii|ok|oki|okey|dale|de acuerdo|perfecto|listo|quiero|me interesa)$/.test(textNorm)
+  || /\\b(si|sii|ok|dale|quiero|contactenme|contacten me|me contacten|que me contacten|que me llame|quiero que me contacten)\\b/.test(textNorm);
+const phaticAck = /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(textNorm);
+
+let reason = '';
+let handoffOutput = '';
+let needsHuman = false;
+
+if (security.is_prompt_injection) {
+  reason = 'security_prompt_injection';
+  handoffOutput = 'Por seguridad, solo te puedo ayudar con informacion de consignacion. Si quieres, te orienta un ejecutivo en 15-30 min.';
+} else if (security.is_spam_like) {
+  reason = 'security_spam_guard';
+  handoffOutput = 'Recibi mucha informacion en un solo mensaje. Si quieres, te contacta un ejecutivo en 15-30 min para verlo contigo.';
+} else if (derivedAlready && phaticAck) {
+  reason = 'post_handoff_ack';
+  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+} else if (!hasHumanNegation && explicitHuman) {
+  reason = 'solicitud_humano';
+  needsHuman = true;
+  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+} else if (legalSensitive) {
+  reason = 'caso_sensible';
+  needsHuman = true;
+  handoffOutput = 'Perfecto, te puedo derivar con un ejecutivo para revisarlo bien. Te contactamos en 15-30 min.';
+} else if (!hasHumanNegation && awaitingHandoffConfirmation && affirmative) {
+  reason = 'confirmacion_handoff';
+  needsHuman = true;
+  handoffOutput = 'Perfecto, quedaste derivado. Te contactamos en 15-30 min.';
+}
+
+return [{
+  json: {
+    ...item,
+    needs_human: Boolean(needsHuman),
+    handoff_reason: reason,
+    handoff_output: handoffOutput
+  }
+}];`;
+
+    const outboundNode = getNode(workflow, 'Preparar Outbound Persistencia');
+    outboundNode.parameters.jsCode = `const out = $input.first().json;
+const waId = $('Normalizar Entrada').item.json.wa_id;
+const rawInput = $('Normalizar Entrada').item.json.raw_input ?? {};
+const messageText = $('Normalizar Entrada').item.json.message_text ?? '';
+const extractedNode = $('Extraer Datos Vitales').item.json;
+const extractedFacts = extractedNode.extracted_facts ?? {};
+const resetNotifyRequested = Boolean(extractedNode.reset_notify_requested);
+const securityFlags = extractedNode.security_flags ?? {};
+
+let h1 = 0x811c9dc5;
+let h2 = 0x811c9dc5;
+for (let i = 0; i < waId.length; i++) {
+  const c = waId.charCodeAt(i);
+  h1 ^= c;
+  h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);
+  h2 ^= (c + i);
+  h2 += (h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24);
+}
+const hex = (n) => (n >>> 0).toString(16).padStart(8, '0');
+const raw = (hex(h1) + hex(h2) + hex(h1 ^ h2) + hex((h1 + h2) >>> 0)).slice(0, 32);
+const customerId = raw.slice(0, 8) + '-' + raw.slice(8, 12) + '-' + raw.slice(12, 16) + '-' + raw.slice(16, 20) + '-' + raw.slice(20, 32);
+
+return [{
+  json: {
+    wa_id: waId,
+    customer_id: customerId,
+    output: out.output,
+    message_text: messageText,
+    raw_input: rawInput,
+    needs_human: Boolean(out.needs_human),
+    handoff_reason: String(out.handoff_reason || ''),
+    optout_requested: Boolean(out.optout_requested),
+    extracted_facts: extractedFacts,
+    memory_key_facts: out.memory_key_facts ?? {},
+    reset_notify_requested: resetNotifyRequested,
+    security_flags: securityFlags
+  }
+}];`;
 
     const fusionNode = getNode(workflow, 'Fusionar Memoria Incremental');
     fusionNode.parameters.jsCode = `const existing = $input.first().json || {};
@@ -180,13 +286,29 @@ if (isHumanThisTurn) {
 }
 
 const outputText = String(outbound.output || '').trim();
+const outputNorm = outputText.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+const offersExecutive = /\\b(ejecutivo|asesor)\\b/.test(outputNorm)
+  && /\\b(contacta|contactamos|llame|llamemos|15-30|min)\\b/.test(outputNorm);
+const confirmsHandoff = /\\b(quedaste derivado|ya te derivo|te contactamos en 15-30|min)\\b/.test(outputNorm);
+
+const awaitingPrev = parseBool(mergedFacts.awaiting_handoff_confirmation);
+let awaitingNext = awaitingPrev;
+if (isDerived || confirmsHandoff || isHumanThisTurn) awaitingNext = false;
+else if (offersExecutive) awaitingNext = true;
+
+mergedFacts.awaiting_handoff_confirmation = awaitingNext;
+mergedFacts.last_handoff_offer_at = offersExecutive ? nowIso : (mergedFacts.last_handoff_offer_at || '');
+
 if (outputText) {
-  const prevOutput = String(mergedFacts.last_assistant_output || '').trim();
-  const prevNorm = normalizeForRepeat(prevOutput);
-  const currNorm = normalizeForRepeat(outputText);
-  const isRepeat = prevNorm && currNorm && (prevNorm === currNorm || prevNorm.includes(currNorm) || currNorm.includes(prevNorm));
-  mergedFacts.assistant_repeat_count = isRepeat ? Number(mergedFacts.assistant_repeat_count || 0) + 1 : 0;
-  mergedFacts.last_assistant_output = outputText.slice(0, 500);
+    const prevOutput = String(mergedFacts.last_assistant_output || '').trim();
+    const prevNorm = normalizeForRepeat(prevOutput);
+    const currNorm = normalizeForRepeat(outputText);
+    const isRepeat = prevNorm && currNorm && (prevNorm === currNorm || prevNorm.includes(currNorm) || currNorm.includes(prevNorm));
+    mergedFacts.assistant_repeat_count = isRepeat ? Number(mergedFacts.assistant_repeat_count || 0) + 1 : 0;
+    if (mergedFacts.assistant_repeat_count >= 2 && !isDerived) {
+      mergedFacts.response_style = 'ultra_concise';
+    }
+    mergedFacts.last_assistant_output = outputText.slice(0, 500);
 }
 
 if (updated.length > 0) {

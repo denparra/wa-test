@@ -175,6 +175,15 @@ function isPhaticAckMessage(text = '') {
     return /^(gracias|ok|oki|okey|dale|perfecto|listo|super|genial|buenisimo|de acuerdo)$/.test(normalized);
 }
 
+function normalizeIntentText(text = '') {
+    return String(text || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function getActiveHandoffState(phone = '') {
     if (!phone) {
         return null;
@@ -1594,11 +1603,22 @@ app.post('/twilio/inbound', validateTwilioSignature, async (req, res) => {
     const body = (req.body.Body || '').trim(); // texto del usuario
 
     const phone = normalizePhone(from); // Renamed internal var for clarity, though not strictly required
+    const normalizedBody = normalizeIntentText(body);
     const upper = body.toUpperCase();
 
     // Quick Win #8: Expanded opt-out keywords for better compliance
-    const OPTOUT_KEYWORDS = ['BAJA', '3', 'STOP', 'UNSUBSCRIBE', 'CANCELAR', 'REMOVER'];
-    const isBaja = OPTOUT_KEYWORDS.some(kw => upper.includes(kw));
+    const OPTOUT_KEYWORDS = ['baja', 'stop', 'unsubscribe', 'cancelar', 'remover', 'salir'];
+    const OPTOUT_PHRASES = [
+        /\bno me (escriban|escribas|contacten|contactes|llamen|llames)\b/,
+        /\b(sacame|saquenme|eliminame|borrame)\b/,
+        /\b(sacar|eliminar|borrar)me de (la )?lista\b/,
+        /\bno quiero (recibir|mas mensajes|mas whatsapp)\b/,
+        /\bdame de baja\b/
+    ];
+    const isKeywordOptOut = OPTOUT_KEYWORDS.some((kw) => normalizedBody.includes(kw));
+    const isPhraseOptOut = OPTOUT_PHRASES.some((pattern) => pattern.test(normalizedBody));
+    const isMenuOptOut = normalizedBody === '3';
+    const isBaja = isKeywordOptOut || isPhraseOptOut || isMenuOptOut;
 
     // Respuesta local fallback
     let reply = 'Gracias por escribir a Queirolo Autos. Responde:\n1) Me interesa consignar\n2) Quiero mas info\n3) BAJA';
