@@ -383,6 +383,9 @@ function resolveLabPhone(candidate = '') {
 }
 
 const LAB_SCENARIOS = [
+    // ============================================================
+    // Suite: smoke — critical happy paths and opt-out
+    // ============================================================
     {
         id: 'happy_handoff',
         name: 'Happy Path Handoff',
@@ -429,6 +432,10 @@ const LAB_SCENARIOS = [
             { user: 'no me escriban mas por favor', expect: { containsAny: ['dado de baja', 'confirmado'] } }
         ]
     },
+
+    // ============================================================
+    // Suite: regression — IA edge cases, handoff variants
+    // ============================================================
     {
         id: 'known_vehicle_context',
         name: 'Known Vehicle Context',
@@ -487,6 +494,202 @@ const LAB_SCENARIOS = [
         steps: [
             { user: 'tengo un problema de prenda y embargo', expect: { containsAny: ['derivado', 'ejecutivo', 'contactamos'] } }
         ]
+    },
+
+    // ============================================================
+    // Suite: dialect — spanish/chilean informal variations
+    // ============================================================
+    {
+        id: 'informal_greeting',
+        name: 'Dialect: Informal Greeting',
+        suite: 'dialect',
+        steps: [
+            { user: 'que onda, quiero consignar mi auto', expect: { containsAny: ['consign', 'ejecutivo'], notContainsAny: ['error'], minLength: 15 } }
+        ]
+    },
+    {
+        id: 'formal_quisiera',
+        name: 'Dialect: Formal Request',
+        suite: 'dialect',
+        steps: [
+            { user: 'quisiera conocer ms sobre la consignacin', expect: { containsAny: ['consign', 'proceso', 'ejecutivo'], minLength: 15 } }
+        ]
+    },
+    {
+        id: 'chilenismo_po',
+        name: 'Dialect: Particula Po',
+        suite: 'dialect',
+        steps: [
+            { user: 'quisiera saber po, cuanto sale consignar?', expect: { containsAny: ['consign', 'precio', 'ejecutivo', 'costo'], minLength: 15 } }
+        ]
+    },
+    {
+        id: 'typo_kiero',
+        name: 'Dialect: Typo Kiero',
+        suite: 'dialect',
+        steps: [
+            { user: 'kiero consignar mi auto', expect: { containsAny: ['consign', 'ejecutivo'], notContainsAny: ['error'], minLength: 15 } }
+        ]
+    },
+    {
+        id: 'abbreviation_toyota',
+        name: 'Dialect: Vehicle Abbreviation',
+        suite: 'dialect',
+        steps: [
+            { user: 'toyota corolla 2020', expect: { containsAny: ['consign', 'proceso', 'ejecutivo'], minLength: 20 } }
+        ]
+    },
+    {
+        id: 'regional_chao_po',
+        name: 'Dialect: Regional Goodbye',
+        suite: 'dialect',
+        steps: [
+            { user: 'gracias chao po', expect: { notContainsAny: ['ejecutivo', 'contacta', 'derivar', 'derivado'] } }
+        ]
+    },
+    {
+        id: 'condition_ok',
+        name: 'Dialect: Informal Vehicle Condition',
+        suite: 'dialect',
+        steps: [
+            { user: 'el auto tiene las ruedas ok y quiero saber del servicio', expect: { containsAny: ['consign', 'proceso', 'ejecutivo'], minLength: 15 } }
+        ]
+    },
+    {
+        id: 'number_word',
+        name: 'Dialect: Number as Word',
+        suite: 'dialect',
+        steps: [
+            { user: 'el auto del dos', expect: { minLength: 10, notContainsAny: ['error'] } }
+        ]
+    },
+
+    // ============================================================
+    // Suite: intent — specific service intents
+    // ============================================================
+    {
+        id: 'intent_precio',
+        name: 'Intent: Precio',
+        suite: 'intent',
+        steps: [
+            { user: 'cuanto sale consignar mi auto?', expect: { containsAny: ['precio', 'consign', 'valor', 'costo'], maxLength: 350 } }
+        ]
+    },
+    {
+        id: 'intent_seguro',
+        name: 'Intent: Seguro',
+        suite: 'intent',
+        steps: [
+            { user: 'tiene seguro incluido el servicio?', expect: { containsAny: ['seguro', 'incluido', 'proceso'] } }
+        ]
+    },
+    {
+        id: 'intent_sin_arriendo',
+        name: 'Intent: Sin Arriendo',
+        suite: 'intent',
+        steps: [
+            { user: 'me dijeron que es sin arriendo mensual', expect: { containsAny: ['arriendo', 'consign', 'sin'], minLength: 15 } }
+        ]
+    },
+    {
+        id: 'intent_plazo',
+        name: 'Intent: Plazo de Venta',
+        suite: 'intent',
+        steps: [
+            { user: 'en cuanto tiempo se vende un auto consignado?', expect: { containsAny: ['venta', 'proceso', 'tiempo', 'dias'] } }
+        ]
+    },
+    {
+        id: 'intent_que_incluye',
+        name: 'Intent: Que Incluye',
+        suite: 'intent',
+        steps: [
+            { user: 'que incluye el servicio de ustedes?', expect: { containsAll: ['proceso', 'publicamos'], minLength: 25, maxLength: 400 } }
+        ]
+    },
+    {
+        id: 'intent_region',
+        name: 'Intent: Cobertura Regional',
+        suite: 'intent',
+        steps: [
+            { user: 'estan en todas partes o solo santiago?', expect: { maxLength: 350 } }
+        ]
+    },
+    {
+        id: 'intent_comision',
+        name: 'Intent: Comision',
+        suite: 'intent',
+        steps: [
+            { user: 'cuanto cobran por comision?', expect: { containsAny: ['consign', 'proceso', 'comision', 'precio'] } }
+        ]
+    },
+
+    // ============================================================
+    // Suite: optout-full — all opt-out variants
+    // ============================================================
+    {
+        id: 'optout_menu_3',
+        name: 'Opt-out: Menu Option 3',
+        suite: 'optout-full',
+        steps: [
+            { user: '3', expect: { containsAny: ['dado de baja', 'confirmado'] } }
+        ]
+    },
+    {
+        id: 'optout_stop',
+        name: 'Opt-out: Stop Keyword',
+        suite: 'optout-full',
+        steps: [
+            { user: 'stop', expect: { containsAny: ['dado de baja', 'confirmado'] } }
+        ]
+    },
+    {
+        id: 'optout_sacame',
+        name: 'Opt-out: Sacame de Lista',
+        suite: 'optout-full',
+        steps: [
+            { user: 'sacame de la lista', expect: { containsAny: ['dado de baja', 'confirmado'] } }
+        ]
+    },
+    {
+        id: 'optout_dame_baja',
+        name: 'Opt-out: Dame de Baja',
+        suite: 'optout-full',
+        steps: [
+            { user: 'dame de baja', expect: { containsAny: ['dado de baja', 'confirmado'] } }
+        ]
+    },
+
+    // ============================================================
+    // Suite: edge-cases — multi-step and complex flows
+    // ============================================================
+    {
+        id: 'menu_two_si_handoff',
+        name: 'Edge: Menu Op2 > SI > Handoff',
+        suite: 'edge-cases',
+        steps: [
+            { user: '2', expect: { containsAny: ['ejecutivo', 'llame'] } },
+            { user: 'si', expect: { containsAny: ['quedaste derivado', 'te contactamos'] } }
+        ]
+    },
+    {
+        id: 'vehicle_context_no_ask_data',
+        name: 'Edge: Known Vehicle No Data Request',
+        suite: 'edge-cases',
+        steps: [
+            { user: 'me interesa consignar', expect: { notContainsAny: ['Marca, Modelo, Ano y Comuna', 'que auto tienes', 'que modelo'] } }
+        ]
+    },
+    {
+        id: 'multi_exchange_then_handoff',
+        name: 'Edge: Multi-exchange then Handoff',
+        suite: 'edge-cases',
+        steps: [
+            { user: 'hola quiero vender mi auto', expect: { containsAny: ['consign', 'ejecutivo'], minLength: 10 } },
+            { user: 'es un toyota', expect: { containsAny: ['proceso', 'consign', 'ejecutivo'], notContainsAny: ['error'], minLength: 10 } },
+            { user: 'tiene 2020', expect: { containsAny: ['proceso', 'consign', 'ejecutivo'], minLength: 10 } },
+            { user: 'si contactenme porfa', expect: { containsAny: ['derivado', 'contactamos', 'derivar'], minLength: 10 } }
+        ]
     }
 ];
 
@@ -527,6 +730,12 @@ function evaluateLabExpectation(reply, expect = {}) {
     }
     if (typeof expect.equals === 'string' && String(reply || '').trim() !== expect.equals.trim()) {
         failures.push(`equals mismatch: expected "${expect.equals}" got "${reply}"`);
+    }
+    if (typeof expect.minLength === 'number' && reply.trim().length < expect.minLength) {
+        failures.push(`reply too short: ${reply.trim().length} < ${expect.minLength}`);
+    }
+    if (typeof expect.maxLength === 'number' && reply.trim().length > expect.maxLength) {
+        failures.push(`reply too long: ${reply.trim().length} > ${expect.maxLength}`);
     }
     return {
         ok: failures.length === 0,
@@ -1914,7 +2123,16 @@ app.post('/admin/api/campaigns/:id/duplicate', adminAuth, (req, res) => {
             status: 'draft',
             isTest: Boolean(original.is_test)
         });
-        res.status(201).json(copy);
+
+        const originalContactIds = db.prepare(`
+            SELECT contact_id FROM campaign_recipients WHERE campaign_id = ? AND contact_id IS NOT NULL
+        `).all(original.id).map(r => r.contact_id);
+
+        if (originalContactIds.length > 0) {
+            assignRecipientsToCampaign(copy.id, originalContactIds);
+        }
+
+        res.status(201).json(getCampaignById(copy.id));
     } catch (error) {
         console.error('Duplicate campaign error:', error);
         res.status(500).json({ error: 'Failed to duplicate campaign' });
