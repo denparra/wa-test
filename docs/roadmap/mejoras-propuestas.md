@@ -1,7 +1,9 @@
-# Mejoras Propuestas — WA-Test (Queirolo Autos)
+# ⚠️ DOCUMENTO OBSOLETO — MERGEADO
 
-> Análisis completo realizado el 2026-04-21.
-> **Criterio:** solo mejoras que NO rompen funcionalidad existente. Sin reescrituras masivas; refactors incrementales.
+> **Fecha de merge**: 2026-04-25
+> **Documento activo**: [`mejoras-campañas-operacion-2026.md`](./mejoras-campañas-operacion-2026.md)
+>
+> Este archivo se conserva por trazabilidad. No editar. Todo backlog vive en el documento activo.
 
 ---
 
