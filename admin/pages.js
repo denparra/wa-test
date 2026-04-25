@@ -1008,6 +1008,10 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
           <button type="button" id="run-scenario-btn" class="action-btn">Ejecutar escenario</button>
           <button type="button" id="run-smoke-btn" class="action-btn">Run smoke</button>
           <button type="button" id="run-regression-btn" class="action-btn">Run regression</button>
+          <button type="button" id="run-dialect-btn" class="action-btn">Run dialect</button>
+          <button type="button" id="run-intent-btn" class="action-btn">Run intent</button>
+          <button type="button" id="run-optout-btn" class="action-btn">Run optout</button>
+          <button type="button" id="run-edge-btn" class="action-btn">Run edge</button>
           <button type="button" id="save-session-btn" class="action-btn">Guardar session .md</button>
           <button type="button" id="new-session-btn" class="action-btn">Nueva sesion</button>
         </div>
@@ -1252,6 +1256,10 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
       runScenarioBtn.addEventListener('click', runScenario);
       runSmokeBtn.addEventListener('click', () => runSuite({ suite: 'smoke' }));
       runRegressionBtn.addEventListener('click', () => runSuite({ suite: 'regression' }));
+      runDialectBtn.addEventListener('click', () => runSuite({ suite: 'dialect' }));
+      runIntentBtn.addEventListener('click', () => runSuite({ suite: 'intent' }));
+      runOptoutBtn.addEventListener('click', () => runSuite({ suite: 'optout-full' }));
+      runEdgeBtn.addEventListener('click', () => runSuite({ suite: 'edge-cases' }));
       newSessionBtn.addEventListener('click', resetSession);
       saveSessionBtn.addEventListener('click', saveSession);
       if (phoneInput) {
