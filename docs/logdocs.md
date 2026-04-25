@@ -20,6 +20,50 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
 
 ---
 
+### 2026-04-25 - Implement 6 (real metrics dashboard), J (segments with live count), 4 (unified inbox)
+
+- Scope: Tres features completando la iteración planificada. Dos requieren migración de schema (segments + conversation_status). Sin dependencias externas nuevas.
+- Why: Segunda mitad de la iteración de mejoras priorizadas (H+1+3 completados previamente). Cierra la iteración con las features de mayor impacto operacional en visibilidad de datos y gestión de conversaciones.
+- Files:
+  - `db/schema.sql`: Columnas `last_used_at TEXT` y `last_campaign_id INTEGER` en `segments`. Nueva tabla `conversation_status` (phone PK, status, updated_at).
+  - `db/index.js`: Migración inline con `PRAGMA table_info` en bloque startup. Siete funciones nuevas: `getDashboardMetrics()` (tasas de respuesta 30/60d, top 5 campañas, envíos semanales 4 semanas, top marcas), `listSegmentsWithCount()` (COUNT vivo por segmento), `updateSegmentLastUsed()`, `listInboxConversations()`, `countUnreadConversations()`, `markConversationRead()`, `getConversationMessagesByPhone()`.
+  - `server.js`: Imports de 7 funciones db nuevas + `renderSegmentsPage`, `renderInboxPage`. Dashboard route pasa `metrics`. Nuevas rutas: `GET /admin/segments`, `POST /admin/api/segments`, `DELETE /admin/api/segments/:id`, `GET /admin/inbox`, `POST /admin/api/inbox/:phone/read`, `GET /admin/api/inbox/unread-count`.
+  - `admin/pages.js`: `renderDashboardPage` acepta `metrics` y añade sección con tarjetas de tasa de respuesta (con delta vs período anterior), top campañas por engagement, gráfico ASCII de envíos semanales, barras de marcas frecuentes. Nuevas exportaciones: `renderSegmentsPage` (tabla con live count, filtros, delete) y `renderInboxPage` (layout dos paneles, lista de conversaciones filtrable, burbuja de mensajes, auto-scroll a fondo).
+  - `admin/render.js`: `NAV_ITEMS` añade `inbox` (con `badge: true`) y `segmentos`. CSS de `.nav-badge`. JS inline en `renderLayout` que hace fetch a `/admin/api/inbox/unread-count` y muestra el badge si hay no leídos.
+  - `docs/roadmap/mejoras-campañas-operacion-2026.md`: Features 4, 6, J marcados `✅ DONE 2026-04-25`. Iteración completa.
+- Runtime impact: Bajo en rutas existentes. Las 7 queries nuevas corren solo en las rutas nuevas o en el dashboard. Dashboard añade ~6 queries ligeras en cada carga de `/admin`. El badge hace 1 fetch al cargar cualquier página del admin.
+- Validation: `node --check` en server.js, admin/pages.js, admin/render.js — sin errores.
+- Rollback: `git revert HEAD` o revertir los cinco archivos. La migración de schema es aditiva (ADD COLUMN / CREATE TABLE IF NOT EXISTS) — no destructiva en la DB existente.
+
+---
+
+### 2026-04-25 - Implement H (engagement profile), 1 (clone campaign), 3 (bulk opt-out import)
+
+- Scope: Tres features del roadmap implementados. Sin nuevas tablas, sin dependencias externas.
+- Why: Primera iteración de mejoras priorizadas por bajo esfuerzo y alto impacto operacional.
+- Files:
+  - `db/index.js`: `bulkInsertOptOuts(phones[])` (transacción con INSERT OR IGNORE + UPDATE contacts), `getContactEngagementStats(contactId)` (4 queries simples: campaigns_received, campaigns_responded, last_campaign, last_reply).
+  - `server.js`: Imports de `bulkInsertOptOuts` y `getContactEngagementStats`. GET `/admin/contacts/:id/edit` ahora pasa `engagement` a la página. POST `/admin/api/campaigns/:id/duplicate` (copia name + message_template + type + content_sid + template_id + filters, sin destinatarios, status=draft). POST `/admin/import/optouts` (parse CSV, normaliza teléfonos, llama bulkInsertOptOuts).
+  - `admin/pages.js`: `renderContactEditPage` acepta `engagement` y muestra sección "Historial de engagement" debajo de vehículos. `renderCampaignsPage` agrega botón ⧉ (Duplicar) a todos los estados de campaña + función `duplicateCampaign()` en script inline. `renderImportPage` acepta `optOutResult` y muestra sección de importación de opt-outs siempre visible.
+- Runtime impact: Bajo. Las queries de engagement se ejecutan solo al abrir la edición de un contacto (4 lightweight SELECTs). Duplicate y opt-out import son nuevas rutas sin impacto en flujos existentes.
+- Validation: Syntax check con `node --check` en los tres archivos — sin errores. `node -e import()` en db/index.js y admin/pages.js — OK.
+- Rollback: `git revert HEAD` o revertir los tres archivos al estado previo al commit.
+
+---
+
+### 2026-04-25 - Roadmap unification + viability analysis
+
+- Scope: Documentación. Consolidación del roadmap de features en un solo archivo fuente de verdad.
+- Why: Existían dos documentos con solapamiento: `next-features-spec.md` (specs técnicas 1–8) y `mejoras-campañas-operacion-2026.md` (A–K basadas en investigación de mercado). Generaban confusión sobre qué era canónico.
+- Files: `docs/roadmap/mejoras-campañas-operacion-2026.md` (reescrito, ahora fuente única), `docs/roadmap/next-features-spec.md` (tombstoned con pointer), `docs/logdocs.md` (este registro).
+- Features seleccionados para próxima implementación: **1** (Clonar campaña, ~2h), **3** (Import masivo opt-outs, ~2h), **4** (Inbox unificado, ~5h), **6** (Dashboard métricas reales, ~5h), **H** (Engagement profile, ~2h), **J** (Segmentos dinámicos, ~5h). Total estimado: 16–21h.
+- Viabilidad actualizada con inspección real del código: CSS del inbox ya existe en render.js; queries de follow-up ya existen; tabla segments ya existe; infraestructura CSV import ya existe.
+- Runtime impact: Ninguno. Solo documentación.
+- Validation: N/A.
+- Rollback: N/A.
+
+---
+
 ### 2026-04-24 14:05 - Handoff loop and opt-out hardening
 
 - Scope: n8n handoff loop reduction, opt-out propagation, semantic opt-out in wa-test.
@@ -172,3 +216,17 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
   - targeted inbound simulation with fresh phones shows handoff confirmation for both failing cases.
   - `npm run harness:chat` -> `PASSED`.
 - Rollback: restore backup artifact above and revert the server/tune changes.
+
+### 2026-04-24 19:55 - Session close snapshot and workflow pointer hardening
+
+- Scope: document final session state, active workflow pointer, and synced JSON source.
+- Why: ensure future sessions start with clear operational context and avoid ambiguity about active workflow/version.
+- Files: `docs/ops/current-workflow.md`, `AGENTS.md`, `C:\Users\denny\.claude\CLAUDE.md`, `docs/logdocs.md`, `n8n/workflows/META-CONSIGNACION-V1.json`.
+- Runtime impact:
+  - local workflow JSON was re-synced from remote active workflow (`active=true`).
+  - new operational pointer file established as single reference for active workflow metadata and backup chain.
+  - repo/agent instructions now explicitly require maintaining that pointer.
+- Validation:
+  - remote fetch + sync command output confirmed: `active: true`, `updatedAt: 2026-04-24T23:38:20.158Z`.
+  - pointer doc includes workflow id/name/path/status and current JSON location.
+- Rollback: restore previous workflow JSON from backup and remove pointer policy additions if needed.

@@ -70,7 +70,17 @@ import {
     createSegment,
     listSegments,
     deleteSegment as dbDeleteSegment,
-    updateMessageStatus
+    updateMessageStatus,
+    bulkInsertOptOuts,
+    getContactEngagementStats,
+    getDashboardMetrics,
+    listSegmentsWithCount,
+    updateSegmentLastUsed,
+    listInboxConversations,
+    countUnreadConversations,
+    markConversationRead,
+    markConversationUnread,
+    getConversationMessagesByPhone
 } from './db/index.js';
 import {
     renderCampaignDetailPage,
@@ -90,7 +100,9 @@ import {
     renderTemplateFormPage,
     renderVehiclesPage,
     renderVehicleFormPage,
-    renderChatLabPage
+    renderChatLabPage,
+    renderSegmentsPage,
+    renderInboxPage
 } from './admin/pages.js';
 import { sendOneRecipient } from './lib/twilio-sender.js';
 import {
@@ -652,7 +664,8 @@ app.use('/admin', adminAuth);
 
 app.get('/admin', (req, res) => {
     const stats = getAdminStats();
-    res.status(200).type('text/html').send(renderDashboardPage({ stats }));
+    const metrics = getDashboardMetrics();
+    res.status(200).type('text/html').send(renderDashboardPage({ stats, metrics }));
 });
 
 app.get('/admin/contacts', (req, res) => {
@@ -688,7 +701,8 @@ app.get('/admin/contacts/:id/edit', adminAuth, (req, res) => {
     }
 
     const vehicles = getVehiclesByContactId(id);
-    res.status(200).type('text/html').send(renderContactEditPage({ contact, vehicles }));
+    const engagement = getContactEngagementStats(id);
+    res.status(200).type('text/html').send(renderContactEditPage({ contact, vehicles, engagement }));
 });
 
 // POST /admin/contacts/:id - Update contact
@@ -1616,6 +1630,64 @@ app.post('/admin/import/confirm', adminAuth, express.urlencoded({ extended: fals
     }
 });
 
+// Feature 3: Bulk opt-out import
+app.post('/admin/import/optouts', adminAuth, upload.single('csvFile'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(200).type('text/html').send(
+                renderImportPage({ optOutResult: { error: 'No se seleccionó archivo' } })
+            );
+        }
+
+        const csvContent = req.file.buffer.toString('utf8').replace(/^﻿/, '');
+        let records;
+        try {
+            records = parse(csvContent, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+                bom: true,
+                relax_column_count: true
+            });
+        } catch (parseError) {
+            return res.status(200).type('text/html').send(
+                renderImportPage({ optOutResult: { error: 'Error al parsear el CSV: ' + parseError.message } })
+            );
+        }
+
+        const phones = [];
+        const invalidRows = [];
+        for (let i = 0; i < records.length; i++) {
+            const row = records[i];
+            const raw = row.Telefono || row.telefono || row.TELEFONO || row.Phone || row.phone || '';
+            if (!raw) {
+                invalidRows.push({ row: i + 2, value: '', reason: 'Teléfono vacío' });
+                continue;
+            }
+            const normalized = normalizePhone(String(raw).trim());
+            if (!normalized || !normalized.match(/^\+[1-9]\d{7,14}$/)) {
+                invalidRows.push({ row: i + 2, value: raw, reason: 'Formato inválido' });
+                continue;
+            }
+            phones.push(normalized);
+        }
+
+        const inserted = phones.length > 0 ? bulkInsertOptOuts(phones) : 0;
+        res.status(200).type('text/html').send(renderImportPage({
+            optOutResult: {
+                total: records.length,
+                valid: phones.length,
+                inserted,
+                skipped: phones.length - inserted,
+                invalidCount: invalidRows.length
+            }
+        }));
+    } catch (error) {
+        console.error('Import opt-outs error:', error);
+        res.status(500).send('Error al importar opt-outs: ' + error.message);
+    }
+});
+
 // ============================================================
 // Campaign Management API
 // ============================================================
@@ -1824,6 +1896,28 @@ app.delete('/admin/api/campaigns/:id', adminAuth, (req, res) => {
     } catch (error) {
         console.error('Delete campaign error:', error);
         res.status(500).json({ error: 'Failed to delete campaign' });
+    }
+});
+
+// Feature 1: Duplicate campaign
+app.post('/admin/api/campaigns/:id/duplicate', adminAuth, (req, res) => {
+    try {
+        const original = getCampaignById(Number(req.params.id));
+        if (!original) return res.status(404).json({ error: 'Campaign not found' });
+        const copy = createCampaign({
+            name: original.name + ' — Copia',
+            messageTemplate: original.message_template,
+            type: original.type,
+            contentSid: original.content_sid,
+            templateId: original.template_id || null,
+            filters: original.filters ? JSON.parse(original.filters) : null,
+            status: 'draft',
+            isTest: Boolean(original.is_test)
+        });
+        res.status(201).json(copy);
+    } catch (error) {
+        console.error('Duplicate campaign error:', error);
+        res.status(500).json({ error: 'Failed to duplicate campaign' });
     }
 });
 
@@ -2130,6 +2224,69 @@ app.post('/admin/api/n8n/workflows/:id/duplicate', adminAuth, express.json(), as
         console.error('N8N duplicate workflow error:', error);
         handleN8nApiError(res, error, 'Failed to duplicate workflow');
     }
+});
+
+// ============================================================
+// Feature J: Segments Routes
+// ============================================================
+
+app.get('/admin/segments', adminAuth, (req, res) => {
+    const segments = listSegmentsWithCount();
+    res.status(200).type('text/html').send(renderSegmentsPage({ segments }));
+});
+
+app.post('/admin/api/segments', adminAuth, express.json(), (req, res) => {
+    const { name, filters } = req.body || {};
+    if (!name?.trim()) {
+        return res.status(400).json({ error: 'name is required' });
+    }
+    try {
+        const seg = createSegment({ name: name.trim(), filters: filters || {} });
+        res.status(201).json(seg);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/admin/api/segments/:id', adminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).json({ error: 'Invalid segment ID' });
+    }
+    try {
+        dbDeleteSegment(id);
+        res.status(200).json({ ok: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================================
+// Feature 4: Inbox Routes
+// ============================================================
+
+app.get('/admin/inbox', adminAuth, (req, res) => {
+    const { limit, offset } = getPaging(req);
+    const filter = ['all', 'unread', 'read'].includes(req.query.filter) ? req.query.filter : 'all';
+    const conversations = listInboxConversations({ limit, offset });
+    const unreadCount = countUnreadConversations();
+    res.status(200).type('text/html').send(renderInboxPage({ conversations, filter, unreadCount }));
+});
+
+app.post('/admin/api/inbox/:phone/read', adminAuth, (req, res) => {
+    const phone = decodeURIComponent(req.params.phone);
+    markConversationRead(phone);
+    res.status(200).json({ ok: true });
+});
+
+app.post('/admin/api/inbox/:phone/unread', adminAuth, (req, res) => {
+    const phone = decodeURIComponent(req.params.phone);
+    markConversationUnread(phone);
+    res.status(200).json({ ok: true });
+});
+
+app.get('/admin/api/inbox/unread-count', adminAuth, (req, res) => {
+    res.status(200).json({ count: countUnreadConversations() });
 });
 
 // ============================================================

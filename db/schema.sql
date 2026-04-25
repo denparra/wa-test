@@ -188,5 +188,17 @@ CREATE TABLE IF NOT EXISTS segments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     filters TEXT NOT NULL,           -- JSON: {"make":"Toyota", "yearMin":2015}
-    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    last_used_at TEXT,               -- Feature J: cuándo fue usada por última vez
+    last_campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL
+);
+
+-- ============================================================
+-- CONVERSATION_STATUS: Estado de lectura de conversaciones
+-- Feature 4: Inbox unificado
+-- ============================================================
+CREATE TABLE IF NOT EXISTS conversation_status (
+    phone TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'unread', -- unread | read | archived
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );

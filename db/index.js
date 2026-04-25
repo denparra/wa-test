@@ -101,6 +101,18 @@ if (vehiclesTableExists) {
     }
 }
 
+// Feature J Migration: Add last_used_at, last_campaign_id to segments
+const segmentsMigrateCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='segments'").get();
+if (segmentsMigrateCheck) {
+    const segsInfo = db.prepare("PRAGMA table_info(segments)").all();
+    if (!segsInfo.some(col => col.name === 'last_used_at')) {
+        db.exec(`ALTER TABLE segments ADD COLUMN last_used_at TEXT`);
+    }
+    if (!segsInfo.some(col => col.name === 'last_campaign_id')) {
+        db.exec(`ALTER TABLE segments ADD COLUMN last_campaign_id INTEGER`);
+    }
+}
+
 // Read and execute schema
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
@@ -435,6 +447,27 @@ export function insertOptOut(phone, reason = null) {
 
 export function isOptedOut(phone) {
     return Boolean(statements.isOptedOut.get(phone));
+}
+
+export function bulkInsertOptOuts(phones) {
+    const insertStmt = db.prepare(`
+        INSERT OR IGNORE INTO opt_outs (phone, reason, opted_out_at)
+        VALUES (?, 'bulk_import', datetime('now', 'localtime'))
+    `);
+    const updateContactStmt = db.prepare(`
+        UPDATE contacts SET status = 'opted_out', updated_at = datetime('now', 'localtime')
+        WHERE phone = ? AND status != 'opted_out'
+    `);
+    const transaction = db.transaction(ps => {
+        let inserted = 0;
+        for (const p of ps) {
+            const r = insertStmt.run(p);
+            if (r.changes > 0) inserted++;
+            updateContactStmt.run(p);
+        }
+        return inserted;
+    });
+    return transaction(phones);
 }
 
 export function insertMessage({
@@ -1386,5 +1419,254 @@ export function updateVehicle(id, { contact_id, make, model, year, price = null,
 
 export function deleteVehicle(id) {
     return db.prepare('DELETE FROM vehicles WHERE id = ?').run(id).changes > 0;
+}
+
+// ============================================================
+// Feature 6: Dashboard Metrics
+// ============================================================
+
+export function getDashboardMetrics() {
+    const now = new Date();
+    const pad = (d) => d.toISOString().slice(0, 10);
+    const today = pad(now);
+    const d7  = pad(new Date(now - 7  * 86400000));
+    const d14 = pad(new Date(now - 14 * 86400000));
+    const d30 = pad(new Date(now - 30 * 86400000));
+    const d60 = pad(new Date(now - 60 * 86400000));
+    const d28 = pad(new Date(now - 28 * 86400000));
+
+    const q = (sql, ...p) => db.prepare(sql).get(...p);
+    const qa = (sql, ...p) => db.prepare(sql).all(...p);
+
+    const contactsTotal   = q(`SELECT COUNT(*) AS c FROM contacts`).c;
+    const contactsToday   = q(`SELECT COUNT(*) AS c FROM contacts WHERE DATE(created_at) = ?`, today).c;
+    const contacts7d      = q(`SELECT COUNT(*) AS c FROM contacts WHERE created_at >= ?`, d7 + ' 00:00:00').c;
+    const contacts7dPrev  = q(`SELECT COUNT(*) AS c FROM contacts WHERE created_at >= ? AND created_at < ?`, d14 + ' 00:00:00', d7 + ' 00:00:00').c;
+    const campaignsTotal  = q(`SELECT COUNT(*) AS c FROM campaigns`).c;
+    const campaignsActive = q(`SELECT COUNT(*) AS c FROM campaigns WHERE status IN ('sending','scheduled')`).c;
+    const optOutsTotal    = q(`SELECT COUNT(*) AS c FROM opt_outs`).c;
+    const optOutsToday    = q(`SELECT COUNT(*) AS c FROM opt_outs WHERE DATE(opted_out_at) = ?`, today).c;
+
+    const rr30 = q(`
+        SELECT COUNT(DISTINCT cr.id) AS sent,
+               SUM(CASE WHEN EXISTS(
+                   SELECT 1 FROM messages m
+                   WHERE m.phone = cr.phone AND m.direction = 'inbound' AND m.created_at > cr.sent_at
+               ) THEN 1 ELSE 0 END) AS responded
+        FROM campaign_recipients cr
+        WHERE cr.sent_at >= ? AND cr.status IN ('sent','delivered','read')
+    `, d30 + ' 00:00:00');
+
+    const rr60 = q(`
+        SELECT COUNT(DISTINCT cr.id) AS sent,
+               SUM(CASE WHEN EXISTS(
+                   SELECT 1 FROM messages m
+                   WHERE m.phone = cr.phone AND m.direction = 'inbound' AND m.created_at > cr.sent_at
+               ) THEN 1 ELSE 0 END) AS responded
+        FROM campaign_recipients cr
+        WHERE cr.sent_at >= ? AND cr.sent_at < ? AND cr.status IN ('sent','delivered','read')
+    `, d60 + ' 00:00:00', d30 + ' 00:00:00');
+
+    const topCampaigns = qa(`
+        SELECT c.id, c.name,
+               COUNT(cr.id) AS sent,
+               SUM(CASE WHEN EXISTS(
+                   SELECT 1 FROM messages m
+                   WHERE m.phone = cr.phone AND m.direction = 'inbound' AND m.created_at > cr.sent_at
+               ) THEN 1 ELSE 0 END) AS responded
+        FROM campaigns c
+        JOIN campaign_recipients cr ON cr.campaign_id = c.id
+        WHERE cr.status IN ('sent','delivered','read')
+        GROUP BY c.id
+        HAVING sent >= 1
+        ORDER BY (CAST(responded AS REAL) / sent) DESC
+        LIMIT 5
+    `);
+
+    const weeklySends = qa(`
+        SELECT strftime('%Y-%W', sent_at) AS week_key,
+               MIN(DATE(sent_at)) AS week_start,
+               COUNT(*) AS sent
+        FROM campaign_recipients
+        WHERE sent_at >= ? AND status IN ('sent','delivered','read')
+        GROUP BY week_key
+        ORDER BY week_start ASC
+    `, d28 + ' 00:00:00');
+
+    const brandDist = qa(`
+        SELECT make, COUNT(*) AS cnt
+        FROM vehicles
+        GROUP BY make
+        ORDER BY cnt DESC
+        LIMIT 5
+    `);
+
+    return {
+        contactsTotal, contactsToday, contacts7d, contacts7dPrev,
+        campaignsTotal, campaignsActive,
+        optOutsTotal, optOutsToday,
+        rr30, rr60,
+        topCampaigns,
+        weeklySends,
+        brandDist
+    };
+}
+
+// ============================================================
+// Feature J: Segments with Live Count
+// ============================================================
+
+export function listSegmentsWithCount() {
+    const segs = db.prepare(`
+        SELECT id, name, filters, created_at, last_used_at, last_campaign_id
+        FROM segments ORDER BY created_at DESC
+    `).all();
+
+    return segs.map(seg => {
+        let contact_count = 0;
+        try {
+            const f = JSON.parse(seg.filters || '{}');
+            const make    = f.make    || null;
+            const model   = f.model   || null;
+            const yearMin = f.yearMin || null;
+            const yearMax = f.yearMax || null;
+            contact_count = db.prepare(`
+                SELECT COUNT(DISTINCT c.id) AS cnt
+                FROM contacts c
+                JOIN vehicles v ON v.contact_id = c.id
+                WHERE c.status = 'active'
+                  AND (? IS NULL OR v.make = ?)
+                  AND (? IS NULL OR v.model = ?)
+                  AND (? IS NULL OR v.year >= ?)
+                  AND (? IS NULL OR v.year <= ?)
+                  AND c.phone NOT IN (SELECT phone FROM opt_outs)
+            `).get(make, make, model, model, yearMin, yearMin, yearMax, yearMax)?.cnt ?? 0;
+        } catch (_) {}
+        return { ...seg, contact_count };
+    });
+}
+
+export function updateSegmentLastUsed(id, campaignId = null) {
+    db.prepare(`
+        UPDATE segments
+        SET last_used_at = datetime('now', 'localtime'), last_campaign_id = ?
+        WHERE id = ?
+    `).run(campaignId, id);
+}
+
+// ============================================================
+// Feature 4: Inbox / Conversation Status
+// ============================================================
+
+export function listInboxConversations({ limit = 100, offset = 0 } = {}) {
+    return db.prepare(`
+        SELECT
+            m.phone,
+            c.name AS contact_name,
+            MAX(m.created_at) AS last_message_at,
+            (SELECT body FROM messages
+             WHERE phone = m.phone AND direction = 'inbound'
+             ORDER BY created_at DESC LIMIT 1) AS last_inbound,
+            COALESCE(cs.status, 'unread') AS conv_status,
+            COUNT(CASE WHEN m.direction = 'inbound' THEN 1 END) AS inbound_count
+        FROM messages m
+        LEFT JOIN contacts c ON c.phone = m.phone
+        LEFT JOIN conversation_status cs ON cs.phone = m.phone
+        WHERE m.direction = 'inbound'
+        GROUP BY m.phone
+        ORDER BY last_message_at DESC
+        LIMIT ? OFFSET ?
+    `).all(limit, offset);
+}
+
+export function countUnreadConversations() {
+    return db.prepare(`
+        SELECT COUNT(DISTINCT m.phone) AS cnt
+        FROM messages m
+        LEFT JOIN conversation_status cs ON cs.phone = m.phone
+        WHERE m.direction = 'inbound'
+          AND (cs.status IS NULL OR cs.status = 'unread')
+    `).get()?.cnt ?? 0;
+}
+
+export function markConversationRead(phone) {
+    db.prepare(`
+        INSERT INTO conversation_status (phone, status, updated_at)
+        VALUES (?, 'read', datetime('now', 'localtime'))
+        ON CONFLICT(phone) DO UPDATE SET
+            status = 'read',
+            updated_at = datetime('now', 'localtime')
+    `).run(phone);
+}
+
+export function markConversationUnread(phone) {
+    db.prepare(`
+        INSERT INTO conversation_status (phone, status, updated_at)
+        VALUES (?, 'unread', datetime('now', 'localtime'))
+        ON CONFLICT(phone) DO UPDATE SET
+            status = 'unread',
+            updated_at = datetime('now', 'localtime')
+    `).run(phone);
+}
+
+export function getConversationMessagesByPhone(phone) {
+    return db.prepare(`
+        SELECT id, direction, body, message_sid, status, created_at
+        FROM messages
+        WHERE phone = ?
+        ORDER BY created_at ASC
+    `).all(phone);
+}
+
+// ============================================================
+// Feature H: Contact Engagement Stats
+// ============================================================
+
+export function getContactEngagementStats(contactId) {
+    const summary = db.prepare(`
+        SELECT COUNT(DISTINCT cr.campaign_id) AS campaigns_received
+        FROM campaign_recipients cr
+        WHERE cr.contact_id = ?
+    `).get(contactId);
+
+    const responded = db.prepare(`
+        SELECT COUNT(DISTINCT cr.campaign_id) AS count
+        FROM campaign_recipients cr
+        WHERE cr.contact_id = ?
+          AND cr.sent_at IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM messages m
+              WHERE m.phone = cr.phone
+                AND m.direction = 'inbound'
+                AND m.created_at > cr.sent_at
+          )
+    `).get(contactId);
+
+    const lastCampaign = db.prepare(`
+        SELECT c.name, cr.sent_at
+        FROM campaign_recipients cr
+        JOIN campaigns c ON c.id = cr.campaign_id
+        WHERE cr.contact_id = ? AND cr.sent_at IS NOT NULL
+        ORDER BY cr.sent_at DESC
+        LIMIT 1
+    `).get(contactId);
+
+    const lastReply = db.prepare(`
+        SELECT m.body, m.created_at
+        FROM messages m
+        JOIN contacts con ON con.phone = m.phone
+        WHERE con.id = ? AND m.direction = 'inbound'
+        ORDER BY m.created_at DESC
+        LIMIT 1
+    `).get(contactId);
+
+    return {
+        campaigns_received: summary?.campaigns_received ?? 0,
+        campaigns_responded: responded?.count ?? 0,
+        last_campaign_name: lastCampaign?.name ?? null,
+        last_campaign_sent_at: lastCampaign?.sent_at ?? null,
+        last_reply_body: lastReply?.body ?? null,
+        last_reply_at: lastReply?.created_at ?? null,
+    };
 }
 

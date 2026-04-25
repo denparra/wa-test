@@ -69,7 +69,7 @@ function formatDateTimeLocal(value) {
   return text.replace(' ', 'T').slice(0, 16);
 }
 
-export function renderDashboardPage({ stats }) {
+export function renderDashboardPage({ stats, metrics = null }) {
   const cards = [
     { label: 'Contactos', value: stats.contacts, link: '/admin/contacts', desc: 'Total de contactos en la base', icon: 'users', kicker: 'Base activa' },
     { label: 'Vehiculos', value: stats.vehicles, link: '/admin/vehicles', desc: 'Vehículos asociados a contactos', icon: 'car', kicker: 'Inventario asociado' },
@@ -95,13 +95,101 @@ export function renderDashboardPage({ stats }) {
       : `<div>${inner}</div>`;
   }).join('');
 
+  let metricsHtml = '';
+  if (metrics) {
+    // rr30 / rr60 come from db as { sent, responded } rows — compute rate here
+    const raw30 = metrics.rr30 || {};
+    const raw60 = metrics.rr60 || {};
+    const rate30 = raw30.sent > 0 ? Math.round(((raw30.responded || 0) / raw30.sent) * 100) : null;
+    const rate60 = raw60.sent > 0 ? Math.round(((raw60.responded || 0) / raw60.sent) * 100) : null;
+    const rr30 = rate30 !== null ? `${rate30}%` : 'N/D';
+    const rr60 = rate60 !== null ? `${rate60}%` : 'N/D';
+    const delta = rate30 !== null && rate60 !== null ? rate30 - rate60 : null;
+    const deltaHtml = delta !== null
+      ? `<span style="color:${delta >= 0 ? 'var(--success-500)' : 'var(--danger-500)'}; font-size:12px; font-weight:600;">${delta >= 0 ? '+' : ''}${delta.toFixed(1)}pp vs período anterior</span>`
+      : (rate30 !== null ? `<span style="font-size:12px;color:var(--ink-400);">${raw30.sent} enviados en 30d</span>` : '');
+
+    // topCampaigns: db returns { id, name, sent, responded } — compute rate inline
+    const topCampaigns = (metrics.topCampaigns || []).map(c => {
+      const rate = c.sent > 0 ? Math.round(((c.responded || 0) / c.sent) * 100) : 0;
+      return `<tr>
+        <td style="font-size:12px;">${escapeHtml(c.name)}</td>
+        <td style="text-align:right;font-weight:600;font-size:12px;">${rate}%</td>
+        <td style="text-align:right;font-size:11px;color:var(--ink-400);">${c.responded || 0}/${c.sent}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="3" class="muted" style="font-size:12px;padding:12px;">Sin campañas con envíos</td></tr>`;
+
+    // weeklySends: db returns { week_key, week_start, sent }
+    const weeklySends = metrics.weeklySends || [];
+    const maxWeekly = Math.max(...weeklySends.map(w => w.sent || 0), 1);
+    const chartBars = weeklySends.map(w => {
+      const pct = Math.round(((w.sent || 0) / maxWeekly) * 10);
+      const bar = '█'.repeat(pct) + '░'.repeat(10 - pct);
+      const label = String(w.week_start || w.week_key || '').slice(5); // MM-DD
+      return `<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;font-family:var(--font-mono);">
+        <span style="color:var(--ink-400);min-width:48px;">${escapeHtml(label)}</span>
+        <span style="color:var(--brand-500);">${bar}</span>
+        <span style="color:var(--ink-700);font-weight:600;">${w.sent || 0}</span>
+      </div>`;
+    }).join('') || `<div class="muted" style="font-size:12px;">Sin envíos recientes</div>`;
+
+    // brandDist: db returns { make, cnt }
+    const brandDist = metrics.brandDist || [];
+    const topMakes = brandDist.map((m) => {
+      const pct = Math.round((m.cnt / (brandDist[0]?.cnt || 1)) * 100);
+      return `<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+          <span style="font-weight:600;">${escapeHtml(m.make)}</span>
+          <span style="color:var(--ink-500);">${m.cnt}</span>
+        </div>
+        <div style="height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:var(--brand-500);border-radius:3px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>`;
+    }).join('') || `<div class="muted" style="font-size:12px;">Sin vehículos registrados</div>`;
+
+    metricsHtml = `
+    <section class="panel" style="margin-top:18px;">
+      <div class="panel-header"><h1>Métricas de campañas (30 días)</h1></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;">
+        <div class="card">
+          <h2>${renderIcon('check-circle', 14)}<span>Tasa de respuesta (30d)</span></h2>
+          <p style="font-size:28px;">${rr30}</p>
+          <div class="card-kicker">${deltaHtml}</div>
+        </div>
+        <div class="card">
+          <h2>${renderIcon('check-circle', 14)}<span>Tasa de respuesta (60d)</span></h2>
+          <p style="font-size:28px;">${rr60}</p>
+          <div class="card-kicker">Período base de comparación</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;align-items:start;">
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.8px;color:var(--ink-500);font-weight:600;margin-bottom:10px;">Top campañas</div>
+          <table style="font-size:12px;">
+            <thead><tr><th>Campaña</th><th style="text-align:right;">Resp%</th><th style="text-align:right;">N</th></tr></thead>
+            <tbody>${topCampaigns}</tbody>
+          </table>
+        </div>
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.8px;color:var(--ink-500);font-weight:600;margin-bottom:10px;">Envíos por semana (4 sem)</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">${chartBars}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.8px;color:var(--ink-500);font-weight:600;margin-bottom:10px;">Marcas más frecuentes</div>
+          ${topMakes}
+        </div>
+      </div>
+    </section>`;
+  }
+
   const content = `<section class="panel">
       <div class="panel-header"><h1>Resumen</h1></div>
       ${helpText}
       <div class="cards">
         ${cardHtml}
       </div>
-    </section>`;
+    </section>${metricsHtml}`;
 
   return renderLayout({ title: 'Resumen', content, active: 'home' });
 }
@@ -203,7 +291,7 @@ export function renderContactsPage({ contacts, query, offset, limit, makes = [],
   return renderLayout({ title: 'Contactos', content, active: 'contacts' });
 }
 
-export function renderContactEditPage({ contact = null, error = null, vehicles = [] }) {
+export function renderContactEditPage({ contact = null, error = null, vehicles = [], engagement = null }) {
   const isNew = !contact;
   const title = isNew ? 'Nuevo Contacto' : 'Editar Contacto';
   const action = isNew ? 'Crear' : 'Guardar';
@@ -310,7 +398,36 @@ export function renderContactEditPage({ contact = null, error = null, vehicles =
         </div>`}
     </section>` : '';
 
-  return renderLayout({ title, content: form + vehiclesSection, active: 'contacts' });
+  const engagementSection = (contact && engagement) ? `
+    <section class="panel" style="margin-top:20px;">
+      <div class="panel-header"><h3>Historial de engagement</h3></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 0 8px;">
+        <div style="background:var(--surface-1);border:1px solid var(--ink-100);border-radius:var(--radius-md);padding:12px;">
+          <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Campañas recibidas</div>
+          <div style="font-size:1.5rem;font-weight:700;line-height:1;">${engagement.campaigns_received}</div>
+        </div>
+        <div style="background:var(--surface-1);border:1px solid var(--ink-100);border-radius:var(--radius-md);padding:12px;">
+          <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Campañas respondidas</div>
+          <div style="font-size:1.5rem;font-weight:700;line-height:1;">${engagement.campaigns_responded}${engagement.campaigns_received > 0 ? `<span style="font-size:13px;font-weight:400;color:var(--ink-500);margin-left:6px;">(${Math.round(engagement.campaigns_responded / engagement.campaigns_received * 100)}%)</span>` : ''}</div>
+        </div>
+      </div>
+      <div style="font-size:13px;display:flex;flex-direction:column;gap:6px;padding-top:4px;">
+        ${engagement.last_campaign_name ? `
+        <div>
+          <span class="muted">Última campaña:</span>
+          <strong style="margin-left:6px;">${escapeHtml(engagement.last_campaign_name)}</strong>
+          ${engagement.last_campaign_sent_at ? `<span class="muted" style="margin-left:6px;">${escapeHtml(formatDate(engagement.last_campaign_sent_at))}</span>` : ''}
+        </div>` : '<div class="muted">Sin campañas enviadas aún.</div>'}
+        ${engagement.last_reply_body ? `
+        <div>
+          <span class="muted">Última respuesta:</span>
+          <span style="margin-left:6px;font-style:italic;">"${escapeHtml(truncate(engagement.last_reply_body, 80))}"</span>
+          ${engagement.last_reply_at ? `<span class="muted" style="margin-left:6px;">${escapeHtml(formatDate(engagement.last_reply_at))}</span>` : ''}
+        </div>` : '<div class="muted">Sin respuestas registradas.</div>'}
+      </div>
+    </section>` : '';
+
+  return renderLayout({ title, content: form + vehiclesSection + engagementSection, active: 'contacts' });
 }
 
 export function renderContactCreatePage({ error = null, formData = {} }) {
@@ -655,8 +772,8 @@ export function renderMessagesPage({ messages, direction, offset, limit }) {
       </aside>
       <section class="conv-pane" id="conv-pane">
         <div class="conv-empty" id="conv-empty" hidden>
-          ${renderIcon('message-square', 40)}
-          <div>Selecciona una conversación para ver el hilo completo.</div>
+          ${renderIcon('message-square', 14)}
+          <span>Selecciona una conversación para ver el hilo.</span>
         </div>
         <div class="conv-header" id="conv-header"></div>
         <div class="conv-body" id="conv-body"></div>
@@ -1185,21 +1302,23 @@ export function renderCampaignsPage({ campaigns, offset, limit }) {
           key: 'actions',
           label: 'Acciones',
           render: (row) => {
+            const dupBtn = `<button onclick="duplicateCampaign(${row.id})" class="action-btn" title="Duplicar campaña">⧉</button>`;
             if (row.status === 'draft') {
               return `<a href="/admin/campaigns/${row.id}/edit" class="action-btn">Editar</a>
-                      <button onclick="deleteCampaign(${row.id})" class="action-btn">Eliminar</button>`;
+                      <button onclick="deleteCampaign(${row.id})" class="action-btn">Eliminar</button>
+                      ${dupBtn}`;
             }
             if (row.status === 'scheduled') {
-              return `<button onclick="cancelCampaign(${row.id})" class="action-btn">Cancelar</button>`;
+              return `<button onclick="cancelCampaign(${row.id})" class="action-btn">Cancelar</button>${dupBtn}`;
             }
             if (row.status === 'sending') {
-              return `<button onclick="pauseCampaign(${row.id})" class="action-btn">Pausar</button>`;
+              return `<button onclick="pauseCampaign(${row.id})" class="action-btn">Pausar</button>${dupBtn}`;
             }
             if (row.status === 'paused') {
               return `<button onclick="resumeCampaign(${row.id})" class="action-btn">Reanudar</button>
-                      <button onclick="cancelCampaign(${row.id})" class="action-btn">Cancelar</button>`;
+                      <button onclick="cancelCampaign(${row.id})" class="action-btn">Cancelar</button>${dupBtn}`;
             }
-            return '';
+            return dupBtn;
           }
         }
       ],
@@ -1257,6 +1376,11 @@ export function renderCampaignsPage({ campaigns, offset, limit }) {
         const res = await fetch('/admin/api/campaigns/'+id, {method: 'DELETE'});
         if(res.ok) window.location.reload();
         else alert('Error al eliminar');
+    }
+    async function duplicateCampaign(id) {
+        const r = await fetch('/admin/api/campaigns/'+id+'/duplicate', {method: 'POST'});
+        if(r.ok) window.location.href = '/admin/campaigns';
+        else alert('Error al duplicar la campaña');
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -2278,7 +2402,7 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
   return renderLayout({ title: 'Opt-outs', content, active: 'opt-outs' });
 }
 
-export function renderImportPage({ preview = null, result = null }) {
+export function renderImportPage({ preview = null, result = null, optOutResult = null }) {
   const helpText = renderHelpText(
     `<strong>Importación CSV:</strong> Importa contactos y vehículos desde un archivo CSV.
     El formato esperado es: <code>Telefono,Nombre,Marca,Modelo,Año,Precio,Link</code><br/>
@@ -2393,6 +2517,29 @@ export function renderImportPage({ preview = null, result = null }) {
     </section>
   ` : '';
 
+  const optOutSection = `
+    <section class="panel" style="margin-top:20px;">
+      <div class="panel-header"><h3>Importar Opt-outs desde CSV</h3></div>
+      ${renderHelpText(`Sube un CSV con columna <code>Telefono</code> (una por fila, formato E.164 o +56...).
+        Todos los números quedarán registrados en la lista de exclusión y no recibirán más campañas.`)}
+      ${optOutResult?.error ? `<div style="color:var(--bad);margin-bottom:12px;">${escapeHtml(optOutResult.error)}</div>` : ''}
+      ${optOutResult && !optOutResult.error ? `
+        <div style="margin-bottom:14px;padding:12px;background:var(--surface-1);border:1px solid var(--ink-100);border-radius:var(--radius-md);">
+          <strong>Importación completada</strong><br/>
+          <span class="muted">Procesados: ${optOutResult.total} · Válidos: ${optOutResult.valid} · <strong>Nuevos opt-outs: ${optOutResult.inserted}</strong> · Ya existían: ${optOutResult.skipped} · Inválidos: ${optOutResult.invalidCount}</span>
+        </div>
+      ` : ''}
+      <form enctype="multipart/form-data" method="POST" action="/admin/import/optouts">
+        <div style="margin-bottom:12px;">
+          <input type="file" name="csvFile" accept=".csv,text/csv" required
+                 style="padding:8px;width:100%;border:1px solid var(--line);border-radius:10px;font-size:13px;" />
+          <div class="muted" style="font-size:12px;margin-top:5px;">CSV con cabecera <code>Telefono</code>. Máximo 5000 registros.</div>
+        </div>
+        <button type="submit">Importar opt-outs</button>
+      </form>
+    </section>
+  `;
+
   const content = `
     <section class="panel">
       <div class="panel-header"><h1>Importar Contactos desde CSV</h1></div>
@@ -2401,6 +2548,7 @@ export function renderImportPage({ preview = null, result = null }) {
     ${uploadForm}
     ${previewSection}
     ${resultSection}
+    ${optOutSection}
   `;
 
   return renderLayout({ title: 'Importar', content, active: 'import' });
@@ -3104,4 +3252,215 @@ export function renderVehicleFormPage({ vehicle = null, error = null, formData =
     </section>`;
 
   return renderLayout({ title, content, active: 'vehicles' });
+}
+
+// ============================================================
+// Feature J: Segments Page
+// ============================================================
+export function renderSegmentsPage({ segments = [] }) {
+  const helpText = renderHelpText(
+    `<strong>Segmentos dinámicos:</strong> filtros guardados para reutilizar en campañas.
+    El conteo refleja los contactos activos con vehículo que cumplen cada filtro en tiempo real.`
+  );
+
+  const tableHtml = segments.length > 0
+    ? `<table>
+        <thead><tr><th>Nombre</th><th>Filtros</th><th style="text-align:right;">Contactos</th><th>Último uso</th><th>Acciones</th></tr></thead>
+        <tbody>
+          ${segments.map(seg => {
+            let filtersDisplay = '';
+            try {
+              const f = typeof seg.filters === 'string' ? JSON.parse(seg.filters) : (seg.filters || {});
+              filtersDisplay = Object.entries(f).map(([k, v]) => `<span class="badge badge-muted">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`).join(' ');
+            } catch (_) {
+              filtersDisplay = escapeHtml(String(seg.filters || '—'));
+            }
+            return `<tr>
+              <td style="font-weight:600;">${escapeHtml(seg.name)}</td>
+              <td>${filtersDisplay || '<span class="muted">Sin filtros</span>'}</td>
+              <td style="text-align:right;font-weight:700;font-size:15px;">${seg.contact_count ?? 0}</td>
+              <td>${seg.last_used_at ? formatDate(seg.last_used_at) : '<span class="muted">—</span>'}</td>
+              <td>
+                <button onclick="deleteSegment(${seg.id}, '${escapeHtml(seg.name)}')" class="action-btn danger" title="Eliminar segmento">${renderIcon('trash', 13)}</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`
+    : renderEmptyState({
+        title: 'Sin segmentos',
+        message: 'Los segmentos se crean desde el formulario de campañas al guardar un conjunto de filtros.',
+        ctaText: 'Ir a campañas',
+        ctaLink: '/admin/campaigns'
+      });
+
+  const script = `<script>
+    async function deleteSegment(id, name) {
+      if (!confirm('¿Eliminar segmento "' + name + '"?')) return;
+      const r = await fetch('/admin/api/segments/' + id, { method: 'DELETE' });
+      if (r.ok) window.location.reload();
+      else alert('Error al eliminar');
+    }
+  </script>`;
+
+  const content = `<section class="panel">
+    <div class="panel-header">
+      <h1>Segmentos</h1>
+    </div>
+    ${helpText}
+    ${tableHtml}
+  </section>${script}`;
+
+  return renderLayout({ title: 'Segmentos', content, active: 'segments' });
+}
+
+// ============================================================
+// Feature 4: Inbox Page
+// ============================================================
+export function renderInboxPage({ conversations = [], filter = 'all', unreadCount = 0 }) {
+  const helpText = renderHelpText(
+    `<strong>Inbox:</strong> bandeja de gestión de respuestas inbound. Muestra quién escribió, cuándo,
+    y si ya fue atendido. Para leer el hilo completo usa <strong>Ver hilo</strong> → va a Mensajes.
+    <strong>Mensajes</strong> tiene la vista chat; el Inbox es el tablero de estado.`
+  );
+
+  const filtered = filter === 'unread'
+    ? conversations.filter(c => (c.conv_status || 'unread') === 'unread')
+    : filter === 'read'
+      ? conversations.filter(c => c.conv_status === 'read')
+      : conversations;
+
+  const totalAll = conversations.length;
+  const totalUnread = conversations.filter(c => (c.conv_status || 'unread') === 'unread').length;
+  const totalRead = conversations.filter(c => c.conv_status === 'read').length;
+
+  const chips = `<div class="chip-group" style="margin-bottom:14px;">
+    <a class="chip ${filter === 'all' ? 'active' : ''}" href="/admin/inbox">Todos <span class="muted">${totalAll}</span></a>
+    <a class="chip ${filter === 'unread' ? 'active' : ''}" href="/admin/inbox?filter=unread">
+      ${renderIcon('inbox', 13)} Sin leer <span class="muted">${totalUnread}</span>
+    </a>
+    <a class="chip ${filter === 'read' ? 'active' : ''}" href="/admin/inbox?filter=read">
+      ${renderIcon('check', 13)} Leídos <span class="muted">${totalRead}</span>
+    </a>
+  </div>`;
+
+  const statCards = `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="padding:12px 18px;border-radius:var(--radius-lg);background:var(--danger-50);border:1px solid #f5c3c3;min-width:130px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--danger-500);font-weight:700;margin-bottom:4px;">Sin leer</div>
+      <div style="font-size:26px;font-weight:700;color:var(--danger-500);line-height:1;">${totalUnread}</div>
+    </div>
+    <div style="padding:12px 18px;border-radius:var(--radius-lg);background:var(--success-50);border:1px solid #c5e8df;min-width:130px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--success-500);font-weight:700;margin-bottom:4px;">Atendidos</div>
+      <div style="font-size:26px;font-weight:700;color:var(--success-500);line-height:1;">${totalRead}</div>
+    </div>
+    <div style="padding:12px 18px;border-radius:var(--radius-lg);background:var(--surface-1);border:1px solid var(--ink-100);min-width:130px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--ink-400);font-weight:700;margin-bottom:4px;">Total contactos</div>
+      <div style="font-size:26px;font-weight:700;line-height:1;">${totalAll}</div>
+    </div>
+  </div>`;
+
+  const tableRows = filtered.map(conv => {
+    const convStatus = conv.conv_status || 'unread';
+    const isUnread = convStatus === 'unread';
+    const statusBadge = isUnread
+      ? `<span class="badge badge-bad">Sin leer</span>`
+      : `<span class="badge badge-good">Leído</span>`;
+    const preview = escapeHtml(truncate(conv.last_inbound || '—', 65));
+    const name = escapeHtml(conv.contact_name || '—');
+    const phone = escapeHtml(conv.phone);
+    const lastAt = escapeHtml(formatDate(conv.last_message_at));
+    const inboundCount = conv.inbound_count || 0;
+    const rowStyle = isUnread ? 'font-weight:600;' : '';
+    return `<tr style="${rowStyle}" data-row>
+      <td>${statusBadge}</td>
+      <td>${name}</td>
+      <td><span class="phone-text">${phone}</span></td>
+      <td style="max-width:320px;color:var(--ink-600);">${preview}</td>
+      <td style="white-space:nowrap;font-size:12px;color:var(--ink-400);">${lastAt}</td>
+      <td style="text-align:center;">${inboundCount}</td>
+      <td>
+        <div class="row-actions">
+          <a href="/admin/messages" class="action-btn" title="Ver hilo en Mensajes">${renderIcon('message-square', 13)} Ver hilo</a>
+          ${isUnread
+            ? `<button onclick="markRead('${escapeHtml(conv.phone)}')" class="action-btn" title="Marcar como leído">${renderIcon('check', 13)} Marcar leído</button>`
+            : `<button onclick="markUnread('${escapeHtml(conv.phone)}')" class="action-btn ghost" title="Marcar como no leído">${renderIcon('refresh', 13)}</button>`
+          }
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const tableHtml = filtered.length > 0
+    ? `<div style="overflow-x:auto;">
+        <table id="inbox-table">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Contacto</th>
+              <th>Teléfono</th>
+              <th>Último mensaje inbound</th>
+              <th>Fecha</th>
+              <th style="text-align:center;">Msgs</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>`
+    : renderEmptyState({
+        title: 'Sin conversaciones',
+        message: filter === 'unread'
+          ? 'No hay mensajes pendientes de atención. ¡Todo al día!'
+          : 'Aún no hay mensajes inbound registrados.',
+        ctaText: 'Ver todos los mensajes',
+        ctaLink: '/admin/messages'
+      });
+
+  const markAllBtn = totalUnread > 0 && filter !== 'read'
+    ? `<button onclick="markAllRead()" class="action-btn primary" style="margin-left:auto;">${renderIcon('check-circle', 13)} Marcar todos leídos (${totalUnread})</button>`
+    : '';
+
+  const searchBar = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <div class="search-box">
+      ${renderIcon('search', 14, 'search-icon')}
+      <input type="text" id="inbox-search" placeholder="Buscar contacto o teléfono..." oninput="filterRows(this.value)" style="min-width:220px;" />
+    </div>
+    ${markAllBtn}
+  </div>`;
+
+  const script = `<script>
+    function filterRows(q) {
+      var ql = q.toLowerCase();
+      document.querySelectorAll('#inbox-table tbody tr[data-row]').forEach(function(tr) {
+        tr.style.display = tr.textContent.toLowerCase().includes(ql) ? '' : 'none';
+      });
+    }
+    async function markRead(phone) {
+      await fetch('/admin/api/inbox/' + encodeURIComponent(phone) + '/read', { method: 'POST' });
+      window.location.reload();
+    }
+    async function markUnread(phone) {
+      await fetch('/admin/api/inbox/' + encodeURIComponent(phone) + '/unread', { method: 'POST' });
+      window.location.reload();
+    }
+    async function markAllRead() {
+      var btns = document.querySelectorAll('[onclick^="markRead"]');
+      var phones = Array.from(btns).map(function(b){ return b.getAttribute('onclick').match(/'([^']+)'/)[1]; });
+      await Promise.all(phones.map(function(p){ return fetch('/admin/api/inbox/' + encodeURIComponent(p) + '/read', { method: 'POST' }); }));
+      window.location.reload();
+    }
+  </script>`;
+
+  const content = `<section class="panel">
+    <div class="panel-header">
+      <h1>Inbox ${unreadCount > 0 ? `<span class="badge badge-bad" style="vertical-align:middle;font-size:13px;">${unreadCount} sin leer</span>` : ''}</h1>
+    </div>
+    ${helpText}
+    ${statCards}
+    ${chips}
+    ${searchBar}
+    ${tableHtml}
+  </section>${script}`;
+
+  return renderLayout({ title: 'Inbox', content, active: 'inbox' });
 }

@@ -1,13 +1,23 @@
 const NAV_ITEMS = [
-  { key: 'home', label: 'Resumen', href: '/admin', icon: 'bar-chart' },
-  { key: 'contacts', label: 'Contactos', href: '/admin/contacts', icon: 'users' },
-  { key: 'vehicles', label: 'Vehículos', href: '/admin/vehicles', icon: 'car' },
-  { key: 'messages', label: 'Mensajes', href: '/admin/messages', icon: 'message-square' },
-  { key: 'lab-chat', label: 'Lab Chat', href: '/admin/lab/chat', icon: 'message-square' },
-  { key: 'campaigns', label: 'Campanas', href: '/admin/campaigns', icon: 'send' },
-  { key: 'templates', label: 'Templates', href: '/admin/templates', icon: 'file-text' },
-  { key: 'opt-outs', label: 'Opt-outs', href: '/admin/opt-outs', icon: 'user-x' },
-  { key: 'import', label: 'Importar', href: '/admin/import', icon: 'upload' }
+  { key: 'home',      label: 'Resumen',   href: '/admin',            icon: 'bar-chart' },
+  { key: 'inbox',     label: 'Inbox',     href: '/admin/inbox',      icon: 'inbox',        badge: true },
+  { key: 'messages',  label: 'Mensajes',  href: '/admin/messages',   icon: 'message-square' },
+  { key: 'lab-chat',  label: 'Lab Chat',  href: '/admin/lab/chat',   icon: 'message-square' },
+  { key: 'campaigns', label: 'Campañas',  href: '/admin/campaigns',  icon: 'send' },
+  { key: 'templates', label: 'Templates', href: '/admin/templates',  icon: 'file-text' },
+  { key: 'segments',  label: 'Segmentos', href: '/admin/segments',   icon: 'filter' },
+  { key: 'contacts',  label: 'Contactos', href: '/admin/contacts',   icon: 'users' },
+  { key: 'vehicles',  label: 'Vehículos', href: '/admin/vehicles',   icon: 'car' },
+  { key: 'opt-outs',  label: 'Opt-outs',  href: '/admin/opt-outs',   icon: 'user-x' },
+  { key: 'import',    label: 'Importar',  href: '/admin/import',     icon: 'upload' }
+];
+
+const NAV_GROUPS = [
+  { label: null,            keys: ['home'] },
+  { label: 'Comunicación',  keys: ['inbox', 'messages', 'lab-chat'] },
+  { label: 'Campañas',      keys: ['campaigns', 'templates', 'segments'] },
+  { label: 'Datos',         keys: ['contacts', 'vehicles'] },
+  { label: 'Config',        keys: ['opt-outs', 'import'] }
 ];
 
 // Inline Lucide-style SVG icon library. Keeps bundle small and avoids CDN dependency.
@@ -85,10 +95,18 @@ export function renderBadge(value, tone = 'muted') {
 }
 
 export function renderLayout({ title, content, active }) {
-  const nav = NAV_ITEMS.map((item) => {
-    const isActive = item.key === active ? 'active' : '';
-    const icon = item.icon ? renderIcon(item.icon, 15) : '';
-    return `<a class="nav-link ${isActive}" href="${item.href}">${icon}<span>${item.label}</span></a>`;
+  const nav = NAV_GROUPS.map(group => {
+    const groupItems = group.keys.map(k => NAV_ITEMS.find(i => i.key === k)).filter(Boolean);
+    const labelHtml = group.label
+      ? `<div class="nav-section-label">${group.label}</div>`
+      : '';
+    const links = groupItems.map(item => {
+      const isActive = item.key === active ? 'active' : '';
+      const icon = item.icon ? renderIcon(item.icon, 15) : '';
+      const badgeEl = item.badge ? `<span class="nav-badge" data-nav-badge="${item.key}"></span>` : '';
+      return `<a class="nav-link ${isActive}" href="${item.href}">${icon}<span>${item.label}</span>${badgeEl}</a>`;
+    }).join('');
+    return `<div class="nav-section">${labelHtml}${links}</div>`;
   }).join('');
 
   return `<!doctype html>
@@ -206,83 +224,137 @@ export function renderLayout({ title, content, active }) {
       letter-spacing: -0.01em;
     }
 
-    /* ---------- Shell ---------- */
-    .shell {
+    /* ---------- [hidden] fix: ensure CSS display doesn't override the HTML attribute ---------- */
+    [hidden] { display: none !important; }
+
+    /* ---------- Shell with sidebar ---------- */
+    .shell { min-height: 100vh; display: flex; }
+
+    .sidebar {
+      width: 224px;
       min-height: 100vh;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 200;
+      background: #1a1815;
       display: flex;
       flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.08) transparent;
     }
-    header.app-header {
-      padding: 26px 32px 10px;
+    .sidebar-brand {
+      padding: 18px 14px 14px;
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      flex-shrink: 0;
     }
     .brand-mark {
-      width: 44px;
-      height: 44px;
-      border-radius: var(--radius-lg);
+      width: 34px; height: 34px;
+      border-radius: var(--radius-md);
       background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
       color: #fff;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: var(--shadow-2);
+      box-shadow: 0 2px 8px rgba(200,91,52,0.4);
       flex-shrink: 0;
     }
-    .brand-mark svg { width: 22px; height: 22px; }
-    .brand-text .title {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.2px;
-      color: var(--ink-900);
-      line-height: 1.2;
+    .brand-mark svg { width: 17px; height: 17px; }
+    .sidebar-brand-text .sidebar-title {
+      font-size: 13.5px; font-weight: 700;
+      color: #fff; letter-spacing: -0.1px; line-height: 1.2;
     }
-    .brand-text .subtitle {
-      margin-top: 3px;
-      color: var(--ink-500);
-      font-size: 13px;
-      letter-spacing: 0.1px;
+    .sidebar-brand-text .sidebar-subtitle {
+      font-size: 10.5px; color: rgba(255,255,255,0.36); margin-top: 2px;
     }
 
-    /* ---------- Navigation ---------- */
-    nav.app-nav {
+    nav.sidebar-nav {
+      flex: 1;
+      padding: 8px 8px 24px;
       display: flex;
-      gap: 6px;
-      padding: 6px 24px 18px;
-      flex-wrap: wrap;
-      margin: 0 8px;
+      flex-direction: column;
+    }
+    .nav-section { margin-bottom: 2px; }
+    .nav-section-label {
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 1.3px;
+      color: rgba(255,255,255,0.24);
+      font-weight: 700;
+      padding: 14px 10px 4px;
     }
     .nav-link {
-      padding: 8px 14px;
-      border-radius: var(--radius-full);
-      background: var(--surface-1);
-      color: var(--ink-500);
-      border: 1px solid var(--ink-100);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      color: rgba(255,255,255,0.55);
       text-decoration: none;
       font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.1px;
-      transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+      font-weight: 500;
+      transition: background 0.12s ease, color 0.12s ease;
     }
-    .nav-link svg { opacity: 0.75; }
+    .nav-link svg { opacity: 0.55; flex-shrink: 0; transition: opacity 0.12s ease; }
     .nav-link:hover {
-      background: var(--ink-900);
-      color: #fff;
-      border-color: var(--ink-900);
+      background: rgba(255,255,255,0.07);
+      color: rgba(255,255,255,0.9);
     }
-    .nav-link:hover svg { opacity: 1; }
+    .nav-link:hover svg { opacity: 0.9; }
     .nav-link.active {
-      background: var(--ink-900);
+      background: rgba(200,91,52,0.22);
       color: #fff;
-      border-color: var(--ink-900);
+      font-weight: 600;
     }
     .nav-link.active svg { opacity: 1; }
+    .nav-badge {
+      display: none;
+      min-width: 17px; height: 17px;
+      padding: 0 4px;
+      border-radius: var(--radius-full);
+      background: var(--brand-500);
+      color: #fff;
+      font-size: 10px; font-weight: 700;
+      line-height: 17px; text-align: center;
+      margin-left: auto;
+    }
+    .nav-badge.visible { display: inline-block; }
 
-    main { padding: 0 32px 40px; flex: 1; }
+    /* ---------- Page wrap ---------- */
+    .page-wrap {
+      margin-left: 224px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .page-topbar {
+      height: 50px;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--ink-100);
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .page-topbar-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--ink-900); letter-spacing: -0.1px;
+    }
+    .page-topbar-right {
+      font-size: 11.5px; color: var(--ink-400);
+    }
+    main { padding: 24px 32px 48px; flex: 1; }
 
     /* ---------- Panel & cards ---------- */
     .panel {
@@ -764,17 +836,17 @@ export function renderLayout({ title, content, active }) {
       max-height: 72vh;
     }
     .conv-empty {
-      flex: 1;
+      padding: 12px 18px;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
+      gap: 8px;
       color: var(--ink-400);
-      padding: 40px 24px;
-      text-align: center;
-      gap: 10px;
+      font-size: 12.5px;
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--ink-100);
+      flex-shrink: 0;
     }
-    .conv-empty svg { opacity: 0.4; }
+    .conv-empty svg { opacity: 0.4; flex-shrink: 0; }
     .conv-header {
       padding: 14px 18px;
       border-bottom: 1px solid var(--ink-100);
@@ -888,22 +960,32 @@ export function renderLayout({ title, content, active }) {
       box-shadow: var(--shadow-1);
     }
 
+    @media (max-width: 1100px) {
+      .sidebar { width: 200px; }
+      .page-wrap { margin-left: 200px; }
+    }
     @media (max-width: 900px) {
+      .sidebar { width: 200px; }
+      .page-wrap { margin-left: 200px; }
       .inbox { grid-template-columns: 1fr; }
       .inbox-list { max-height: none; }
       .conv-pane { max-height: none; }
     }
-    @media (max-width: 700px) {
-      header.app-header, nav.app-nav, main {
-        padding-left: 18px;
-        padding-right: 18px;
-      }
-      .panel { padding: 16px; }
+    @media (max-width: 680px) {
+      .sidebar { width: 52px; }
+      .sidebar-brand-text,
+      .nav-section-label,
+      .nav-link span { display: none; }
+      .sidebar-brand { justify-content: center; padding: 14px 8px; }
+      .nav-link { justify-content: center; padding: 10px; }
+      .nav-badge { position: absolute; top: 4px; right: 4px; min-width: 14px; height: 14px; font-size: 9px; line-height: 14px; }
+      .page-wrap { margin-left: 52px; }
+      .page-topbar { padding: 0 16px; }
+      main { padding: 16px; }
+      .panel { padding: 14px; }
       .cards { grid-template-columns: 1fr; }
       table { font-size: 12px; }
       th, td { padding: 9px 6px; }
-      .brand-text .title { font-size: 19px; }
-      .brand-text .subtitle { font-size: 12px; }
     }
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; }
@@ -912,16 +994,33 @@ export function renderLayout({ title, content, active }) {
 </head>
 <body>
   <div class="shell">
-    <header class="app-header">
-      <div class="brand-mark">${renderIcon('car', 22)}</div>
-      <div class="brand-text">
-        <div class="title">Queirolo Autos · Centro de comunicaciones</div>
-        <div class="subtitle">WhatsApp · Campañas · Seguimiento</div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">${renderIcon('car', 17)}</div>
+        <div class="sidebar-brand-text">
+          <div class="sidebar-title">Queirolo Autos</div>
+          <div class="sidebar-subtitle">WhatsApp · Campañas</div>
+        </div>
       </div>
-    </header>
-    <nav class="app-nav">${nav}</nav>
-    <main>${content}</main>
+      <nav class="sidebar-nav">${nav}</nav>
+    </aside>
+    <div class="page-wrap">
+      <div class="page-topbar">
+        <span class="page-topbar-title">${escapeHtml(title)}</span>
+        <span class="page-topbar-right">Centro de comunicaciones</span>
+      </div>
+      <main>${content}</main>
+    </div>
   </div>
+  <script>
+    (function() {
+      var el = document.querySelector('[data-nav-badge="inbox"]');
+      if (!el) return;
+      fetch('/admin/api/inbox/unread-count').then(function(r) { return r.json(); }).then(function(d) {
+        if (d.count > 0) { el.textContent = d.count; el.classList.add('visible'); }
+      }).catch(function(){});
+    })();
+  </script>
 </body>
 </html>`;
 }
