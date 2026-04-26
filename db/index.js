@@ -24,6 +24,24 @@ db.pragma('foreign_keys = ON');
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
 
+function tableExists(name) {
+    return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(name));
+}
+
+function columnExists(tableName, columnName) {
+    if (!tableExists(tableName)) {
+        return false;
+    }
+    const info = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    return info.some((col) => col.name === columnName);
+}
+
+function addColumnIfMissing(tableName, columnName, definition) {
+    if (!columnExists(tableName, columnName)) {
+        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    }
+}
+
 // Check for old schema state (migration hack)
 const tableInfo = db.prepare("PRAGMA table_info(contacts)").all();
 const hasPhone = tableInfo.some(col => col.name === 'phone');
@@ -113,6 +131,46 @@ if (segmentsMigrateCheck) {
     }
 }
 
+// Opt-out hardening migration: richer audit fields while keeping legacy columns.
+if (tableExists('opt_outs')) {
+    addColumnIfMissing('opt_outs', 'reason_code', "TEXT NOT NULL DEFAULT 'global_user_request'");
+    addColumnIfMissing('opt_outs', 'reason_detail', 'TEXT');
+    addColumnIfMissing('opt_outs', 'source', "TEXT NOT NULL DEFAULT 'keyword'");
+    addColumnIfMissing('opt_outs', 'created_at', 'TEXT');
+    addColumnIfMissing('opt_outs', 'updated_at', 'TEXT');
+    addColumnIfMissing('opt_outs', 'released_at', 'TEXT');
+    addColumnIfMissing('opt_outs', 'created_by', 'TEXT');
+    addColumnIfMissing('opt_outs', 'released_by', 'TEXT');
+    db.exec(`
+        UPDATE opt_outs
+        SET created_at = COALESCE(created_at, opted_out_at, datetime('now', 'localtime')),
+            updated_at = COALESCE(updated_at, opted_out_at, datetime('now', 'localtime')),
+            reason_code = COALESCE(reason_code,
+                CASE
+                    WHEN reason = 'manual' THEN 'global_manual'
+                    WHEN reason = 'bulk_import' THEN 'global_import'
+                    WHEN reason = 'user_request_ai' THEN 'global_ai_detected'
+                    WHEN reason = 'complaint' THEN 'global_manual'
+                    WHEN reason = 'invalid' THEN 'global_manual'
+                    ELSE 'global_user_request'
+                END
+            ),
+            source = COALESCE(source,
+                CASE
+                    WHEN reason = 'manual' THEN 'admin'
+                    WHEN reason = 'bulk_import' THEN 'import'
+                    WHEN reason = 'user_request_ai' THEN 'ai'
+                    ELSE 'keyword'
+                END
+            )
+    `);
+}
+
+// Campaign recipient migration: preserve exact targeted vehicle.
+if (tableExists('campaign_recipients')) {
+    addColumnIfMissing('campaign_recipients', 'vehicle_id', 'INTEGER');
+}
+
 // Read and execute schema
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
@@ -150,27 +208,65 @@ const statements = {
         WHERE id = ?
     `),
     insertOptOut: db.prepare(`
-        INSERT OR IGNORE INTO opt_outs (phone, reason, opted_out_at)
-        VALUES (?, ?, datetime('now', 'localtime'))
+        INSERT INTO opt_outs (
+            phone,
+            reason,
+            reason_code,
+            reason_detail,
+            source,
+            opted_out_at,
+            created_at,
+            updated_at,
+            created_by,
+            released_at,
+            released_by
+        )
+        VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), datetime('now', 'localtime'), ?, NULL, NULL)
+        ON CONFLICT(phone) DO UPDATE SET
+            reason = excluded.reason,
+            reason_code = excluded.reason_code,
+            reason_detail = excluded.reason_detail,
+            source = excluded.source,
+            opted_out_at = datetime('now', 'localtime'),
+            updated_at = datetime('now', 'localtime'),
+            created_by = COALESCE(excluded.created_by, opt_outs.created_by),
+            released_at = NULL,
+            released_by = NULL
     `),
     updateOptOut: db.prepare(`
         UPDATE opt_outs
-        SET reason = ?
+        SET reason = ?,
+            reason_code = ?,
+            updated_at = datetime('now', 'localtime'),
+            released_at = NULL,
+            released_by = NULL
         WHERE phone = ?
     `),
     deleteOptOut: db.prepare(`
         DELETE FROM opt_outs
         WHERE phone = ?
     `),
+    releaseOptOut: db.prepare(`
+        UPDATE opt_outs
+        SET released_at = datetime('now', 'localtime'),
+            released_by = ?,
+            updated_at = datetime('now', 'localtime')
+        WHERE phone = ?
+          AND released_at IS NULL
+    `),
     getOptOutByPhone: db.prepare(`
-        SELECT phone, reason, opted_out_at
+        SELECT phone, reason, reason_code, reason_detail, source, opted_out_at,
+               COALESCE(created_at, opted_out_at) AS created_at,
+               updated_at, released_at, created_by, released_by
         FROM opt_outs
         WHERE phone = ?
+          AND released_at IS NULL
     `),
     isOptedOut: db.prepare(`
         SELECT 1
         FROM opt_outs
         WHERE phone = ?
+          AND released_at IS NULL
         LIMIT 1
     `),
     insertMessage: db.prepare(`
@@ -223,13 +319,14 @@ const statements = {
             campaign_id,
             contact_id,
             phone,
+            vehicle_id,
             status,
             message_sid,
             sent_at,
             error_message,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
     `),
     incrementCampaignSentCount: db.prepare(`
         UPDATE campaigns
@@ -292,7 +389,7 @@ const statements = {
         LIMIT ?
     `),
     listPendingRecipients: db.prepare(`
-        SELECT id, contact_id, phone
+        SELECT id, contact_id, phone, vehicle_id
         FROM campaign_recipients
         WHERE campaign_id = ? AND status = 'pending'
         ORDER BY id ASC
@@ -304,34 +401,121 @@ const statements = {
         WHERE id = ?
     `),
     getContactWithVehicle: db.prepare(`
-        SELECT c.id, c.phone, c.name, v.make, v.model, v.year
+        SELECT c.id, c.phone, c.name,
+               v.id AS vehicle_id, v.make, v.model, v.year, v.link, v.origin, v.external_id,
+               CASE WHEN vs.id IS NOT NULL THEN 1 ELSE 0 END AS is_vehicle_suppressed,
+               vs.reason_code AS vehicle_suppression_reason
         FROM contacts c
         LEFT JOIN vehicles v ON v.contact_id = c.id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
         WHERE c.id = ?
         ORDER BY v.created_at DESC
+        LIMIT 1
+    `),
+    getContactByVehicle: db.prepare(`
+        SELECT c.id, c.phone, c.name,
+               v.id AS vehicle_id, v.make, v.model, v.year, v.link, v.origin, v.external_id,
+               CASE WHEN vs.id IS NOT NULL THEN 1 ELSE 0 END AS is_vehicle_suppressed,
+               vs.reason_code AS vehicle_suppression_reason
+        FROM vehicles v
+        JOIN contacts c ON c.id = v.contact_id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
+        WHERE v.id = ?
         LIMIT 1
     `),
     listContactsForCampaign: db.prepare(`
         SELECT c.id, c.phone, c.name, c.status
         FROM contacts c
         WHERE c.status = 'active'
-          AND c.phone NOT IN (SELECT phone FROM opt_outs)
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
           AND (? IS NULL OR c.phone LIKE ? OR c.name LIKE ?)
         ORDER BY c.updated_at DESC
         LIMIT ?
     `),
     listVehicleContactsByFilters: db.prepare(`
-        SELECT DISTINCT c.id, c.phone, c.name, v.make, v.model, v.year
+        SELECT v.id AS vehicle_id,
+               c.id, c.phone, c.name, v.make, v.model, v.year, v.link, v.origin, v.external_id
         FROM contacts c
         INNER JOIN vehicles v ON v.contact_id = c.id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
         WHERE c.status = 'active'
             AND (? IS NULL OR v.make = ?)
             AND (? IS NULL OR v.model = ?)
             AND (? IS NULL OR v.year >= ?)
             AND (? IS NULL OR v.year <= ?)
-            AND c.phone NOT IN (SELECT phone FROM opt_outs)
-        ORDER BY c.updated_at DESC
+            AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+            AND vs.id IS NULL
+        ORDER BY c.updated_at DESC, v.updated_at DESC
         LIMIT ?
+    `),
+    getActiveVehicleSuppressionByVehicleId: db.prepare(`
+        SELECT id, vehicle_id, phone, origin, external_id, link, reason_code, reason_detail,
+               source, campaign_id, message_sid, suppressed_at, updated_at, released_at,
+               created_by, released_by, notes
+        FROM vehicle_suppressions
+        WHERE vehicle_id = ?
+          AND released_at IS NULL
+        LIMIT 1
+    `),
+    insertVehicleSuppression: db.prepare(`
+        INSERT INTO vehicle_suppressions (
+            vehicle_id, phone, origin, external_id, link,
+            reason_code, reason_detail, source, campaign_id, message_sid,
+            suppressed_at, updated_at, created_by, released_at, released_by, notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), ?, NULL, NULL, ?)
+    `),
+    updateVehicleSuppression: db.prepare(`
+        UPDATE vehicle_suppressions
+        SET phone = ?,
+            origin = ?,
+            external_id = ?,
+            link = ?,
+            reason_code = ?,
+            reason_detail = ?,
+            source = ?,
+            campaign_id = ?,
+            message_sid = ?,
+            updated_at = datetime('now', 'localtime'),
+            created_by = COALESCE(?, created_by),
+            released_at = NULL,
+            released_by = NULL,
+            notes = ?
+        WHERE id = ?
+    `),
+    releaseVehicleSuppression: db.prepare(`
+        UPDATE vehicle_suppressions
+        SET released_at = datetime('now', 'localtime'),
+            released_by = ?,
+            updated_at = datetime('now', 'localtime')
+        WHERE id = ?
+          AND released_at IS NULL
+    `),
+    listVehicleSuppressions: db.prepare(`
+        SELECT vs.id, vs.vehicle_id, vs.phone, vs.origin, vs.external_id, vs.link,
+               vs.reason_code, vs.reason_detail, vs.source, vs.campaign_id, vs.message_sid,
+               vs.suppressed_at, vs.updated_at, vs.released_at, vs.created_by, vs.released_by, vs.notes,
+               v.make, v.model, v.year, v.contact_id,
+               c.name AS contact_name, c.phone AS contact_phone
+        FROM vehicle_suppressions vs
+        JOIN vehicles v ON v.id = vs.vehicle_id
+        JOIN contacts c ON c.id = v.contact_id
+        WHERE vs.released_at IS NULL
+        ORDER BY COALESCE(vs.released_at, vs.suppressed_at) DESC
+        LIMIT ? OFFSET ?
+    `),
+    getLatestContactedVehicleByPhone: db.prepare(`
+        SELECT cr.vehicle_id, cr.campaign_id, cr.message_sid, cr.sent_at,
+               v.make, v.model, v.year, v.link, v.origin, v.external_id,
+               c.id AS contact_id, c.name AS contact_name
+        FROM campaign_recipients cr
+        JOIN vehicles v ON v.id = cr.vehicle_id
+        JOIN contacts c ON c.id = cr.contact_id
+        WHERE cr.phone = ?
+          AND cr.vehicle_id IS NOT NULL
+          AND cr.sent_at IS NOT NULL
+        ORDER BY datetime(cr.sent_at) DESC, cr.id DESC
+        LIMIT 1
     `)
 };
 
@@ -441,8 +625,52 @@ export function updateContactStatus(phone, status) {
     statements.updateContactStatus.run(status, phone);
 }
 
-export function insertOptOut(phone, reason = null) {
-    statements.insertOptOut.run(phone, reason);
+function toLegacyOptOutReason(reasonCode = '') {
+    const code = String(reasonCode || '').trim().toLowerCase();
+    if (code === 'global_manual') return 'manual';
+    if (code === 'global_import') return 'bulk_import';
+    if (code === 'global_ai_detected') return 'user_request_ai';
+    return 'user_request';
+}
+
+function normalizeGlobalOptOutReason(reason = null) {
+    const value = String(reason || '').trim().toLowerCase();
+    switch (value) {
+        case 'manual':
+        case 'global_manual':
+        case 'complaint':
+        case 'invalid':
+            return { reasonCode: 'global_manual', source: 'admin' };
+        case 'bulk_import':
+        case 'global_import':
+            return { reasonCode: 'global_import', source: 'import' };
+        case 'user_request_ai':
+        case 'global_ai_detected':
+            return { reasonCode: 'global_ai_detected', source: 'ai' };
+        case 'global_keyword_stop':
+        case 'global_phrase_stop':
+            return { reasonCode: value, source: value.includes('keyword') ? 'keyword' : 'phrase' };
+        case 'global_user_request':
+        case 'user_request':
+        default:
+            return { reasonCode: 'global_user_request', source: 'keyword' };
+    }
+}
+
+export function insertOptOut(phone, reason = null, meta = {}) {
+    const normalizedPhone = normalizePhone(phone);
+    const { reasonCode, source } = normalizeGlobalOptOutReason(reason);
+    if (!normalizedPhone) {
+        return;
+    }
+    statements.insertOptOut.run(
+        normalizedPhone,
+        toLegacyOptOutReason(reasonCode),
+        reasonCode,
+        meta.reasonDetail || null,
+        meta.source || source,
+        meta.createdBy || null
+    );
 }
 
 export function isOptedOut(phone) {
@@ -451,8 +679,19 @@ export function isOptedOut(phone) {
 
 export function bulkInsertOptOuts(phones) {
     const insertStmt = db.prepare(`
-        INSERT OR IGNORE INTO opt_outs (phone, reason, opted_out_at)
-        VALUES (?, 'bulk_import', datetime('now', 'localtime'))
+        INSERT INTO opt_outs (
+            phone, reason, reason_code, source, opted_out_at, created_at, updated_at, created_by, released_at, released_by
+        )
+        VALUES (?, 'bulk_import', 'global_import', 'import', datetime('now', 'localtime'), datetime('now', 'localtime'), datetime('now', 'localtime'), 'csv_import', NULL, NULL)
+        ON CONFLICT(phone) DO UPDATE SET
+            reason = 'bulk_import',
+            reason_code = 'global_import',
+            source = 'import',
+            opted_out_at = datetime('now', 'localtime'),
+            updated_at = datetime('now', 'localtime'),
+            created_by = 'csv_import',
+            released_at = NULL,
+            released_by = NULL
     `);
     const updateContactStmt = db.prepare(`
         UPDATE contacts SET status = 'opted_out', updated_at = datetime('now', 'localtime')
@@ -553,6 +792,7 @@ export function insertCampaignRecipient({
     campaignId,
     contactId,
     phone,
+    vehicleId = null,
     status = 'pending',
     messageSid = null, // RENAMED
     sentAt = null,
@@ -562,6 +802,7 @@ export function insertCampaignRecipient({
         campaignId,
         contactId,
         phone,
+        vehicleId,
         status,
         messageSid,
         sentAt,
@@ -575,7 +816,7 @@ export function getAdminStats() {
     return {
         contacts: getCount('contacts'),
         vehicles: getCount('vehicles'),
-        optOuts: getCount('opt_outs'),
+        optOuts: db.prepare(`SELECT COUNT(*) AS count FROM opt_outs WHERE released_at IS NULL`).get().count,
         campaigns: getCount('campaigns'),
         campaignRecipients: getCount('campaign_recipients'),
         messages: getCount('messages')
@@ -658,10 +899,16 @@ export function listCampaignRecipients({ campaignId, limit = 50, offset = 0 }) {
 
 export function listOptOuts({ limit = 50, offset = 0 }) {
     return db.prepare(`
-        SELECT o.id, o.phone, o.reason, o.opted_out_at AS created_at, c.name AS contact_name
+        SELECT o.id, o.phone,
+               COALESCE(o.reason_code, o.reason, 'global_user_request') AS reason,
+               o.reason_code, o.reason_detail, o.source,
+               COALESCE(o.created_at, o.opted_out_at) AS created_at,
+               o.updated_at, o.released_at,
+               c.name AS contact_name
         FROM opt_outs o
         LEFT JOIN contacts c ON o.phone = c.phone
-        ORDER BY o.opted_out_at DESC
+        WHERE o.released_at IS NULL
+        ORDER BY COALESCE(o.created_at, o.opted_out_at) DESC
         LIMIT ? OFFSET ?
     `).all(limit, offset);
 }
@@ -727,6 +974,10 @@ export function getContactWithVehicle(contactId) {
     return statements.getContactWithVehicle.get(contactId) || null;
 }
 
+export function getContactByVehicle(vehicleId) {
+    return statements.getContactByVehicle.get(vehicleId) || null;
+}
+
 export function listContactsByFilters({ make = null, model = null, yearMin = null, yearMax = null, limit = 1000 }) {
     const sql = `
         SELECT DISTINCT c.id, c.phone, c.name, c.status
@@ -737,7 +988,7 @@ export function listContactsByFilters({ make = null, model = null, yearMin = nul
             AND (? IS NULL OR v.model = ?)
             AND (? IS NULL OR v.year >= ?)
             AND (? IS NULL OR v.year <= ?)
-            AND c.phone NOT IN (SELECT phone FROM opt_outs)
+            AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
         LIMIT ?
     `;
     return db.prepare(sql).all(
@@ -771,7 +1022,7 @@ export function listCampaignRecipientsByContacts(campaignId, contactIds = []) {
     }
     const placeholders = ids.map(() => '?').join(', ');
     const sql = `
-        SELECT id, contact_id, phone, status
+        SELECT id, contact_id, phone, vehicle_id, status
         FROM campaign_recipients
         WHERE campaign_id = ?
           AND contact_id IN (${placeholders})
@@ -788,22 +1039,61 @@ export function listCampaignRecipientContactIds(campaignId) {
     `).all(campaignId).map((row) => row.contact_id);
 }
 
-export function assignRecipientsToCampaign(campaignId, contactIds) {
-    // Use transaction for batch insert
-    const insert = db.prepare(`
-        INSERT OR IGNORE INTO campaign_recipients (campaign_id, contact_id, phone, status)
-        SELECT ?, c.id, c.phone, 'pending'
-        FROM contacts c
-        WHERE c.id = ?
+export function listCampaignRecipientTargets(campaignId) {
+    return db.prepare(`
+        SELECT DISTINCT contact_id, phone, vehicle_id
+        FROM campaign_recipients
+        WHERE campaign_id = ?
+          AND contact_id IS NOT NULL
+    `).all(campaignId);
+}
+
+export function assignRecipientsToCampaign(campaignId, recipients) {
+    const rows = Array.isArray(recipients) ? recipients.filter(Boolean) : [];
+    if (!rows.length) {
+        return 0;
+    }
+
+    const insertVehicleRecipient = db.prepare(`
+        INSERT OR IGNORE INTO campaign_recipients (campaign_id, contact_id, phone, vehicle_id, status)
+        SELECT ?, c.id, c.phone, v.id, 'pending'
+        FROM vehicles v
+        JOIN contacts c ON c.id = v.contact_id
+        WHERE v.id = ?
+          AND c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+          AND NOT EXISTS (
+              SELECT 1 FROM vehicle_suppressions vs
+              WHERE vs.vehicle_id = v.id AND vs.released_at IS NULL
+          )
     `);
 
-    const transaction = db.transaction((ids) => {
-        for (const contactId of ids) {
-            insert.run(campaignId, contactId);
+    const insertContactRecipient = db.prepare(`
+        INSERT OR IGNORE INTO campaign_recipients (campaign_id, contact_id, phone, vehicle_id, status)
+        SELECT ?, c.id, c.phone, NULL, 'pending'
+        FROM contacts c
+        WHERE c.id = ?
+          AND c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+    `);
+
+    const transaction = db.transaction((items) => {
+        for (const item of items) {
+            if (typeof item === 'number') {
+                insertContactRecipient.run(campaignId, item);
+                continue;
+            }
+            const vehicleId = Number(item?.vehicle_id || 0);
+            const contactId = Number(item?.contact_id || item?.id || 0);
+            if (vehicleId > 0) {
+                insertVehicleRecipient.run(campaignId, vehicleId);
+            } else if (contactId > 0) {
+                insertContactRecipient.run(campaignId, contactId);
+            }
         }
     });
 
-    transaction(contactIds);
+    transaction(rows);
 
     // Update total_recipients count
     const count = db.prepare(`
@@ -841,15 +1131,94 @@ export function renderMessageTemplate(template, variables = {}) {
 }
 
 export function updateOptOut(phone, reason) {
-    return statements.updateOptOut.run(reason || 'user_request', normalizePhone(phone));
+    const normalizedPhone = normalizePhone(phone);
+    const { reasonCode } = normalizeGlobalOptOutReason(reason);
+    return statements.updateOptOut.run(toLegacyOptOutReason(reasonCode), reasonCode, normalizedPhone);
 }
 
 export function deleteOptOut(phone) {
     return statements.deleteOptOut.run(normalizePhone(phone));
 }
 
+export function releaseOptOut(phone, releasedBy = 'admin') {
+    return statements.releaseOptOut.run(releasedBy, normalizePhone(phone));
+}
+
 export function getOptOutByPhone(phone) {
     return statements.getOptOutByPhone.get(normalizePhone(phone));
+}
+
+export function createVehicleSuppression({
+    vehicleId,
+    phone = null,
+    reasonCode = 'vehicle_unavailable',
+    reasonDetail = null,
+    source = 'rule',
+    campaignId = null,
+    messageSid = null,
+    createdBy = null,
+    notes = null
+}) {
+    const vehicle = getVehicleById(vehicleId);
+    if (!vehicle) {
+        throw new Error('Vehicle not found');
+    }
+
+    const normalizedPhone = normalizePhone(phone || vehicle.contact_phone || '');
+    const active = statements.getActiveVehicleSuppressionByVehicleId.get(vehicleId);
+
+    if (active) {
+        statements.updateVehicleSuppression.run(
+            normalizedPhone || active.phone,
+            vehicle.origin || active.origin || null,
+            vehicle.external_id || active.external_id || null,
+            vehicle.link || active.link || null,
+            reasonCode,
+            reasonDetail || null,
+            source,
+            campaignId || null,
+            messageSid || null,
+            createdBy || null,
+            notes || null,
+            active.id
+        );
+    } else {
+        statements.insertVehicleSuppression.run(
+            vehicleId,
+            normalizedPhone || normalizePhone(vehicle.contact_phone || ''),
+            vehicle.origin || null,
+            vehicle.external_id || null,
+            vehicle.link || null,
+            reasonCode,
+            reasonDetail || null,
+            source,
+            campaignId || null,
+            messageSid || null,
+            createdBy || null,
+            notes || null
+        );
+    }
+
+    return statements.getActiveVehicleSuppressionByVehicleId.get(vehicleId) || null;
+}
+
+export function isVehicleSuppressed(vehicleId) {
+    if (!vehicleId) {
+        return false;
+    }
+    return Boolean(statements.getActiveVehicleSuppressionByVehicleId.get(vehicleId));
+}
+
+export function releaseVehicleSuppression(id, releasedBy = 'admin') {
+    return statements.releaseVehicleSuppression.run(releasedBy, id);
+}
+
+export function listVehicleSuppressions({ limit = 50, offset = 0 }) {
+    return statements.listVehicleSuppressions.all(limit, offset);
+}
+
+export function getLatestContactedVehicleByPhone(phone) {
+    return statements.getLatestContactedVehicleByPhone.get(normalizePhone(phone)) || null;
 }
 
 // ============================================================
@@ -1325,10 +1694,17 @@ export function listContactsByMake(make, { limit = 50, offset = 0 } = {}) {
 
 export function getVehiclesByContactId(contactId) {
     return db.prepare(`
-        SELECT id, make, model, year, price, link, origin, external_id, created_at, updated_at
-        FROM vehicles
+        SELECT v.id, v.make, v.model, v.year, v.price, v.link, v.origin, v.external_id,
+               v.created_at, v.updated_at,
+               CASE WHEN vs.id IS NOT NULL THEN 1 ELSE 0 END AS is_suppressed,
+               vs.id AS suppression_id,
+               vs.reason_code AS suppression_reason_code,
+               vs.suppressed_at,
+               vs.released_at
+        FROM vehicles v
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
         WHERE contact_id = ?
-        ORDER BY updated_at DESC
+        ORDER BY v.updated_at DESC
     `).all(contactId);
 }
 
@@ -1354,9 +1730,14 @@ export function listVehicles({ make = null, model = null, yearMin = null, yearMa
     return db.prepare(`
         SELECT v.id, v.make, v.model, v.year, v.price, v.link, v.origin, v.external_id,
                v.created_at, v.contact_id,
-               c.name AS contact_name, c.phone AS contact_phone, c.status AS contact_status
+               c.name AS contact_name, c.phone AS contact_phone, c.status AS contact_status,
+               CASE WHEN vs.id IS NOT NULL THEN 1 ELSE 0 END AS is_suppressed,
+               vs.id AS suppression_id,
+               vs.reason_code AS suppression_reason_code,
+               vs.suppressed_at
         FROM vehicles v
         JOIN contacts c ON c.id = v.contact_id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
         ${where}
         ORDER BY v.created_at DESC
         LIMIT ? OFFSET ?
@@ -1390,11 +1771,13 @@ export function getVehicleStats() {
     return db.prepare(`
         SELECT
             COUNT(*) AS total,
-            COUNT(DISTINCT make) AS makes,
-            COUNT(DISTINCT contact_id) AS contacts_with_vehicles,
-            ROUND(AVG(CASE WHEN price > 0 THEN price END)) AS avg_price,
-            COUNT(CASE WHEN link IS NOT NULL AND link != '' THEN 1 END) AS with_link
-        FROM vehicles
+            COUNT(DISTINCT v.make) AS makes,
+            COUNT(DISTINCT v.contact_id) AS contacts_with_vehicles,
+            ROUND(AVG(CASE WHEN v.price > 0 THEN v.price END)) AS avg_price,
+            COUNT(CASE WHEN v.link IS NOT NULL AND v.link != '' THEN 1 END) AS with_link,
+            COUNT(DISTINCT CASE WHEN vs.id IS NOT NULL THEN v.id END) AS suppressed
+        FROM vehicles v
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
     `).get();
 }
 
@@ -1402,9 +1785,15 @@ export function getVehicleById(id) {
     return db.prepare(`
         SELECT v.id, v.make, v.model, v.year, v.price, v.link, v.origin, v.external_id,
                v.created_at, v.updated_at, v.contact_id,
-               c.name AS contact_name, c.phone AS contact_phone
+               c.name AS contact_name, c.phone AS contact_phone,
+               CASE WHEN vs.id IS NOT NULL THEN 1 ELSE 0 END AS is_suppressed,
+               vs.id AS suppression_id,
+               vs.reason_code AS suppression_reason_code,
+               vs.suppressed_at,
+               vs.released_at
         FROM vehicles v
         JOIN contacts c ON c.id = v.contact_id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
         WHERE v.id = ?
     `).get(id);
 }
@@ -1453,8 +1842,8 @@ export function getDashboardMetrics() {
     const contacts7dPrev  = q(`SELECT COUNT(*) AS c FROM contacts WHERE created_at >= ? AND created_at < ?`, d14 + ' 00:00:00', d7 + ' 00:00:00').c;
     const campaignsTotal  = q(`SELECT COUNT(*) AS c FROM campaigns`).c;
     const campaignsActive = q(`SELECT COUNT(*) AS c FROM campaigns WHERE status IN ('sending','scheduled')`).c;
-    const optOutsTotal    = q(`SELECT COUNT(*) AS c FROM opt_outs`).c;
-    const optOutsToday    = q(`SELECT COUNT(*) AS c FROM opt_outs WHERE DATE(opted_out_at) = ?`, today).c;
+    const optOutsTotal    = q(`SELECT COUNT(*) AS c FROM opt_outs WHERE released_at IS NULL`).c;
+    const optOutsToday    = q(`SELECT COUNT(*) AS c FROM opt_outs WHERE released_at IS NULL AND DATE(opted_out_at) = ?`, today).c;
 
     const rr30 = q(`
         SELECT COUNT(DISTINCT cr.id) AS sent,
@@ -1543,12 +1932,14 @@ export function listSegmentsWithCount() {
                 SELECT COUNT(DISTINCT c.id) AS cnt
                 FROM contacts c
                 JOIN vehicles v ON v.contact_id = c.id
+                LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
                 WHERE c.status = 'active'
                   AND (? IS NULL OR v.make = ?)
                   AND (? IS NULL OR v.model = ?)
                   AND (? IS NULL OR v.year >= ?)
                   AND (? IS NULL OR v.year <= ?)
-                  AND c.phone NOT IN (SELECT phone FROM opt_outs)
+                  AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+                  AND vs.id IS NULL
             `).get(make, make, model, model, yearMin, yearMin, yearMax, yearMax)?.cnt ?? 0;
         } catch (_) {}
         return { ...seg, contact_count };

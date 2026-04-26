@@ -59,7 +59,13 @@ import {
     deleteVehicle as dbDeleteVehicle,
     updateOptOut,
     deleteOptOut,
+    releaseOptOut,
     getOptOutByPhone,
+    listVehicleSuppressions,
+    createVehicleSuppression,
+    releaseVehicleSuppression,
+    getLatestContactedVehicleByPhone,
+    listCampaignRecipientTargets,
     getCampaignFollowUpStats,
     listCampaignRecipientsWithReplies,
     getRecipientConversationHistory,
@@ -262,6 +268,31 @@ function normalizeIntentText(text = '') {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function detectVehicleUnavailableReason(text = '') {
+    const normalized = normalizeIntentText(text);
+    if (!normalized) {
+        return null;
+    }
+
+    const soldPatterns = [
+        /\b(ya\s+lo\s+vendi|ya\s+se\s+vendio|vendido|lo\s+vendi|se\s+vendio)\b/,
+        /\b(ese\s+auto\s+ya\s+se\s+fue|ese\s+auto\s+ya\s+salio)\b/
+    ];
+    if (soldPatterns.some((pattern) => pattern.test(normalized))) {
+        return 'vehicle_sold';
+    }
+
+    const unavailablePatterns = [
+        /\b(ya\s+no\s+esta\s+disponible|no\s+esta\s+disponible|ya\s+no\s+esta)\b/,
+        /\b(no\s+disponible|ya\s+salio|publicacion\s+caida)\b/
+    ];
+    if (unavailablePatterns.some((pattern) => pattern.test(normalized))) {
+        return 'vehicle_unavailable';
+    }
+
+    return null;
 }
 
 function toVehicleContextList(vehicles = []) {
@@ -662,6 +693,50 @@ const LAB_SCENARIOS = [
     },
 
     // ============================================================
+    // Suite: vehicle-suppression — puntual por vehículo/publicación
+    // ============================================================
+    {
+        id: 'vehicle_sold_basic',
+        name: 'Vehicle Suppression: Ya lo vendí',
+        suite: 'vehicle-suppression',
+        steps: [
+            { user: 'ya lo vendí', expect: { containsAny: ['dejaremos de contactarte', 'publicación / vehículo'], notContainsAny: ['dado de baja', 'ejecutivo', 'te contactamos'] } }
+        ]
+    },
+    {
+        id: 'vehicle_unavailable_basic',
+        name: 'Vehicle Suppression: No disponible',
+        suite: 'vehicle-suppression',
+        steps: [
+            { user: 'ya no está disponible', expect: { containsAny: ['dejaremos de contactarte', 'publicación / vehículo'], notContainsAny: ['dado de baja', 'ejecutivo', 'te contactamos'] } }
+        ]
+    },
+    {
+        id: 'vehicle_gone_phrase',
+        name: 'Vehicle Suppression: Ese auto ya salió',
+        suite: 'vehicle-suppression',
+        steps: [
+            { user: 'ese auto ya salió', expect: { containsAny: ['dejaremos de contactarte', 'publicación / vehículo'], notContainsAny: ['dado de baja', 'ejecutivo'] } }
+        ]
+    },
+    {
+        id: 'vehicle_vs_global_stop',
+        name: 'Vehicle Suppression: BAJA sigue global',
+        suite: 'vehicle-suppression',
+        steps: [
+            { user: 'BAJA', expect: { containsAny: ['dado de baja', 'confirmado'], notContainsAny: ['publicación / vehículo'] } }
+        ]
+    },
+    {
+        id: 'vehicle_vs_global_semantic',
+        name: 'Vehicle Suppression: No me contacten más sigue global',
+        suite: 'vehicle-suppression',
+        steps: [
+            { user: 'no me contacten más', expect: { containsAny: ['dado de baja', 'confirmado'], notContainsAny: ['publicación / vehículo'] } }
+        ]
+    },
+
+    // ============================================================
     // Suite: edge-cases — multi-step and complex flows
     // ============================================================
     {
@@ -922,21 +997,24 @@ app.post('/admin/contacts/:id', adminAuth, express.urlencoded({ extended: true }
         return res.status(400).send('Invalid contact ID');
     }
 
+    const originalContact = getContactById(id);
+    if (!originalContact) {
+        return res.status(404).send('Contact not found');
+    }
+
     const { phone, name, status } = req.body;
 
     // Validate phone format (E.164)
     if (!phone || !phone.match(/^\+[1-9]\d{1,14}$/)) {
-        const contact = getContactById(id);
         return res.status(400).type('text/html').send(
-            renderContactEditPage({ contact, error: 'Invalid phone format. Must be E.164 format (e.g., +56975400946)' })
+            renderContactEditPage({ contact: originalContact, vehicles: getVehiclesByContactId(id), engagement: getContactEngagementStats(id), error: 'Invalid phone format. Must be E.164 format (e.g., +56975400946)' })
         );
     }
 
     // Validate status
     if (!['active', 'opted_out', 'invalid'].includes(status)) {
-        const contact = getContactById(id);
         return res.status(400).type('text/html').send(
-            renderContactEditPage({ contact, error: 'Invalid status value' })
+            renderContactEditPage({ contact: originalContact, vehicles: getVehiclesByContactId(id), engagement: getContactEngagementStats(id), error: 'Invalid status value' })
         );
     }
 
@@ -946,13 +1024,29 @@ app.post('/admin/contacts/:id', adminAuth, express.urlencoded({ extended: true }
             return res.status(500).send('Failed to update contact');
         }
 
+        if (status === 'opted_out') {
+            insertOptOut(updated.phone, 'global_manual', {
+                source: 'admin',
+                createdBy: 'admin_contact_edit',
+                reasonDetail: 'Aplicado manualmente desde edición de contacto'
+            });
+            updateContactStatus(updated.phone, 'opted_out');
+        } else {
+            releaseOptOut(originalContact.phone, 'admin_contact_edit');
+            if (updated.phone !== originalContact.phone) {
+                releaseOptOut(updated.phone, 'admin_contact_edit');
+            }
+            if (status === 'active') {
+                updateContactStatus(updated.phone, 'active');
+            }
+        }
+
         // Redirect back to contacts list
         res.redirect('/admin/contacts');
     } catch (error) {
         console.error('Contact update error:', error);
-        const contact = getContactById(id);
         res.status(500).type('text/html').send(
-            renderContactEditPage({ contact, error: error.message })
+            renderContactEditPage({ contact: originalContact, vehicles: getVehiclesByContactId(id), engagement: getContactEngagementStats(id), error: error.message })
         );
     }
 });
@@ -1013,6 +1107,13 @@ app.post('/admin/contacts', adminAuth, express.urlencoded({ extended: true }), (
 
     try {
         const newContact = createContactWithVehicle(contactData, vehicleData);
+        if (contactData.status === 'opted_out') {
+            insertOptOut(newContact.phone, 'global_manual', {
+                source: 'admin',
+                createdBy: 'admin_contact_create',
+                reasonDetail: 'Contacto creado ya en BAJA global'
+            });
+        }
         console.log('Contact created:', newContact);
 
         // Redirect to contacts list
@@ -1205,6 +1306,53 @@ app.post('/admin/vehicles/:id/delete', express.urlencoded({ extended: true }), (
     }
 });
 
+app.post('/admin/vehicles/:id/suppress', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).send('Invalid vehicle ID');
+
+    const backUrl = String(req.body.back || `/admin/vehicles/${id}/edit`);
+    const reasonCode = String(req.body.reason_code || 'vehicle_manual').trim() || 'vehicle_manual';
+    const notes = String(req.body.notes || '').trim() || null;
+
+    try {
+        const vehicle = getVehicleById(id);
+        if (!vehicle) {
+            return res.status(404).send('Vehicle not found');
+        }
+        createVehicleSuppression({
+            vehicleId: id,
+            phone: vehicle.contact_phone,
+            reasonCode,
+            reasonDetail: notes || 'Aplicado manualmente desde admin',
+            source: 'manual',
+            createdBy: 'admin_vehicle'
+        });
+        res.redirect(backUrl);
+    } catch (error) {
+        console.error('Vehicle suppression create error:', error);
+        res.status(500).send('Failed to suppress vehicle: ' + error.message);
+    }
+});
+
+app.post('/admin/vehicles/:id/release-suppression', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).send('Invalid vehicle ID');
+
+    const backUrl = String(req.body.back || `/admin/vehicles/${id}/edit`);
+
+    try {
+        const vehicle = getVehicleById(id);
+        if (!vehicle?.suppression_id) {
+            return res.redirect(backUrl);
+        }
+        releaseVehicleSuppression(vehicle.suppression_id, 'admin_vehicle');
+        res.redirect(backUrl);
+    } catch (error) {
+        console.error('Vehicle suppression release error:', error);
+        res.status(500).send('Failed to release vehicle suppression: ' + error.message);
+    }
+});
+
 app.get('/admin/messages', (req, res) => {
     const { limit, offset } = getPaging(req);
     const direction = String(req.query.direction || '').trim();
@@ -1335,11 +1483,37 @@ app.get('/admin/campaigns/:id/conversation/:phone', (req, res) => {
 app.get('/admin/opt-outs', (req, res) => {
     const { limit, offset } = getPaging(req);
     const optOuts = listOptOuts({ limit, offset });
+    const vehicleSuppressions = listVehicleSuppressions({ limit, offset });
     res.status(200).type('text/html').send(renderOptOutsPage({
         optOuts,
+        vehicleSuppressions,
         offset,
         limit
     }));
+});
+
+app.post('/admin/opt-outs/manual', adminAuth, express.urlencoded({ extended: true }), (req, res) => {
+    const phone = normalizePhone(String(req.body.phone || '').trim());
+    const reasonCode = String(req.body.reason_code || 'global_manual').trim() || 'global_manual';
+    const reasonDetail = String(req.body.reason_detail || '').trim() || 'Aplicado manualmente desde admin';
+
+    if (!phone) {
+        return res.status(400).send('Teléfono inválido');
+    }
+
+    try {
+        upsertContact(phone, null);
+        insertOptOut(phone, reasonCode, {
+            source: 'admin',
+            createdBy: 'admin_optout_page',
+            reasonDetail
+        });
+        updateContactStatus(phone, 'opted_out');
+        res.redirect('/admin/opt-outs');
+    } catch (error) {
+        console.error('Manual opt-out create error:', error);
+        res.status(500).send('Failed to create opt-out: ' + error.message);
+    }
 });
 
 app.get('/admin/import', adminAuth, (req, res) => {
@@ -1475,11 +1649,26 @@ app.post('/admin/opt-outs/:phone', adminAuth, express.urlencoded({ extended: tru
 app.delete('/admin/api/opt-outs/:phone', adminAuth, (req, res) => {
     const phone = req.params.phone;
     try {
-        deleteOptOut(phone);
-        res.status(200).send('Opt-out deleted');
+        releaseOptOut(phone, 'admin_optout_release');
+        updateContactStatus(phone, 'active');
+        res.status(200).send('Opt-out released');
     } catch (error) {
         console.error('Opt-out delete error:', error);
         res.status(500).send('Failed to delete opt-out: ' + error.message);
+    }
+});
+
+app.post('/admin/api/vehicle-suppressions/:id/release', adminAuth, express.json(), (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: 'Invalid suppression id' });
+    }
+    try {
+        releaseVehicleSuppression(id, 'admin_optout_release');
+        res.status(200).json({ ok: true });
+    } catch (error) {
+        console.error('Vehicle suppression release API error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -2125,10 +2314,10 @@ app.post('/admin/api/campaigns/:id/duplicate', adminAuth, (req, res) => {
             isTest: Boolean(original.is_test)
         });
 
-        const originalContactIds = listCampaignRecipientContactIds(original.id);
+        const originalTargets = listCampaignRecipientTargets(original.id);
 
-        if (originalContactIds.length > 0) {
-            assignRecipientsToCampaign(copy.id, originalContactIds);
+        if (originalTargets.length > 0) {
+            assignRecipientsToCampaign(copy.id, originalTargets);
         }
 
         res.status(201).json(getCampaignById(copy.id));
@@ -2224,8 +2413,8 @@ app.post('/admin/api/campaigns/:id/assign-recipients', adminAuth, express.json()
 
         const candidates = source === 'contacts'
             ? listContactsForCampaign({ query: search, limit: 10000 })
-            : listContactsByFilters({ ...filters, limit: 10000 });
-        const count = assignRecipientsToCampaign(id, candidates.map(c => c.id));
+            : listVehicleContactsByFilters({ ...filters, limit: 10000 });
+        const count = assignRecipientsToCampaign(id, source === 'contacts' ? candidates.map(c => c.id) : candidates);
 
         res.json({ assigned: count, totalRecipients: count });
     } catch (error) {
@@ -2532,11 +2721,15 @@ async function processInboundMessage({ from, body, messageSid = null, persist = 
     const isPhraseOptOut = OPTOUT_PHRASES.some((pattern) => pattern.test(normalizedBody));
     const isMenuOptOut = normalizedBody === '3';
     const isBaja = isKeywordOptOut || isPhraseOptOut || isMenuOptOut;
+    const vehicleSuppressionReason = detectVehicleUnavailableReason(text);
+    const isVehicleUnavailable = Boolean(vehicleSuppressionReason);
 
     let reply = 'Gracias por escribir a Queirolo Autos. Responde:\n1) Me interesa consignar\n2) Quiero mas info\n3) BAJA';
 
     if (isBaja) {
         reply = '✅ Confirmado: Tu número ha sido dado de baja. No recibirás más mensajes de Queirolo Autos.';
+    } else if (isVehicleUnavailable) {
+        reply = '✅ Gracias por avisar. Dejaremos de contactarte por esta publicación / vehículo.';
     } else if (upper === '1' || upper.includes('CONSIGN')) {
         if (knownVehicles.length > 0) {
             reply = `Perfecto. Ya tengo registrado tu vehiculo (${knownVehicleSummary}). Si quieres, te contacta un ejecutivo en 15-30 min para orientarte mejor.`;
@@ -2551,7 +2744,7 @@ async function processInboundMessage({ from, body, messageSid = null, persist = 
     let aiNeedsHuman = false;
     let aiHandoffReason = '';
 
-    if (!isBaja) {
+    if (!isBaja && !isVehicleUnavailable) {
         const handoffState = phone ? getActiveHandoffState(phone) : null;
         const handoffOfferState = phone ? getActiveHandoffOfferState(phone) : null;
         const isPhaticAck = isPhaticAckMessage(text);
@@ -2671,6 +2864,21 @@ async function processInboundMessage({ from, body, messageSid = null, persist = 
                 if (isBaja) {
                     insertOptOut(phone, 'user_request');
                     updateContactStatus(phone, 'opted_out');
+                } else if (isVehicleUnavailable) {
+                    const latestVehicle = getLatestContactedVehicleByPhone(phone);
+                    if (latestVehicle?.vehicle_id) {
+                        createVehicleSuppression({
+                            vehicleId: latestVehicle.vehicle_id,
+                            phone,
+                            reasonCode: vehicleSuppressionReason,
+                            reasonDetail: text,
+                            source: 'rule',
+                            campaignId: latestVehicle.campaign_id || null,
+                            messageSid: latestVehicle.message_sid || null,
+                            createdBy: source === 'twilio' ? 'twilio_inbound_rule' : 'lab_inbound_rule',
+                            notes: 'Supresión automática por respuesta de no disponibilidad'
+                        });
+                    }
                 }
             }
         } catch (error) {
@@ -2682,12 +2890,14 @@ async function processInboundMessage({ from, body, messageSid = null, persist = 
         from: maskPhone(phone),
         bodyLength: text.length,
         isBaja,
+        isVehicleUnavailable,
         source
     });
 
     return {
         reply,
         isBaja,
+        isVehicleUnavailable,
         phone,
         usedAi,
         needsHuman: aiNeedsHuman,

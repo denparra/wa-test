@@ -46,10 +46,67 @@ CREATE TABLE IF NOT EXISTS opt_outs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     phone TEXT NOT NULL UNIQUE, -- E.164
     opted_out_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    reason TEXT -- "user_request" | "manual"
+    reason TEXT, -- legacy / backward compatibility
+    reason_code TEXT NOT NULL DEFAULT 'global_user_request',
+    reason_detail TEXT,
+    source TEXT NOT NULL DEFAULT 'keyword',
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    released_at TEXT,
+    created_by TEXT,
+    released_by TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_opt_outs_phone ON opt_outs(phone);
+CREATE INDEX IF NOT EXISTS idx_opt_outs_active ON opt_outs(released_at);
+
+DROP TRIGGER IF EXISTS trg_opt_outs_updated_at;
+CREATE TRIGGER IF NOT EXISTS trg_opt_outs_updated_at
+AFTER UPDATE ON opt_outs
+FOR EACH ROW
+BEGIN
+    UPDATE opt_outs SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+END;
+
+-- ============================================================
+-- VEHICLE_SUPPRESSIONS: exclusión puntual por vehículo/publicación
+-- ============================================================
+CREATE TABLE IF NOT EXISTS vehicle_suppressions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_id INTEGER NOT NULL,
+    phone TEXT NOT NULL,
+    origin TEXT,
+    external_id TEXT,
+    link TEXT,
+    reason_code TEXT NOT NULL DEFAULT 'vehicle_unavailable',
+    reason_detail TEXT,
+    source TEXT NOT NULL DEFAULT 'rule',
+    campaign_id INTEGER,
+    message_sid TEXT,
+    suppressed_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    released_at TEXT,
+    created_by TEXT,
+    released_by TEXT,
+    notes TEXT,
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehicle_suppressions_vehicle_id ON vehicle_suppressions(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_vehicle_suppressions_phone ON vehicle_suppressions(phone);
+CREATE INDEX IF NOT EXISTS idx_vehicle_suppressions_released_at ON vehicle_suppressions(released_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicle_suppressions_vehicle_active
+ON vehicle_suppressions(vehicle_id)
+WHERE released_at IS NULL;
+
+DROP TRIGGER IF EXISTS trg_vehicle_suppressions_updated_at;
+CREATE TRIGGER IF NOT EXISTS trg_vehicle_suppressions_updated_at
+AFTER UPDATE ON vehicle_suppressions
+FOR EACH ROW
+BEGIN
+    UPDATE vehicle_suppressions SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+END;
 
 -- ============================================================
 -- CAMPAIGNS: Definición de campaña
@@ -90,18 +147,21 @@ CREATE TABLE IF NOT EXISTS campaign_recipients (
     campaign_id INTEGER NOT NULL,
     contact_id INTEGER NOT NULL,
     phone TEXT NOT NULL, -- Redundante pero útil
+    vehicle_id INTEGER,
     status TEXT NOT NULL DEFAULT 'pending', -- pending|sent|delivered|failed|skipped
     message_sid TEXT, -- Twilio message SID
     sent_at TEXT,
     error_message TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
-    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaign_recipients_campaign_id ON campaign_recipients(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_campaign_recipients_status ON campaign_recipients(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_recipients_contact_id ON campaign_recipients(contact_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_recipients_vehicle_id ON campaign_recipients(vehicle_id);
 
 -- ============================================================
 -- MESSAGES: Log unificado inbound/outbound

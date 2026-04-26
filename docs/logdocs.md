@@ -20,6 +20,19 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
 
 ---
 
+### 2026-04-26 - Lab Chat suite for vehicle/publication suppression
+
+- Scope: QA conversacional no persistente para la nueva lógica de supresión puntual por vehículo/publicación.
+- Why: Validar rápido en Lab Chat que frases como `ya lo vendí` y `ya no está disponible` respondan con supresión puntual y NO disparen BAJA global, sin tocar persistencia ni WhatsApp real.
+- Files:
+  - `server.js`: nueva suite `vehicle-suppression` en `LAB_SCENARIOS` con cinco escenarios (vendido, no disponible, ese auto ya salió, BAJA global, no me contacten más global).
+  - `admin/pages.js`: nuevo botón `Run vehicle suppression` en Lab Chat + contador de suite en el panel lateral.
+- Runtime impact: Bajo. Solo amplía el catálogo de pruebas del Lab Chat y su UI; no cambia el flujo productivo ni la persistencia.
+- Validation: `node --check server.js` y `node --check admin/pages.js`.
+- Rollback: revertir los cambios en `server.js` y `admin/pages.js` para eliminar la suite y el botón.
+
+---
+
 ### 2026-04-25 - Implement 6 (real metrics dashboard), J (segments with live count), 4 (unified inbox)
 
 - Scope: Tres features completando la iteración planificada. Dos requieren migración de schema (segments + conversation_status). Sin dependencias externas nuevas.

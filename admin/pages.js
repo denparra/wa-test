@@ -352,6 +352,19 @@ export function renderContactEditPage({ contact = null, error = null, vehicles =
         <strong>Creado:</strong> ${escapeHtml(formatDate(contact.created_at))}<br/>
         <strong>Actualizado:</strong> ${escapeHtml(formatDate(contact.updated_at))}
       </div>
+
+      <div style="margin-bottom:16px; padding:12px; border:1px solid var(--ink-100); border-radius:var(--radius-md); background:var(--surface-1);">
+        <div style="font-weight:700; margin-bottom:6px;">Baja global manual</div>
+        <div class="muted" style="font-size:12px; margin-bottom:10px;">Esto bloquea el teléfono completo para campañas futuras. Úsalo solo para BAJA real, no para un auto puntual.</div>
+        ${contact.status === 'opted_out'
+          ? `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              ${renderBadge('BAJA global activa', 'bad')}
+              <span class="muted" style="font-size:12px;">Puedes revertirla cambiando el estado a <strong>active</strong> y guardando.</span>
+            </div>`
+          : `<input type="hidden" name="reason_code" value="global_manual" />
+             <input type="hidden" name="reason_detail" value="Aplicado manualmente desde perfil de contacto" />
+             <button type="submit" class="action-btn danger" formaction="/admin/opt-outs/manual" formmethod="POST">${renderIcon('user-x', 12)} Aplicar BAJA global</button>`}
+      </div>
       ` : ''}
 
       <div style="margin-top:20px; display:flex; gap:10px;">
@@ -379,11 +392,23 @@ export function renderContactEditPage({ contact = null, error = null, vehicles =
                 <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
                   ${v.origin ? renderBadge(v.origin, v.origin === 'manual' ? 'info' : 'muted') : ''}
                   ${v.external_id ? `<span class="muted" style="font-size:11px;font-family:var(--font-mono);">${escapeHtml(v.external_id)}</span>` : ''}
+                  ${v.is_suppressed ? renderBadge('Suprimido', 'warn') : ''}
                 </div>
               </div>
               <div class="row-actions" style="flex-shrink:0;">
                 ${v.link ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación">${renderIcon('arrow-up-right', 12)}</a>` : ''}
                 <a href="/admin/vehicles/${v.id}/edit?back=/admin/contacts/${contact.id}/edit" class="action-btn">${renderIcon('edit', 12)} Editar</a>
+                ${v.is_suppressed
+                  ? `<form method="POST" action="/admin/vehicles/${v.id}/release-suppression" style="display:inline;">
+                      <input type="hidden" name="back" value="/admin/contacts/${contact.id}/edit" />
+                      <button type="submit" class="action-btn">${renderIcon('refresh', 12)} Liberar</button>
+                    </form>`
+                  : `<form method="POST" action="/admin/vehicles/${v.id}/suppress" style="display:inline;" onsubmit="return confirm('¿Suprimir este vehículo/publicación para futuras campañas?');">
+                      <input type="hidden" name="back" value="/admin/contacts/${contact.id}/edit" />
+                      <input type="hidden" name="reason_code" value="vehicle_manual" />
+                      <input type="hidden" name="notes" value="Aplicado manualmente desde perfil de contacto" />
+                      <button type="submit" class="action-btn danger">${renderIcon('user-x', 12)} Suprimir</button>
+                    </form>`}
                 <form method="POST" action="/admin/vehicles/${v.id}/delete" style="display:inline;" onsubmit="return confirm('¿Eliminar este vehículo? No se puede deshacer.')">
                   <input type="hidden" name="back" value="/admin/contacts/${contact.id}/edit" />
                   <button type="submit" class="action-btn danger">${renderIcon('trash', 12)}</button>
@@ -580,10 +605,10 @@ export function renderOptOutEditPage({ optOut = null, error = null }) {
       <div style="margin-bottom:15px;">
         <label style="display:block; font-weight:600; margin-bottom:5px;">Razón</label>
         <select name="reason" style="width:100%;">
-            <option value="user_request" ${optOut?.reason === 'user_request' ? 'selected' : ''}>Solicitud de usuario (STOP/BAJA)</option>
-            <option value="manual" ${optOut?.reason === 'manual' ? 'selected' : ''}>Manual (Admin)</option>
-            <option value="complaint" ${optOut?.reason === 'complaint' ? 'selected' : ''}>Queja / Spam</option>
-            <option value="invalid" ${optOut?.reason === 'invalid' ? 'selected' : ''}>Número inválido / Reciclado</option>
+            <option value="global_user_request" ${optOut?.reason_code === 'global_user_request' || optOut?.reason === 'user_request' ? 'selected' : ''}>Solicitud de usuario (STOP/BAJA)</option>
+            <option value="global_manual" ${optOut?.reason_code === 'global_manual' || optOut?.reason === 'manual' ? 'selected' : ''}>Manual (Admin)</option>
+            <option value="global_ai_detected" ${optOut?.reason_code === 'global_ai_detected' || optOut?.reason === 'user_request_ai' ? 'selected' : ''}>Detectado por IA</option>
+            <option value="global_import" ${optOut?.reason_code === 'global_import' || optOut?.reason === 'bulk_import' ? 'selected' : ''}>Importación</option>
         </select>
       </div>
 
@@ -985,6 +1010,7 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
 
   const smokeScenarios = scenarioCatalog.filter((scenario) => scenario.suite === 'smoke');
   const regressionScenarios = scenarioCatalog.filter((scenario) => scenario.suite === 'regression');
+  const vehicleSuppressionScenarios = scenarioCatalog.filter((scenario) => scenario.suite === 'vehicle-suppression');
   const scenarioOptions = scenarioCatalog
     .map((scenario) => `<option value="${escapeHtml(scenario.id)}">${escapeHtml(scenario.name)} (${escapeHtml(scenario.suite)})</option>`)
     .join('');
@@ -1011,6 +1037,7 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
           <button type="button" id="run-dialect-btn" class="action-btn">Run dialect</button>
           <button type="button" id="run-intent-btn" class="action-btn">Run intent</button>
           <button type="button" id="run-optout-btn" class="action-btn">Run optout</button>
+          <button type="button" id="run-vehicle-suppression-btn" class="action-btn">Run vehicle suppression</button>
           <button type="button" id="run-edge-btn" class="action-btn">Run edge</button>
           <button type="button" id="save-session-btn" class="action-btn">Guardar session .md</button>
           <button type="button" id="new-session-btn" class="action-btn">Nueva sesion</button>
@@ -1035,6 +1062,7 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
           <ul style="margin:0; padding-left:18px; font-size:13px; color:var(--ink-500); line-height:1.5;">
             <li>Smoke (${smokeScenarios.length}): criticos de no-regresion</li>
             <li>Regression (${regressionScenarios.length}): cobertura ampliada</li>
+            <li>Vehicle suppression (${vehicleSuppressionScenarios.length}): distingue baja global vs vehículo puntual</li>
             <li>Cada corrida puede guardar reporte Markdown en <code>docs/qa</code></li>
           </ul>
         </aside>
@@ -1063,6 +1091,7 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
       const runDialectBtn = document.getElementById('run-dialect-btn');
       const runIntentBtn = document.getElementById('run-intent-btn');
       const runOptoutBtn = document.getElementById('run-optout-btn');
+      const runVehicleSuppressionBtn = document.getElementById('run-vehicle-suppression-btn');
       const runEdgeBtn = document.getElementById('run-edge-btn');
       const scenarioSelect = document.getElementById('lab-scenario');
       const newSessionBtn = document.getElementById('new-session-btn');
@@ -1263,6 +1292,7 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
       if (runDialectBtn) runDialectBtn.addEventListener('click', () => runSuite({ suite: 'dialect' }));
       if (runIntentBtn) runIntentBtn.addEventListener('click', () => runSuite({ suite: 'intent' }));
       if (runOptoutBtn) runOptoutBtn.addEventListener('click', () => runSuite({ suite: 'optout-full' }));
+      if (runVehicleSuppressionBtn) runVehicleSuppressionBtn.addEventListener('click', () => runSuite({ suite: 'vehicle-suppression' }));
       if (runEdgeBtn) runEdgeBtn.addEventListener('click', () => runSuite({ suite: 'edge-cases' }));
       if (newSessionBtn) newSessionBtn.addEventListener('click', resetSession);
       if (saveSessionBtn) saveSessionBtn.addEventListener('click', saveSession);
@@ -2340,24 +2370,48 @@ document.addEventListener('DOMContentLoaded', () => {
   return renderLayout({ title, content: form, active: 'campaigns' });
 }
 
-export function renderOptOutsPage({ optOuts, offset, limit }) {
+export function renderOptOutsPage({ optOuts, vehicleSuppressions = [], offset, limit }) {
   const helpText = renderHelpText(
-    `<strong>Gestión de Bajas (Opt-outs):</strong> Usuarios que solicitaron no recibir más mensajes.
-    Estos contactos están excluidos de futuras campañas automáticamente. Los motivos son:
-    <strong>user_request</strong> (usuario pidió BAJA) o <strong>manual</strong> (añadido manualmente).`
+    `<strong>Gestión de exclusiones:</strong> aquí conviven dos niveles.
+    <strong>BAJA global</strong> bloquea el teléfono completo. <strong>Supresión por vehículo</strong>
+    bloquea solo una publicación / vehículo exacto sin invalidar otros autos del mismo contacto.`
   );
+
+  const manualForm = `<section class="panel" style="margin-bottom:18px;">
+      <div class="panel-header"><h3>Crear BAJA global manual</h3></div>
+      <form method="POST" action="/admin/opt-outs/manual" style="display:grid;grid-template-columns:1.1fr 0.9fr 1.4fr auto;gap:10px;align-items:end;">
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:5px;">Teléfono</label>
+          <input type="text" name="phone" required pattern="^\+[1-9]\d{1,14}$" placeholder="+56975400946" style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:5px;">Motivo</label>
+          <select name="reason_code" style="width:100%;">
+            <option value="global_manual">Manual</option>
+            <option value="global_user_request">Solicitud usuario</option>
+            <option value="global_ai_detected">Detectado por IA</option>
+            <option value="global_import">Importación</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:5px;">Detalle</label>
+          <input type="text" name="reason_detail" placeholder="Observación opcional" style="width:100%;" />
+        </div>
+        <button type="submit">${renderIcon('user-x', 13)} Aplicar BAJA</button>
+      </form>
+    </section>`;
 
   const tableContent = optOuts.length > 0
     ? renderTable({
       columns: [
         { key: 'phone', label: 'Telefono' },
         { key: 'contact_name', label: 'Nombre' },
-        { key: 'reason', label: 'Motivo', render: (row) => renderBadge(row.reason || 'user_request', 'warn') },
+        { key: 'reason', label: 'Motivo', render: (row) => renderBadge(row.reason_code || row.reason || 'global_user_request', 'bad') },
         { key: 'created_at', label: 'Fecha', render: (row) => escapeHtml(formatDate(row.created_at)) },
         {
           key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
             <a href="/admin/opt-outs/${encodeURIComponent(row.phone)}/edit" class="action-btn" title="Editar razón" aria-label="Editar">${renderIcon('edit', 13)}</a>
-            <button onclick="deleteOptOut('${escapeHtml(row.phone)}')" class="action-btn danger" title="Eliminar (Reactivar)" aria-label="Eliminar">${renderIcon('trash', 13)}</button>
+            <button onclick="deleteOptOut('${escapeHtml(row.phone)}')" class="action-btn" title="Liberar BAJA" aria-label="Liberar">${renderIcon('refresh', 13)}</button>
         </div>` }
       ],
       rows: optOuts,
@@ -2370,6 +2424,33 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
       message: 'Aún no hay usuarios que hayan solicitado BAJA. Cuando un usuario responda "BAJA" o "3", aparecerá aquí.',
       ctaText: 'Ver contactos',
       ctaLink: '/admin/contacts'
+    });
+
+  const vehicleSuppressionTable = vehicleSuppressions.length > 0
+    ? renderTable({
+      columns: [
+        { key: 'vehicle', label: 'Vehículo', render: (row) => `<strong>${escapeHtml(row.make || '')} ${escapeHtml(row.model || '')}</strong> ${row.year ? escapeHtml(String(row.year)) : ''}` },
+        { key: 'contact_name', label: 'Contacto', render: (row) => `<a href="/admin/contacts/${row.contact_id}/edit" style="color:var(--accent);font-weight:600;text-decoration:none;">${escapeHtml(row.contact_name || row.contact_phone || '—')}</a>` },
+        { key: 'reason_code', label: 'Motivo', render: (row) => renderBadge(row.reason_code || 'vehicle_unavailable', 'warn') },
+        { key: 'suppressed_at', label: 'Fecha', render: (row) => escapeHtml(formatDate(row.suppressed_at)) },
+        {
+          key: 'actions', label: 'Acciones', render: (row) => `<div class="row-actions">
+            ${row.link ? `<a href="${escapeHtml(row.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación">${renderIcon('arrow-up-right', 12)}</a>` : ''}
+            <a href="/admin/vehicles/${row.vehicle_id}/edit" class="action-btn">${renderIcon('edit', 12)} Vehículo</a>
+            <button onclick="releaseVehicleSuppression(${row.id})" class="action-btn">${renderIcon('refresh', 12)} Liberar</button>
+          </div>`
+        }
+      ],
+      rows: vehicleSuppressions,
+      searchable: true,
+      sortable: true,
+      tableId: 'vehicle-suppressions-table'
+    })
+    : renderEmptyState({
+      title: 'Sin suppressions por vehículo',
+      message: 'Todavía no hay vehículos/publicaciones suprimidos.',
+      ctaText: 'Ver vehículos',
+      ctaLink: '/admin/vehicles'
     });
 
   const script = `
@@ -2392,12 +2473,29 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
           alert('Error al eliminar: ' + error.message);
         }
       }
+
+      async function releaseVehicleSuppression(id) {
+        if (!confirm('¿Liberar esta supresión de vehículo?')) {
+          return;
+        }
+        try {
+          const res = await fetch('/admin/api/vehicle-suppressions/' + id + '/release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            const error = await res.text();
+            alert('Error al liberar: ' + error);
+          }
+        } catch (error) {
+          alert('Error al liberar: ' + error.message);
+        }
+      }
     </script>
   `;
 
-  const content = `<section class="panel">
+  const content = `${manualForm}<section class="panel">
       <div class="panel-header">
-        <h1>Opt-outs</h1>
+        <h1>BAJAS globales</h1>
         <a href="/admin/export/opt-outs" class="action-btn">Exportar CSV</a>
       </div>
       ${helpText}
@@ -2409,6 +2507,14 @@ export function renderOptOutsPage({ optOuts, offset, limit }) {
     limit,
     hasNext: optOuts.length === limit
   }) : ''}
+    </section>
+
+    <section class="panel" style="margin-top:18px;">
+      <div class="panel-header">
+        <h1>Supresión por vehículo / publicación</h1>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:12px;">Estas exclusiones no bloquean el teléfono completo; solo evitan futuros contactos sobre el vehículo exacto.</div>
+      ${vehicleSuppressionTable}
     </section>${script}`;
 
   return renderLayout({ title: 'Opt-outs', content, active: 'opt-outs' });
@@ -3029,7 +3135,8 @@ export function renderVehiclesPage({ vehicles, vehicleStats, makes, filters = {}
     { label: 'Total', value: vehicleStats.total ?? 0, icon: 'car', accent: true },
     { label: 'Marcas', value: vehicleStats.makes ?? 0, icon: 'filter', accent: false },
     { label: 'Contactos con auto', value: vehicleStats.contacts_with_vehicles ?? 0, icon: 'users', accent: false },
-    { label: 'Con publicación', value: vehicleStats.with_link ?? 0, icon: 'arrow-up-right', accent: false }
+    { label: 'Con publicación', value: vehicleStats.with_link ?? 0, icon: 'arrow-up-right', accent: false },
+    { label: 'Suprimidos', value: vehicleStats.suppressed ?? 0, icon: 'user-x', accent: false }
   ].map(c => `
     <div class="card${c.accent ? ' card-accent' : ''}">
       <h2>${renderIcon(c.icon, 14)}<span>${escapeHtml(c.label)}</span></h2>
@@ -3062,17 +3169,29 @@ export function renderVehiclesPage({ vehicles, vehicleStats, makes, filters = {}
       ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación">${renderIcon('arrow-up-right', 12)}</a>`
       : '';
     const statusBadge = v.contact_status === 'opted_out' ? ` ${renderBadge('baja', 'bad')}` : '';
+    const suppressionBadge = v.is_suppressed ? ` ${renderBadge('suprimido', 'warn')}` : '';
     return `<tr>
       <td><strong>${escapeHtml(v.make)}</strong> ${originBadge}</td>
       <td>${escapeHtml(v.model)}</td>
       <td>${v.year}</td>
       <td class="mono" style="color:var(--ink-700);">${priceText}</td>
-      <td><a href="/admin/contacts/${v.contact_id}/edit" style="color:var(--brand-500);text-decoration:none;font-weight:600;">${escapeHtml(v.contact_name || '—')}</a>${statusBadge}</td>
+      <td><a href="/admin/contacts/${v.contact_id}/edit" style="color:var(--brand-500);text-decoration:none;font-weight:600;">${escapeHtml(v.contact_name || '—')}</a>${statusBadge}${suppressionBadge}</td>
       <td class="mono" style="font-size:12px;">${escapeHtml(v.contact_phone)}</td>
       <td>${linkBtn}</td>
       <td>
         <div class="row-actions">
           <a href="/admin/vehicles/${v.id}/edit" class="action-btn">${renderIcon('edit', 12)} Editar</a>
+          ${v.is_suppressed
+            ? `<form method="POST" action="/admin/vehicles/${v.id}/release-suppression" style="display:inline;">
+                <input type="hidden" name="back" value="/admin/vehicles" />
+                <button type="submit" class="action-btn">${renderIcon('refresh', 12)}</button>
+              </form>`
+            : `<form method="POST" action="/admin/vehicles/${v.id}/suppress" style="display:inline;" onsubmit="return confirm('¿Suprimir este vehículo/publicación para futuras campañas?');">
+                <input type="hidden" name="back" value="/admin/vehicles" />
+                <input type="hidden" name="reason_code" value="vehicle_manual" />
+                <input type="hidden" name="notes" value="Aplicado manualmente desde inventario de vehículos" />
+                <button type="submit" class="action-btn danger">${renderIcon('user-x', 12)}</button>
+              </form>`}
           <form method="POST" action="/admin/vehicles/${v.id}/delete" style="display:inline;" onsubmit="return confirm('¿Eliminar este vehículo? No se puede deshacer.')">
             <button type="submit" class="action-btn danger">${renderIcon('trash', 12)}</button>
           </form>
@@ -3102,6 +3221,7 @@ export function renderVehiclesPage({ vehicles, vehicleStats, makes, filters = {}
               <div style="font-size:11px;color:var(--ink-400);text-transform:uppercase;letter-spacing:1px;font-weight:600;">${escapeHtml(v.make)}</div>
               <div style="font-size:19px;font-weight:700;letter-spacing:-0.3px;line-height:1.2;">${escapeHtml(v.model)}</div>
               <div style="font-size:13px;color:var(--ink-500);">${v.year}</div>
+              ${v.is_suppressed ? `<div style="margin-top:6px;">${renderBadge('Suprimido', 'warn')}</div>` : ''}
             </div>
             ${v.link ? `<a href="${escapeHtml(v.link)}" target="_blank" rel="noopener" class="action-btn" title="Ver publicación" style="padding:6px;flex-shrink:0;">${renderIcon('arrow-up-right', 14)}</a>` : ''}
           </div>
@@ -3112,6 +3232,17 @@ export function renderVehiclesPage({ vehicles, vehicleStats, makes, filters = {}
           </div>
           <div style="display:flex;gap:6px;">
             <a href="/admin/vehicles/${v.id}/edit" class="action-btn" style="flex:1;justify-content:center;">${renderIcon('edit', 12)} Editar</a>
+            ${v.is_suppressed
+              ? `<form method="POST" action="/admin/vehicles/${v.id}/release-suppression" style="display:inline;">
+                  <input type="hidden" name="back" value="/admin/vehicles" />
+                  <button type="submit" class="action-btn">${renderIcon('refresh', 12)}</button>
+                </form>`
+              : `<form method="POST" action="/admin/vehicles/${v.id}/suppress" style="display:inline;" onsubmit="return confirm('¿Suprimir este vehículo/publicación para futuras campañas?');">
+                  <input type="hidden" name="back" value="/admin/vehicles" />
+                  <input type="hidden" name="reason_code" value="vehicle_manual" />
+                  <input type="hidden" name="notes" value="Aplicado manualmente desde inventario de vehículos" />
+                  <button type="submit" class="action-btn danger">${renderIcon('user-x', 12)}</button>
+                </form>`}
             <form method="POST" action="/admin/vehicles/${v.id}/delete" style="display:inline;" onsubmit="return confirm('¿Eliminar este vehículo? No se puede deshacer.')">
               <button type="submit" class="action-btn danger">${renderIcon('trash', 12)}</button>
             </form>
