@@ -44,6 +44,7 @@ import {
     getContactWithVehicle,
     assignRecipientsToCampaign,
     listCampaignRecipientsByContacts,
+    listCampaignRecipientContactIds,
     renderMessageTemplate,
     bulkImportContactsAndVehicles,
     listVehicleMakes,
@@ -2124,9 +2125,7 @@ app.post('/admin/api/campaigns/:id/duplicate', adminAuth, (req, res) => {
             isTest: Boolean(original.is_test)
         });
 
-        const originalContactIds = db.prepare(`
-            SELECT contact_id FROM campaign_recipients WHERE campaign_id = ? AND contact_id IS NOT NULL
-        `).all(original.id).map(r => r.contact_id);
+        const originalContactIds = listCampaignRecipientContactIds(original.id);
 
         if (originalContactIds.length > 0) {
             assignRecipientsToCampaign(copy.id, originalContactIds);

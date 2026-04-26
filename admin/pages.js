@@ -1060,6 +1060,10 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
       const runScenarioBtn = document.getElementById('run-scenario-btn');
       const runSmokeBtn = document.getElementById('run-smoke-btn');
       const runRegressionBtn = document.getElementById('run-regression-btn');
+      const runDialectBtn = document.getElementById('run-dialect-btn');
+      const runIntentBtn = document.getElementById('run-intent-btn');
+      const runOptoutBtn = document.getElementById('run-optout-btn');
+      const runEdgeBtn = document.getElementById('run-edge-btn');
       const scenarioSelect = document.getElementById('lab-scenario');
       const newSessionBtn = document.getElementById('new-session-btn');
       const saveSessionBtn = document.getElementById('save-session-btn');
@@ -1253,15 +1257,15 @@ export function renderChatLabPage({ defaultPhone = '+56911112222', scenarioCatal
         await sendMessage(value);
       });
 
-      runScenarioBtn.addEventListener('click', runScenario);
-      runSmokeBtn.addEventListener('click', () => runSuite({ suite: 'smoke' }));
-      runRegressionBtn.addEventListener('click', () => runSuite({ suite: 'regression' }));
-      runDialectBtn.addEventListener('click', () => runSuite({ suite: 'dialect' }));
-      runIntentBtn.addEventListener('click', () => runSuite({ suite: 'intent' }));
-      runOptoutBtn.addEventListener('click', () => runSuite({ suite: 'optout-full' }));
-      runEdgeBtn.addEventListener('click', () => runSuite({ suite: 'edge-cases' }));
-      newSessionBtn.addEventListener('click', resetSession);
-      saveSessionBtn.addEventListener('click', saveSession);
+      if (runScenarioBtn) runScenarioBtn.addEventListener('click', runScenario);
+      if (runSmokeBtn) runSmokeBtn.addEventListener('click', () => runSuite({ suite: 'smoke' }));
+      if (runRegressionBtn) runRegressionBtn.addEventListener('click', () => runSuite({ suite: 'regression' }));
+      if (runDialectBtn) runDialectBtn.addEventListener('click', () => runSuite({ suite: 'dialect' }));
+      if (runIntentBtn) runIntentBtn.addEventListener('click', () => runSuite({ suite: 'intent' }));
+      if (runOptoutBtn) runOptoutBtn.addEventListener('click', () => runSuite({ suite: 'optout-full' }));
+      if (runEdgeBtn) runEdgeBtn.addEventListener('click', () => runSuite({ suite: 'edge-cases' }));
+      if (newSessionBtn) newSessionBtn.addEventListener('click', resetSession);
+      if (saveSessionBtn) saveSessionBtn.addEventListener('click', saveSession);
       if (phoneInput) {
         phoneInput.addEventListener('change', () => {
           state.phone = String(phoneInput.value || '').trim() || state.phone;

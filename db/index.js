@@ -779,6 +779,15 @@ export function listCampaignRecipientsByContacts(campaignId, contactIds = []) {
     return db.prepare(sql).all(campaignId, ...ids);
 }
 
+export function listCampaignRecipientContactIds(campaignId) {
+    return db.prepare(`
+        SELECT DISTINCT contact_id
+        FROM campaign_recipients
+        WHERE campaign_id = ?
+          AND contact_id IS NOT NULL
+    `).all(campaignId).map((row) => row.contact_id);
+}
+
 export function assignRecipientsToCampaign(campaignId, contactIds) {
     // Use transaction for batch insert
     const insert = db.prepare(`
