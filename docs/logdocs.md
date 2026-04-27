@@ -20,6 +20,23 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
 
 ---
 
+### 2026-04-26 - Segmentos manuales + resolución real de audiencia en campañas
+
+- Scope: corregir el wizard de campañas para que deje de guardar solo una muestra de 5 destinatarios, resolver la audiencia completa en backend desde filtros/segmentos, habilitar segmentos manuales con carga de miembros desde contactos o vehículos, y mejorar la UX de segmentos con selects de marca/año y vista de detalle por segmento.
+- Why: el flujo de producción usaba el endpoint de preview como si fuera asignación real, por eso al cargar un segmento aparecían 5 destinatarios y la campaña podía guardarse incompleta. Además faltaba la posibilidad de crear segmentos vacíos y cargarles miembros manualmente, y la UI tenía demasiada fricción con textboxes libres para marca/año y sin forma de inspeccionar el contenido del segmento.
+- Files:
+  - `db/schema.sql`: nueva tabla `segment_members` para segmentos manuales.
+  - `db/index.js`: conteo real de audiencias (`countVehicleAudienceByFilters`, `countContactsForCampaign`), listas paginadas de audiencia, años disponibles (`listVehicleYears()`), helpers para limpiar/reasignar recipients de campaña, y funciones para agregar/listar miembros de segmentos manuales.
+  - `server.js`: helpers de resolución de audiencia, creación/edición de campañas asignando el total real desde filtros o segmentos, preview devolviendo `samples + total`, endpoints para previsualizar/cargar/eliminar miembros en segmentos manuales, exportación CSV del segmento, y nueva vista `GET /admin/segments/:id`.
+  - `admin/pages.js`: campaña de producción mostrando conteo real y usando backend para la carga total; página de segmentos con creación `dinámico/manual`, selects de marca y rango `desde/hasta`, panel para cargar miembros por vehículos/contactos, y pantalla detalle de segmento para inspeccionar miembros guardados o coincidencias vivas, buscar dentro de la tabla, quitar miembros manuales y exportar.
+  - `tests/segment-campaign-flow.test.js`: pruebas automáticas del flujo base segmentos/campañas, incluyendo borrado individual de miembros.
+  - `docs/logdocs.md`: traza operativa del cambio.
+- Runtime impact: Medio-bajo. No toca n8n ni la lógica inbound. Sí agrega tabla nueva y cambia el comportamiento del wizard de campañas para que el backend resuelva la audiencia completa y los segmentos manuales queden disponibles operativamente.
+- Validation: `node --check server.js`, `node --check admin/pages.js`, `node --check db/index.js`, `node --check tests/segment-campaign-flow.test.js`, `node --test tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `db/schema.sql`, `db/index.js`, `server.js`, `admin/pages.js`, `tests/segment-campaign-flow.test.js` y esta entrada. La migración es aditiva (`CREATE TABLE IF NOT EXISTS segment_members`).
+
+---
+
 ### 2026-04-26 - Lab Chat suite for vehicle/publication suppression
 
 - Scope: QA conversacional no persistente para la nueva lógica de supresión puntual por vehículo/publicación.

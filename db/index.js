@@ -432,6 +432,13 @@ const statements = {
         ORDER BY c.updated_at DESC
         LIMIT ?
     `),
+    countContactsForCampaign: db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM contacts c
+        WHERE c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+          AND (? IS NULL OR c.phone LIKE ? OR c.name LIKE ?)
+    `),
     listVehicleContactsByFilters: db.prepare(`
         SELECT v.id AS vehicle_id,
                c.id, c.phone, c.name, v.make, v.model, v.year, v.link, v.origin, v.external_id
@@ -1015,6 +1022,78 @@ export function listContactsForCampaign({ query = '', limit = 1000 }) {
     return statements.listContactsForCampaign.all(like, like, like, limit);
 }
 
+export function countVehicleAudienceByFilters({ make = null, model = null, yearMin = null, yearMax = null } = {}) {
+    return db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM contacts c
+        INNER JOIN vehicles v ON v.contact_id = c.id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
+        WHERE c.status = 'active'
+          AND (? IS NULL OR v.make = ?)
+          AND (? IS NULL OR v.model = ?)
+          AND (? IS NULL OR v.year >= ?)
+          AND (? IS NULL OR v.year <= ?)
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+          AND vs.id IS NULL
+    `).get(
+        make, make,
+        model, model,
+        yearMin, yearMin,
+        yearMax, yearMax
+    )?.total ?? 0;
+}
+
+export function listVehicleAudiencePage({ make = null, model = null, yearMin = null, yearMax = null, limit = 50, offset = 0 } = {}) {
+    return db.prepare(`
+        SELECT v.id AS vehicle_id,
+               c.id AS contact_id,
+               c.phone,
+               c.name,
+               v.make,
+               v.model,
+               v.year,
+               v.link,
+               v.origin,
+               v.external_id
+        FROM contacts c
+        INNER JOIN vehicles v ON v.contact_id = c.id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
+        WHERE c.status = 'active'
+          AND (? IS NULL OR v.make = ?)
+          AND (? IS NULL OR v.model LIKE ?)
+          AND (? IS NULL OR v.year >= ?)
+          AND (? IS NULL OR v.year <= ?)
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+          AND vs.id IS NULL
+        ORDER BY v.year DESC, v.updated_at DESC, c.updated_at DESC
+        LIMIT ? OFFSET ?
+    `).all(
+        make, make,
+        model, model ? `%${model}%` : null,
+        yearMin, yearMin,
+        yearMax, yearMax,
+        limit, offset
+    );
+}
+
+export function countContactsForCampaign({ query = '' } = {}) {
+    const like = query ? `%${query}%` : null;
+    return statements.countContactsForCampaign.get(like, like, like)?.total ?? 0;
+}
+
+export function listContactAudiencePage({ query = '', limit = 50, offset = 0 } = {}) {
+    const like = query ? `%${query}%` : null;
+    return db.prepare(`
+        SELECT c.id, c.phone, c.name, c.status, c.created_at, c.updated_at
+        FROM contacts c
+        WHERE c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+          AND (? IS NULL OR c.phone LIKE ? OR c.name LIKE ?)
+        ORDER BY c.updated_at DESC
+        LIMIT ? OFFSET ?
+    `).all(like, like, like, limit, offset);
+}
+
 export function listCampaignRecipientsByContacts(campaignId, contactIds = []) {
     const ids = Array.isArray(contactIds) ? contactIds.filter(Boolean) : [];
     if (!ids.length) {
@@ -1103,6 +1182,11 @@ export function assignRecipientsToCampaign(campaignId, recipients) {
     db.prepare(`UPDATE campaigns SET total_recipients = ? WHERE id = ?`).run(count, campaignId);
 
     return count;
+}
+
+export function clearCampaignRecipients(campaignId) {
+    db.prepare(`DELETE FROM campaign_recipients WHERE campaign_id = ?`).run(campaignId);
+    db.prepare(`UPDATE campaigns SET total_recipients = 0, sent_count = 0 WHERE id = ?`).run(campaignId);
 }
 
 export function renderMessageTemplate(template, variables = {}) {
@@ -1642,6 +1726,59 @@ const segmentStatements = {
     `)
 };
 
+const segmentMemberStatements = {
+    insertVehicle: db.prepare(`
+        INSERT OR IGNORE INTO segment_members (segment_id, contact_id, vehicle_id, created_at)
+        SELECT ?, c.id, v.id, datetime('now', 'localtime')
+        FROM vehicles v
+        JOIN contacts c ON c.id = v.contact_id
+        LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
+        WHERE v.id = ?
+          AND c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+          AND vs.id IS NULL
+    `),
+    insertContact: db.prepare(`
+        INSERT OR IGNORE INTO segment_members (segment_id, contact_id, vehicle_id, created_at)
+        SELECT ?, c.id, NULL, datetime('now', 'localtime')
+        FROM contacts c
+        WHERE c.id = ?
+          AND c.status = 'active'
+          AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
+    `),
+    count: db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM segment_members
+        WHERE segment_id = ?
+    `),
+    list: db.prepare(`
+        SELECT sm.id, sm.segment_id, sm.contact_id, sm.vehicle_id, sm.created_at,
+               c.phone, c.name, c.status,
+               v.make, v.model, v.year, v.link
+        FROM segment_members sm
+        LEFT JOIN contacts c ON c.id = sm.contact_id
+        LEFT JOIN vehicles v ON v.id = sm.vehicle_id
+        WHERE sm.segment_id = ?
+        ORDER BY sm.created_at DESC, sm.id DESC
+        LIMIT ? OFFSET ?
+    `),
+    listTargets: db.prepare(`
+        SELECT DISTINCT sm.contact_id, sm.vehicle_id, c.phone, c.name,
+               v.make, v.model, v.year, v.link, v.origin, v.external_id
+        FROM segment_members sm
+        JOIN contacts c ON c.id = sm.contact_id
+        LEFT JOIN vehicles v ON v.id = sm.vehicle_id
+        WHERE sm.segment_id = ?
+        ORDER BY sm.id ASC
+        LIMIT ?
+    `),
+    remove: db.prepare(`
+        DELETE FROM segment_members
+        WHERE segment_id = ?
+          AND id = ?
+    `)
+};
+
 export function createSegment(name, filters) {
     const filtersJson = JSON.stringify(filters || {});
     const result = segmentStatements.insert.run(name, filtersJson);
@@ -1661,6 +1798,51 @@ export function deleteSegment(id) {
     return info.changes > 0;
 }
 
+export function countSegmentMembers(segmentId) {
+    return segmentMemberStatements.count.get(segmentId)?.total ?? 0;
+}
+
+export function listSegmentMembers(segmentId, { limit = 50, offset = 0 } = {}) {
+    return segmentMemberStatements.list.all(segmentId, limit, offset);
+}
+
+export function listSegmentRecipientTargets(segmentId, { limit = 10000 } = {}) {
+    return segmentMemberStatements.listTargets.all(segmentId, limit);
+}
+
+export function addMembersToSegment(segmentId, recipients) {
+    const rows = Array.isArray(recipients) ? recipients.filter(Boolean) : [];
+    if (!rows.length) {
+        return countSegmentMembers(segmentId);
+    }
+
+    const transaction = db.transaction((items) => {
+        for (const item of items) {
+            if (typeof item === 'number') {
+                segmentMemberStatements.insertContact.run(segmentId, item);
+                continue;
+            }
+
+            const vehicleId = Number(item?.vehicle_id || 0);
+            const contactId = Number(item?.contact_id || item?.id || 0);
+
+            if (vehicleId > 0) {
+                segmentMemberStatements.insertVehicle.run(segmentId, vehicleId);
+            } else if (contactId > 0) {
+                segmentMemberStatements.insertContact.run(segmentId, contactId);
+            }
+        }
+    });
+
+    transaction(rows);
+    return countSegmentMembers(segmentId);
+}
+
+export function removeSegmentMember(segmentId, memberId) {
+    const info = segmentMemberStatements.remove.run(segmentId, memberId);
+    return info.changes > 0;
+}
+
 // ============================================================
 // Fase 3: Vehicle Make Filtering Functions
 // ============================================================
@@ -1674,6 +1856,15 @@ export function listVehicleMakes() {
         GROUP BY make
         ORDER BY make
     `).all();
+}
+
+export function listVehicleYears() {
+    return db.prepare(`
+        SELECT DISTINCT year
+        FROM vehicles
+        WHERE year IS NOT NULL
+        ORDER BY year DESC
+    `).all().map((row) => row.year);
 }
 
 export function listContactsByMake(make, { limit = 50, offset = 0 } = {}) {
@@ -1921,28 +2112,36 @@ export function listSegmentsWithCount() {
     `).all();
 
     return segs.map(seg => {
-        let contact_count = 0;
+        let target_count = 0;
+        let segment_mode = 'dynamic';
+        let segment_source = 'vehicles';
+
         try {
             const f = JSON.parse(seg.filters || '{}');
-            const make    = f.make    || null;
-            const model   = f.model   || null;
-            const yearMin = f.yearMin || null;
-            const yearMax = f.yearMax || null;
-            contact_count = db.prepare(`
-                SELECT COUNT(DISTINCT c.id) AS cnt
-                FROM contacts c
-                JOIN vehicles v ON v.contact_id = c.id
-                LEFT JOIN vehicle_suppressions vs ON vs.vehicle_id = v.id AND vs.released_at IS NULL
-                WHERE c.status = 'active'
-                  AND (? IS NULL OR v.make = ?)
-                  AND (? IS NULL OR v.model = ?)
-                  AND (? IS NULL OR v.year >= ?)
-                  AND (? IS NULL OR v.year <= ?)
-                  AND c.phone NOT IN (SELECT phone FROM opt_outs WHERE released_at IS NULL)
-                  AND vs.id IS NULL
-            `).get(make, make, model, model, yearMin, yearMin, yearMax, yearMax)?.cnt ?? 0;
+            segment_mode = f.mode === 'manual' ? 'manual' : 'dynamic';
+            segment_source = f.source === 'contacts' ? 'contacts' : 'vehicles';
+
+            if (segment_mode === 'manual') {
+                target_count = countSegmentMembers(seg.id);
+            } else if (segment_source === 'contacts') {
+                target_count = countContactsForCampaign({ query: String(f.query || '').trim() });
+            } else {
+                target_count = countVehicleAudienceByFilters({
+                    make: f.make || null,
+                    model: f.model || null,
+                    yearMin: f.yearMin || null,
+                    yearMax: f.yearMax || null
+                });
+            }
         } catch (_) {}
-        return { ...seg, contact_count };
+
+        return {
+            ...seg,
+            contact_count: target_count,
+            target_count,
+            segment_mode,
+            segment_source
+        };
     });
 }
 

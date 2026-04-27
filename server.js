@@ -36,18 +36,24 @@ import {
     getCampaignProgress,
     listContactsByFilters,
     listVehicleContactsByFilters,
+    countVehicleAudienceByFilters,
+    listVehicleAudiencePage,
     listContactsForCampaign,
+    countContactsForCampaign,
+    listContactAudiencePage,
     listScheduledCampaignsDue,
     listCampaignsByStatus,
     listPendingRecipients,
     updateCampaignRecipientStatus,
     getContactWithVehicle,
     assignRecipientsToCampaign,
+    clearCampaignRecipients,
     listCampaignRecipientsByContacts,
     listCampaignRecipientContactIds,
     renderMessageTemplate,
     bulkImportContactsAndVehicles,
     listVehicleMakes,
+    listVehicleYears,
     listContactsByMake,
     getVehiclesByContactId,
     listVehicles,
@@ -76,7 +82,13 @@ import {
     deleteTemplate as dbDeleteTemplate,
     createSegment,
     listSegments,
+    getSegmentById,
     deleteSegment as dbDeleteSegment,
+    addMembersToSegment,
+    countSegmentMembers,
+    listSegmentMembers,
+    listSegmentRecipientTargets,
+    removeSegmentMember,
     updateMessageStatus,
     bulkInsertOptOuts,
     getContactEngagementStats,
@@ -109,6 +121,7 @@ import {
     renderVehicleFormPage,
     renderChatLabPage,
     renderSegmentsPage,
+    renderSegmentDetailPage,
     renderInboxPage
 } from './admin/pages.js';
 import { sendOneRecipient } from './lib/twilio-sender.js';
@@ -892,6 +905,240 @@ function normalizeTemplateId(value) {
     }
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeRecipientAssignments(rawRecipients = []) {
+    if (!Array.isArray(rawRecipients)) {
+        return [];
+    }
+
+    return rawRecipients
+        .map((item) => {
+            if (typeof item === 'number') {
+                return item > 0 ? item : null;
+            }
+
+            if (typeof item === 'string') {
+                const parsed = Number(item);
+                return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+            }
+
+            if (!item || typeof item !== 'object') {
+                return null;
+            }
+
+            const vehicleId = Number(item.vehicle_id || 0);
+            const contactId = Number(item.contact_id || item.id || 0);
+
+            if (vehicleId > 0) {
+                return {
+                    vehicle_id: vehicleId,
+                    contact_id: contactId > 0 ? contactId : null
+                };
+            }
+
+            if (contactId > 0) {
+                return { contact_id: contactId };
+            }
+
+            return null;
+        })
+        .filter(Boolean);
+}
+
+function parseStoredFilters(rawFilters = {}) {
+    if (!rawFilters) {
+        return {};
+    }
+
+    if (typeof rawFilters === 'string') {
+        try {
+            return JSON.parse(rawFilters || '{}');
+        } catch (_) {
+            return {};
+        }
+    }
+
+    return typeof rawFilters === 'object' ? { ...rawFilters } : {};
+}
+
+function normalizeAudienceFilters(rawFilters = {}) {
+    const filters = parseStoredFilters(rawFilters);
+    const normalizeText = (value) => {
+        const text = String(value ?? '').trim();
+        return text ? text : null;
+    };
+    const normalizeYear = (value) => {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const source = filters.source === 'contacts' ? 'contacts' : 'vehicles';
+    const mode = filters.mode === 'manual' ? 'manual' : 'dynamic';
+    const segmentIdRaw = Number(filters.segmentId || 0);
+
+    return {
+        ...filters,
+        source,
+        mode,
+        segmentId: Number.isInteger(segmentIdRaw) && segmentIdRaw > 0 ? segmentIdRaw : null,
+        make: normalizeText(filters.make),
+        model: normalizeText(filters.model),
+        query: source === 'contacts' ? String(filters.query || '').trim() : '',
+        yearMin: normalizeYear(filters.yearMin),
+        yearMax: normalizeYear(filters.yearMax)
+    };
+}
+
+function getSegmentDescriptor(segmentId) {
+    if (!Number.isInteger(Number(segmentId)) || Number(segmentId) <= 0) {
+        return null;
+    }
+
+    const segment = getSegmentById(Number(segmentId));
+    if (!segment) {
+        throw new Error('Segment not found');
+    }
+
+    return {
+        segment,
+        filters: normalizeAudienceFilters(segment.filters)
+    };
+}
+
+function resolveAudiencePreviewItems(candidates = [], source = 'vehicles', limit = 10) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 20));
+    return candidates.slice(0, safeLimit).map((candidate) => {
+        if (source === 'contacts') {
+            return {
+                id: candidate.contact_id || candidate.id,
+                contact_id: candidate.contact_id || candidate.id,
+                phone: candidate.phone,
+                name: candidate.name || null
+            };
+        }
+
+        return {
+            id: candidate.contact_id || candidate.id,
+            contact_id: candidate.contact_id || candidate.id,
+            vehicle_id: candidate.vehicle_id || null,
+            phone: candidate.phone,
+            name: candidate.name || null,
+            make: candidate.make || null,
+            model: candidate.model || null,
+            year: candidate.year || null,
+            link: candidate.link || null
+        };
+    });
+}
+
+function escapeCsvValue(value) {
+    const text = String(value ?? '');
+    if (/[",\n\r]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+}
+
+function toCsv(headers = [], rows = []) {
+    const headerLine = headers.map(escapeCsvValue).join(',');
+    const bodyLines = rows.map((row) => row.map(escapeCsvValue).join(','));
+    return [headerLine, ...bodyLines].join('\n');
+}
+
+function toSegmentFileSafeName(name = '') {
+    return String(name || 'segmento')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .toLowerCase() || 'segmento';
+}
+
+function resolveAudienceCandidates({ source = 'vehicles', filters = {}, limit = 10000 } = {}) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10000, 10000));
+    const requested = normalizeAudienceFilters({ source, ...filters });
+    const segmentDescriptor = requested.segmentId ? getSegmentDescriptor(requested.segmentId) : null;
+    const segmentFilters = segmentDescriptor?.filters || {};
+    const mode = requested.segmentId && segmentFilters.mode === 'manual'
+        ? 'manual'
+        : requested.mode;
+    const resolvedSource = mode === 'manual'
+        ? (segmentFilters.source === 'contacts' ? 'contacts' : 'vehicles')
+        : (requested.source === 'contacts' ? 'contacts' : 'vehicles');
+
+    if (mode === 'manual') {
+        const total = requested.segmentId ? countSegmentMembers(requested.segmentId) : 0;
+        const candidates = requested.segmentId
+            ? listSegmentRecipientTargets(requested.segmentId, { limit: safeLimit })
+            : [];
+
+        return {
+            mode,
+            source: resolvedSource,
+            total,
+            candidates,
+            segmentId: requested.segmentId,
+            segment: segmentDescriptor?.segment || null,
+            filters: {
+                source: resolvedSource,
+                mode,
+                segmentId: requested.segmentId
+            }
+        };
+    }
+
+    if (resolvedSource === 'contacts') {
+        const query = requested.query || (requested.segmentId ? String(segmentFilters.query || '').trim() : '');
+        const candidates = listContactsForCampaign({ query, limit: safeLimit }).map((contact) => ({
+            ...contact,
+            contact_id: contact.id
+        }));
+        const total = countContactsForCampaign({ query });
+
+        return {
+            mode,
+            source: resolvedSource,
+            total,
+            candidates,
+            segmentId: requested.segmentId,
+            segment: segmentDescriptor?.segment || null,
+            filters: {
+                source: resolvedSource,
+                mode,
+                segmentId: requested.segmentId,
+                query
+            }
+        };
+    }
+
+    const effectiveFilters = {
+        make: requested.make,
+        model: requested.model,
+        yearMin: requested.yearMin,
+        yearMax: requested.yearMax
+    };
+    const candidates = listVehicleContactsByFilters({ ...effectiveFilters, limit: safeLimit });
+    const total = countVehicleAudienceByFilters(effectiveFilters);
+
+    return {
+        mode,
+        source: resolvedSource,
+        total,
+        candidates,
+        segmentId: requested.segmentId,
+        segment: segmentDescriptor?.segment || null,
+        filters: {
+            source: resolvedSource,
+            mode,
+            segmentId: requested.segmentId,
+            ...effectiveFilters
+        }
+    };
 }
 
 async function processCampaignQueue() {
@@ -1796,55 +2043,6 @@ app.get('/admin/api/templates', adminAuth, (req, res) => {
 });
 
 // ============================================================
-// Phase 2.3: Segments Routes
-// ============================================================
-
-// GET /admin/api/segments - JSON list for dropdown
-app.get('/admin/api/segments', adminAuth, (req, res) => {
-    try {
-        const segments = listSegments();
-        res.json({ segments });
-    } catch (error) {
-        console.error('API segments error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// POST /admin/api/segments - Create segment
-app.post('/admin/api/segments', adminAuth, express.json(), (req, res) => {
-    const { name, filters } = req.body;
-    if (!name?.trim()) {
-        return res.status(400).json({ error: 'Name is required' });
-    }
-    try {
-        const segment = createSegment(name.trim(), filters);
-        res.json({ segment });
-    } catch (error) {
-        console.error('Segment create error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// DELETE /admin/api/segments/:id - Delete segment
-app.delete('/admin/api/segments/:id', adminAuth, (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).json({ error: 'Invalid segment ID' });
-    }
-    try {
-        const deleted = dbDeleteSegment(id);
-        if (!deleted) {
-            return res.status(404).json({ error: 'Segment not found' });
-        }
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Segment delete error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-
-// ============================================================
 // CSV Import Routes
 // ============================================================
 
@@ -2093,10 +2291,13 @@ app.post('/admin/import/optouts', adminAuth, upload.single('csvFile'), (req, res
 
 app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
     try {
-        const { name, messageTemplate, type, scheduledAt, contentSid, templateId, filters, recipientIds, isTest } = req.body;
+        const { name, messageTemplate, type, scheduledAt, contentSid, templateId, filters, recipientIds, recipients, isTest } = req.body;
         const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
         const status = normalizedScheduledAt ? 'scheduled' : 'draft';
         const normalizedTemplateId = normalizeTemplateId(templateId);
+        let resolvedFilters = filters ? normalizeAudienceFilters(filters) : null;
+        let resolvedRecipients = normalizeRecipientAssignments(recipients || recipientIds || []);
+        let resolvedAudience = null;
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required' });
@@ -2123,6 +2324,16 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
             return res.status(400).json({ error: 'Twilio template requires content SID or selected template' });
         }
 
+        if (!Boolean(isTest) && !resolvedRecipients.length && resolvedFilters?.source) {
+            resolvedAudience = resolveAudienceCandidates({
+                source: resolvedFilters.source,
+                filters: resolvedFilters,
+                limit: 10000
+            });
+            resolvedRecipients = normalizeRecipientAssignments(resolvedAudience.candidates);
+            resolvedFilters = resolvedAudience.filters;
+        }
+
         const campaign = createCampaign({
             name,
             messageTemplate: resolvedMessageTemplate,
@@ -2130,17 +2341,20 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
             scheduledAt: normalizedScheduledAt,
             templateId: normalizedTemplateId,
             contentSid: resolvedContentSid,
-            filters,
+            filters: resolvedFilters,
             status,
             isTest: Boolean(isTest)
         });
 
         // Assign recipients if provided
-        if (recipientIds && Array.isArray(recipientIds) && recipientIds.length > 0) {
-            assignRecipientsToCampaign(campaign.id, recipientIds);
+        if (resolvedRecipients.length > 0) {
+            assignRecipientsToCampaign(campaign.id, resolvedRecipients);
+            if (resolvedAudience?.segmentId) {
+                updateSegmentLastUsed(resolvedAudience.segmentId, campaign.id);
+            }
         }
 
-        res.status(201).json(campaign);
+        res.status(201).json(getCampaignById(campaign.id) || campaign);
     } catch (error) {
         console.error('Create campaign error:', error);
         res.status(500).json({ error: 'Failed to create campaign' });
@@ -2188,6 +2402,26 @@ app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
             return res.status(400).json({ error: 'Twilio template requires content SID or selected template' });
         }
 
+        const hasRecipientsPayload = Array.isArray(updates.recipientIds)
+            || Array.isArray(updates.recipients)
+            || Object.prototype.hasOwnProperty.call(updates, 'filters');
+
+        let resolvedFilters = Object.prototype.hasOwnProperty.call(updates, 'filters')
+            ? (updates.filters ? normalizeAudienceFilters(updates.filters) : null)
+            : (current.filters ? normalizeAudienceFilters(current.filters) : null);
+        let resolvedAudience = null;
+        let resolvedRecipients = normalizeRecipientAssignments(updates.recipients || updates.recipientIds || []);
+
+        if (!Boolean(current.is_test || updates.isTest) && hasRecipientsPayload && !resolvedRecipients.length && resolvedFilters?.source) {
+            resolvedAudience = resolveAudienceCandidates({
+                source: resolvedFilters.source,
+                filters: resolvedFilters,
+                limit: 10000
+            });
+            resolvedRecipients = normalizeRecipientAssignments(resolvedAudience.candidates);
+            resolvedFilters = resolvedAudience.filters;
+        }
+
         const payload = {
             name: updates.name ?? current.name,
             messageTemplate: resolvedMessageTemplate,
@@ -2195,10 +2429,21 @@ app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
             scheduledAt: normalizedScheduledAt,
             templateId: normalizedTemplateId,
             contentSid: resolvedContentSid,
-            filters: updates.filters ?? current.filters
+            filters: resolvedFilters
         };
 
         let campaign = updateCampaignFull(id, payload);
+
+        if (hasRecipientsPayload && ['draft', 'scheduled'].includes(current.status)) {
+            clearCampaignRecipients(id);
+            if (resolvedRecipients.length > 0) {
+                assignRecipientsToCampaign(id, resolvedRecipients);
+                if (resolvedAudience?.segmentId) {
+                    updateSegmentLastUsed(resolvedAudience.segmentId, id);
+                }
+            }
+            campaign = getCampaignById(id) || campaign;
+        }
 
         if (hasScheduledAt && normalizedScheduledAt && current.status === 'draft') {
             campaign = setCampaignStatus(id, 'scheduled') || campaign;
@@ -2408,13 +2653,25 @@ app.get('/admin/api/contacts/for-campaign', adminAuth, (req, res) => {
 app.post('/admin/api/campaigns/:id/assign-recipients', adminAuth, express.json(), (req, res) => {
     try {
         const id = Number(req.params.id);
-        const { source = 'vehicles', filters = {}, query = '' } = req.body || {};
-        const search = query || filters.query || '';
+        const { source = 'vehicles', filters = {}, query = '', recipients = [] } = req.body || {};
+        const explicitRecipients = normalizeRecipientAssignments(recipients);
 
-        const candidates = source === 'contacts'
-            ? listContactsForCampaign({ query: search, limit: 10000 })
-            : listVehicleContactsByFilters({ ...filters, limit: 10000 });
-        const count = assignRecipientsToCampaign(id, source === 'contacts' ? candidates.map(c => c.id) : candidates);
+        let candidates = explicitRecipients;
+        let resolvedAudience = null;
+        if (!candidates.length) {
+            resolvedAudience = resolveAudienceCandidates({
+                source,
+                filters: { ...filters, query },
+                limit: 10000
+            });
+            candidates = normalizeRecipientAssignments(resolvedAudience.candidates);
+        }
+
+        const count = assignRecipientsToCampaign(id, candidates);
+
+        if (resolvedAudience?.segmentId && count > 0) {
+            updateSegmentLastUsed(resolvedAudience.segmentId, id);
+        }
 
         res.json({ assigned: count, totalRecipients: count });
     } catch (error) {
@@ -2507,12 +2764,17 @@ app.post('/admin/api/campaigns/preview', adminAuth, express.json(), (req, res) =
 app.post('/admin/api/campaigns/preview-samples', adminAuth, express.json(), (req, res) => {
     try {
         const { source = 'vehicles', filters = {}, limit = 3 } = req.body || {};
-        const safeLimit = Math.max(1, Math.min(Number(limit) || 3, 5));
-        const samples = source === 'contacts'
-            ? listContactsForCampaign({ query: filters.query || '', limit: safeLimit })
-            : listVehicleContactsByFilters({ ...filters, limit: safeLimit });
+        const safeLimit = Math.max(1, Math.min(Number(limit) || 3, 20));
+        const resolved = resolveAudienceCandidates({ source, filters, limit: safeLimit });
+        const samples = resolveAudiencePreviewItems(resolved.candidates, resolved.source, safeLimit);
 
-        res.json({ samples });
+        res.json({
+            samples,
+            total: resolved.total,
+            source: resolved.source,
+            mode: resolved.mode,
+            segmentId: resolved.segmentId || null
+        });
     } catch (error) {
         console.error('Preview samples error:', error);
         res.status(500).json({ error: 'Preview samples failed' });
@@ -2638,18 +2900,71 @@ app.post('/admin/api/n8n/workflows/:id/duplicate', adminAuth, express.json(), as
 
 app.get('/admin/segments', adminAuth, (req, res) => {
     const segments = listSegmentsWithCount();
-    res.status(200).type('text/html').send(renderSegmentsPage({ segments }));
+    const makes = listVehicleMakes();
+    const years = listVehicleYears();
+    res.status(200).type('text/html').send(renderSegmentsPage({ segments, makes, years }));
+});
+
+app.get('/admin/segments/:id', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).send('Invalid segment ID');
+        }
+
+        const descriptor = getSegmentDescriptor(id);
+        const { limit, offset } = getPaging(req);
+        const mode = descriptor.filters.mode;
+        const source = descriptor.filters.source;
+
+        let rows = [];
+        let total = 0;
+        if (mode === 'manual') {
+            total = countSegmentMembers(id);
+            rows = listSegmentMembers(id, { limit, offset });
+        } else if (source === 'contacts') {
+            total = countContactsForCampaign({ query: descriptor.filters.query || '' });
+            rows = listContactAudiencePage({ query: descriptor.filters.query || '', limit, offset });
+        } else {
+            total = countVehicleAudienceByFilters(descriptor.filters);
+            rows = listVehicleAudiencePage({ ...descriptor.filters, limit, offset });
+        }
+
+        res.status(200).type('text/html').send(renderSegmentDetailPage({
+            segment: descriptor.segment,
+            segmentFilters: descriptor.filters,
+            rows,
+            total,
+            offset,
+            limit
+        }));
+    } catch (error) {
+        console.error('Segment detail error:', error);
+        res.status(500).send('Failed to load segment detail');
+    }
+});
+
+app.get('/admin/api/segments', adminAuth, (req, res) => {
+    try {
+        const segments = listSegments();
+        res.json({ segments });
+    } catch (error) {
+        console.error('API segments error:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.post('/admin/api/segments', adminAuth, express.json(), (req, res) => {
     const { name, filters } = req.body || {};
     if (!name?.trim()) {
-        return res.status(400).json({ error: 'name is required' });
+        return res.status(400).json({ error: 'Name is required' });
     }
     try {
-        const seg = createSegment({ name: name.trim(), filters: filters || {} });
-        res.status(201).json(seg);
+        const normalizedFilters = normalizeAudienceFilters(filters || {});
+        const segment = createSegment(name.trim(), normalizedFilters);
+        res.status(201).json({ segment });
     } catch (error) {
+        console.error('Segment create error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2660,10 +2975,152 @@ app.delete('/admin/api/segments/:id', adminAuth, (req, res) => {
         return res.status(400).json({ error: 'Invalid segment ID' });
     }
     try {
-        dbDeleteSegment(id);
+        const deleted = dbDeleteSegment(id);
+        if (!deleted) {
+            return res.status(404).json({ error: 'Segment not found' });
+        }
         res.status(200).json({ ok: true });
     } catch (error) {
+        console.error('Segment delete error:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/admin/api/segments/:id/members/preview', adminAuth, express.json(), (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ error: 'Invalid segment ID' });
+        }
+
+        const descriptor = getSegmentDescriptor(id);
+        const source = descriptor.filters.source;
+        const incomingFilters = req.body?.filters || {};
+        const resolved = resolveAudienceCandidates({
+            source,
+            filters: { ...incomingFilters, source },
+            limit: Math.max(1, Math.min(Number(req.body?.limit) || 10, 20))
+        });
+
+        const samples = resolveAudiencePreviewItems(resolved.candidates, source, 10);
+
+        res.json({
+            segment: descriptor.segment,
+            source,
+            mode: descriptor.filters.mode,
+            total: resolved.total,
+            samples
+        });
+    } catch (error) {
+        console.error('Segment members preview error:', error);
+        res.status(500).json({ error: error.message || 'Failed to preview segment members' });
+    }
+});
+
+app.post('/admin/api/segments/:id/members/bulk-add', adminAuth, express.json(), (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ error: 'Invalid segment ID' });
+        }
+
+        const descriptor = getSegmentDescriptor(id);
+        if (descriptor.filters.mode !== 'manual') {
+            return res.status(400).json({ error: 'Only manual segments accept explicit members' });
+        }
+
+        const resolved = resolveAudienceCandidates({
+            source: descriptor.filters.source,
+            filters: { ...(req.body?.filters || {}), source: descriptor.filters.source },
+            limit: 10000
+        });
+        const recipients = normalizeRecipientAssignments(resolved.candidates);
+        const totalMembers = addMembersToSegment(id, recipients);
+
+        res.json({
+            added: recipients.length,
+            totalMembers,
+            source: descriptor.filters.source
+        });
+    } catch (error) {
+        console.error('Segment members bulk add error:', error);
+        res.status(500).json({ error: error.message || 'Failed to add segment members' });
+    }
+});
+
+app.delete('/admin/api/segments/:id/members/:memberId', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const memberId = Number(req.params.memberId);
+        if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(memberId) || memberId <= 0) {
+            return res.status(400).json({ error: 'Invalid segment member reference' });
+        }
+
+        const descriptor = getSegmentDescriptor(id);
+        if (descriptor.filters.mode !== 'manual') {
+            return res.status(400).json({ error: 'Only manual segments allow member removal' });
+        }
+
+        const removed = removeSegmentMember(id, memberId);
+        if (!removed) {
+            return res.status(404).json({ error: 'Segment member not found' });
+        }
+
+        res.status(200).json({ ok: true, totalMembers: countSegmentMembers(id) });
+    } catch (error) {
+        console.error('Segment member delete error:', error);
+        res.status(500).json({ error: error.message || 'Failed to remove segment member' });
+    }
+});
+
+app.get('/admin/segments/:id/export', adminAuth, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).send('Invalid segment ID');
+        }
+
+        const descriptor = getSegmentDescriptor(id);
+        const mode = descriptor.filters.mode;
+        const source = descriptor.filters.source;
+        const exportLimit = 100000;
+        let rows = [];
+        let headers = [];
+
+        if (mode === 'manual') {
+            rows = listSegmentMembers(id, { limit: exportLimit, offset: 0 });
+            headers = source === 'contacts'
+                ? ['member_id', 'contact_id', 'phone', 'name', 'status', 'created_at']
+                : ['member_id', 'contact_id', 'vehicle_id', 'phone', 'name', 'make', 'model', 'year', 'link', 'created_at'];
+        } else if (source === 'contacts') {
+            rows = listContactAudiencePage({ query: descriptor.filters.query || '', limit: exportLimit, offset: 0 });
+            headers = ['contact_id', 'phone', 'name', 'status', 'updated_at'];
+        } else {
+            rows = listVehicleAudiencePage({ ...descriptor.filters, limit: exportLimit, offset: 0 });
+            headers = ['contact_id', 'vehicle_id', 'phone', 'name', 'make', 'model', 'year', 'link'];
+        }
+
+        const csvRows = rows.map((row) => {
+            if (mode === 'manual' && source === 'contacts') {
+                return [row.id, row.contact_id, row.phone, row.name, row.status, row.created_at];
+            }
+            if (mode === 'manual' && source === 'vehicles') {
+                return [row.id, row.contact_id, row.vehicle_id, row.phone, row.name, row.make, row.model, row.year, row.link, row.created_at];
+            }
+            if (source === 'contacts') {
+                return [row.id, row.phone, row.name, row.status, row.updated_at];
+            }
+            return [row.contact_id, row.vehicle_id, row.phone, row.name, row.make, row.model, row.year, row.link];
+        });
+
+        const csv = toCsv(headers, csvRows);
+        const filename = `${toSegmentFileSafeName(descriptor.segment.name)}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.status(200).send(`\uFEFF${csv}`);
+    } catch (error) {
+        console.error('Segment export error:', error);
+        res.status(500).send('Failed to export segment');
     }
 });
 

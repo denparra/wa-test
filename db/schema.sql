@@ -254,6 +254,31 @@ CREATE TABLE IF NOT EXISTS segments (
 );
 
 -- ============================================================
+-- SEGMENT_MEMBERS: miembros explícitos para segmentos manuales
+-- ============================================================
+CREATE TABLE IF NOT EXISTS segment_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    segment_id INTEGER NOT NULL,
+    contact_id INTEGER,
+    vehicle_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    CHECK (contact_id IS NOT NULL OR vehicle_id IS NOT NULL),
+    FOREIGN KEY (segment_id) REFERENCES segments(id) ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_segment_members_segment_id ON segment_members(segment_id);
+CREATE INDEX IF NOT EXISTS idx_segment_members_contact_id ON segment_members(contact_id);
+CREATE INDEX IF NOT EXISTS idx_segment_members_vehicle_id ON segment_members(vehicle_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_segment_members_segment_contact_unique
+ON segment_members(segment_id, contact_id)
+WHERE vehicle_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_segment_members_segment_vehicle_unique
+ON segment_members(segment_id, vehicle_id)
+WHERE vehicle_id IS NOT NULL;
+
+-- ============================================================
 -- CONVERSATION_STATUS: Estado de lectura de conversaciones
 -- Feature 4: Inbox unificado
 -- ============================================================

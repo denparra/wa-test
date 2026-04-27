@@ -1711,6 +1711,23 @@ export function renderCampaignFormPage({ campaign = {}, makes = [], templates = 
   const msgType = (campaign.content_sid || campaign.template_id) ? 'twilio' : 'libre';
   const isTestCampaign = campaign.is_test ? 'test' : (campaign.id ? 'prod' : '');
   const selectedTemplateId = campaign.template_id ? String(campaign.template_id) : '';
+  let campaignFilters = {};
+  try {
+    campaignFilters = typeof campaign.filters === 'string'
+      ? JSON.parse(campaign.filters || '{}')
+      : (campaign.filters || {});
+  } catch (_) {
+    campaignFilters = {};
+  }
+  const initialRecipientSource = campaignFilters.source === 'contacts'
+    ? 'contacts'
+    : (isTestCampaign === 'prod' ? 'vehicles' : '');
+  const initialSegmentId = campaignFilters.segmentId ? String(campaignFilters.segmentId) : '';
+  const initialFilterMake = campaignFilters.make || '';
+  const initialFilterModel = campaignFilters.model || '';
+  const initialFilterYearMin = campaignFilters.yearMin ? String(campaignFilters.yearMin) : '';
+  const initialFilterYearMax = campaignFilters.yearMax ? String(campaignFilters.yearMax) : '';
+  const initialFilterQuery = campaignFilters.query || '';
 
   const dotBase = 'width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;';
   const dotActive   = dotBase + 'background:var(--accent);color:#fff;';
@@ -1908,9 +1925,9 @@ export function renderCampaignFormPage({ campaign = {}, makes = [], templates = 
     <div class="inline" style="margin-bottom:10px;">
       <label class="muted">Fuente:</label>
       <select id="recipientSource">
-        <option value="">No asignar ahora (borrador)</option>
-        <option value="vehicles">Por vehículos</option>
-        <option value="contacts">Por contactos</option>
+        <option value="" ${!initialRecipientSource ? 'selected' : ''}>No asignar ahora (borrador)</option>
+        <option value="vehicles" ${initialRecipientSource === 'vehicles' ? 'selected' : ''}>Por vehículos</option>
+        <option value="contacts" ${initialRecipientSource === 'contacts' ? 'selected' : ''}>Por contactos</option>
       </select>
       <button type="button" id="loadRecipientsBtn">Cargar destinatarios</button>
     </div>
@@ -1926,19 +1943,20 @@ export function renderCampaignFormPage({ campaign = {}, makes = [], templates = 
         <button type="button" id="saveSegmentBtn" class="action-btn" style="background:var(--accent-2);border-color:var(--accent-2);color:white;">Guardar Filtros</button>
       </div>
       <div class="inline">
-        <input type="text" id="filterMake" placeholder="Marca (opcional)" />
-        <input type="text" id="filterModel" placeholder="Modelo (opcional)" />
-        <input type="number" id="filterYearMin" placeholder="Año min" />
-        <input type="number" id="filterYearMax" placeholder="Año max" />
+        <input type="text" id="filterMake" placeholder="Marca (opcional)" value="${escapeHtml(initialFilterMake)}" />
+        <input type="text" id="filterModel" placeholder="Modelo (opcional)" value="${escapeHtml(initialFilterModel)}" />
+        <input type="number" id="filterYearMin" placeholder="Año min" value="${escapeHtml(initialFilterYearMin)}" />
+        <input type="number" id="filterYearMax" placeholder="Año max" value="${escapeHtml(initialFilterYearMax)}" />
       </div>
     </div>
 
     <div id="recipientContactFilters" class="hidden" style="margin-bottom:10px;">
       <div class="inline">
-        <input type="text" id="filterQuery" placeholder="Teléfono o nombre" />
+        <input type="text" id="filterQuery" placeholder="Teléfono o nombre" value="${escapeHtml(initialFilterQuery)}" />
       </div>
     </div>
 
+    <div id="recipientFeedback" class="muted" style="margin-top:8px;min-height:18px;"></div>
     <div id="recipientCount" class="muted" style="margin-top:8px;"></div>
     <div id="recipientPreview" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
   </div>
@@ -2209,6 +2227,106 @@ async function loadTestContacts() {
 }
 
 // ── Segmentos (producción) ───────────
+let availableSegments = [];
+let prodAudienceTotal = 0;
+
+function setRecipientFeedback(msg, isError = false) {
+  const el = document.getElementById('recipientFeedback');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+}
+
+function parseSegmentConfig(segment) {
+  if (!segment) return {};
+  try {
+    return typeof segment.filters === 'string' ? JSON.parse(segment.filters || '{}') : (segment.filters || {});
+  } catch (_) {
+    return {};
+  }
+}
+
+function getSelectedSegmentMeta() {
+  const segmentId = document.getElementById('segmentSelect')?.value || '';
+  if (!segmentId) return null;
+  return availableSegments.find((segment) => String(segment.id) === String(segmentId)) || null;
+}
+
+function getVehicleFilters() {
+  const yearMinRaw = document.getElementById('filterYearMin')?.value || '';
+  const yearMaxRaw = document.getElementById('filterYearMax')?.value || '';
+  const yearMin = yearMinRaw ? Number(yearMinRaw) : null;
+  const yearMax = yearMaxRaw ? Number(yearMaxRaw) : null;
+  return {
+    make: document.getElementById('filterMake')?.value?.trim() || null,
+    model: document.getElementById('filterModel')?.value?.trim() || null,
+    yearMin: Number.isNaN(yearMin) ? null : yearMin,
+    yearMax: Number.isNaN(yearMax) ? null : yearMax
+  };
+}
+
+function getCurrentRecipientConfig() {
+  const segment = getSelectedSegmentMeta();
+  const segmentFilters = parseSegmentConfig(segment);
+  if (segment && segmentFilters.mode === 'manual') {
+    const source = segmentFilters.source === 'contacts' ? 'contacts' : 'vehicles';
+    return {
+      source,
+      filters: {
+        source,
+        mode: 'manual',
+        segmentId: Number(segment.id)
+      }
+    };
+  }
+
+  const source = document.getElementById('recipientSource')?.value || '';
+  if (source === 'contacts') {
+    return {
+      source,
+      filters: {
+        source,
+        mode: 'dynamic',
+        segmentId: segment ? Number(segment.id) : null,
+        query: document.getElementById('filterQuery')?.value?.trim() || ''
+      }
+    };
+  }
+
+  return {
+    source,
+    filters: {
+      source,
+      mode: 'dynamic',
+      segmentId: segment ? Number(segment.id) : null,
+      ...getVehicleFilters()
+    }
+  };
+}
+
+function applySegmentFilters(filters = {}, segmentId = '') {
+  const source = filters.source === 'contacts' ? 'contacts' : 'vehicles';
+  const recipientSource = document.getElementById('recipientSource');
+  if (recipientSource) {
+    recipientSource.value = source;
+  }
+  document.getElementById('filterMake').value = filters.make || '';
+  document.getElementById('filterModel').value = filters.model || '';
+  document.getElementById('filterYearMin').value = filters.yearMin || '';
+  document.getElementById('filterYearMax').value = filters.yearMax || '';
+  const queryInput = document.getElementById('filterQuery');
+  if (queryInput) {
+    queryInput.value = filters.query || '';
+  }
+  const segmentSelect = document.getElementById('segmentSelect');
+  if (segmentSelect) {
+    segmentSelect.value = segmentId ? String(segmentId) : '';
+  }
+
+  document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', source !== 'vehicles');
+  document.getElementById('recipientContactFilters')?.classList.toggle('hidden', source !== 'contacts');
+}
+
 async function loadSegments() {
   const sel = document.getElementById('segmentSelect');
   if (!sel) return;
@@ -2216,50 +2334,85 @@ async function loadSegments() {
     const r = await fetch('/admin/api/segments');
     if (r.ok) {
       const d = await r.json();
+      availableSegments = Array.isArray(d.segments) ? d.segments : [];
       sel.innerHTML = '<option value="">-- Cargar Segmento --</option>'
-        + d.segments.map(s=>"<option value='"+escapeHtml(s.filters)+"'>"+escapeHtml(s.name)+"</option>").join('');
+        + availableSegments.map((s) => {
+          const parsed = parseSegmentConfig(s);
+          const mode = parsed.mode === 'manual' ? 'manual' : 'dinámico';
+          const source = parsed.source === 'contacts' ? 'contactos' : 'vehículos';
+          const selected = '${initialSegmentId}' && String(s.id) === '${initialSegmentId}' ? ' selected' : '';
+          return "<option value='" + String(s.id) + "'" + selected + ">" + escapeHtml(s.name + ' · ' + mode + ' · ' + source) + '</option>';
+        }).join('');
+
+      if ('${initialSegmentId}') {
+        const initialSegment = availableSegments.find((segment) => String(segment.id) === '${initialSegmentId}');
+        if (initialSegment) {
+          const filters = parseSegmentConfig(initialSegment);
+          applySegmentFilters(filters, initialSegment.id);
+        }
+      }
     }
   } catch(e) { console.error('loadSegments',e); }
 }
 async function saveSegment() {
-  const make=document.getElementById('filterMake')?.value?.trim();
-  const model=document.getElementById('filterModel')?.value?.trim();
-  const yearMin=document.getElementById('filterYearMin')?.value;
-  const yearMax=document.getElementById('filterYearMax')?.value;
+  const source = document.getElementById('recipientSource')?.value || 'vehicles';
+  if (source !== 'vehicles') {
+    setRecipientFeedback('Por ahora solo puedes guardar segmentos dinámicos desde filtros de vehículos.', true);
+    return;
+  }
+  const { make, model, yearMin, yearMax } = getVehicleFilters();
   if (!make&&!model&&!yearMin&&!yearMax) { alert('Ingresa al menos un filtro.'); return; }
   const name=prompt('Nombre para este segmento:');
   if (!name) return;
   try {
     const r=await fetch('/admin/api/segments',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,filters:{make,model,yearMin:yearMin?Number(yearMin):null,yearMax:yearMax?Number(yearMax):null}})});
-    if(r.ok){alert('Segmento guardado');loadSegments();}
-    else{const e=await r.json();alert('Error: '+e.error);}
-  } catch(e){alert('Error de conexión');}
+      body:JSON.stringify({name,filters:{mode:'dynamic',source:'vehicles',make,model,yearMin,yearMax}})});
+    if(r.ok){
+      setRecipientFeedback('Segmento guardado.');
+      await loadSegments();
+    }
+    else{
+      const e=await r.json().catch(()=>({error:'No se pudo guardar el segmento'}));
+      setRecipientFeedback('Error: '+(e.error||'No se pudo guardar el segmento'), true);
+    }
+  } catch(e){
+    setRecipientFeedback('Error de conexión al guardar el segmento.', true);
+  }
 }
 
 // ── Destinatarios producción ─────────
 async function loadProdRecipients() {
-  const source=document.getElementById('recipientSource')?.value;
-  if (!source){alert('Selecciona una fuente');return;}
-  const filters={};
-  if(source==='contacts') filters.query=document.getElementById('filterQuery')?.value?.trim()||'';
-  else {
-    filters.make=document.getElementById('filterMake')?.value?.trim()||null;
-    filters.model=document.getElementById('filterModel')?.value?.trim()||null;
-    filters.yearMin=document.getElementById('filterYearMin')?.value||null;
-    filters.yearMax=document.getElementById('filterYearMax')?.value||null;
+  const { source, filters } = getCurrentRecipientConfig();
+  if (!source){
+    window.selectedRecipients=[];
+    prodAudienceTotal = 0;
+    document.getElementById('recipientCount').textContent='';
+    document.getElementById('recipientPreview').innerHTML='';
+    setRecipientFeedback('Borrador sin destinatarios precargados.');
+    return;
   }
+  setRecipientFeedback('Cargando destinatarios...');
   try {
     const r=await fetch('/admin/api/campaigns/preview-samples',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({source,filters,limit:100})});
-    if(!r.ok){alert('Error al cargar destinatarios');return;}
-    const {samples:recipients=[]}=await r.json();
-    document.getElementById('recipientCount').textContent=recipients.length+' destinatarios encontrados';
+    if(!r.ok){
+      const err = await r.json().catch(()=>({error:'Error al cargar destinatarios'}));
+      setRecipientFeedback('Error: '+(err.error||'Error al cargar destinatarios'), true);
+      return;
+    }
+    const {samples:recipients=[], total=0, mode='dynamic'}=await r.json();
+    prodAudienceTotal = Number(total || 0);
+    document.getElementById('recipientCount').textContent=prodAudienceTotal+' destinatarios encontrados';
     document.getElementById('recipientPreview').innerHTML=
-      recipients.slice(0,10).map(r=>'<div style="padding:4px;border-bottom:1px solid #eee;">'+maskPhone(r.phone)+' — '+escapeHtml(r.name||'Sin nombre')+'</div>').join('')
+      recipients.slice(0,10).map(r=>'<div style="padding:4px;border-bottom:1px solid #eee;">'+maskPhone(r.phone)+' — '+escapeHtml(r.name||'Sin nombre')+(source==='vehicles'?' · '+escapeHtml([r.make,r.model,r.year].filter(Boolean).join(' ')):'')+'</div>').join('')
       +(recipients.length>10?'<div class="muted" style="padding:8px;">...y '+(recipients.length-10)+' más</div>':'');
     window.selectedRecipients=recipients;
-  } catch(e){alert('Error: '+e.message);}
+    if (mode === 'manual') {
+      setRecipientFeedback(prodAudienceTotal ? 'Segmento manual listo para usar en campaña.' : 'El segmento manual todavía no tiene miembros cargados.');
+    } else {
+      setRecipientFeedback(prodAudienceTotal ? 'Audiencia resuelta. Al guardar se cargará el total completo en backend.' : 'No se encontraron destinatarios para ese filtro.');
+    }
+  } catch(e){setRecipientFeedback('Error: '+e.message, true);}
 }
 
 // ── Submit ───────────────────────────
@@ -2279,17 +2432,22 @@ async function handleSubmit(e) {
   const scheduledAt=timing==='scheduled'?document.querySelector('input[name="scheduledAt"]')?.value||'':'';
   const isTest=campaignMode==='test';
   let recipientIds=[];
+  let filters=null;
   if (isTest) {
     if (!selectedTestIds.length){setTestHint('Selecciona al menos un contacto.',true);return;}
     recipientIds=selectedTestIds;
   } else {
-    if (window.selectedRecipients?.length) recipientIds=window.selectedRecipients.map(r=>r.id);
-    if (!recipientIds.length&&scheduledAt) {
+    const config = getCurrentRecipientConfig();
+    filters = config.source ? config.filters : null;
+    if (!filters&&scheduledAt) {
       if (!confirm('⚠️ Estás programando sin destinatarios.\\n\\n¿Deseas continuar de todos modos?')) return;
+    }
+    if (filters&&prodAudienceTotal===0&&scheduledAt) {
+      if (!confirm('⚠️ La audiencia actual está vacía.\\n\\n¿Deseas programar igual?')) return;
     }
   }
   const payload={name,messageTemplate:msgType==='libre'?msgTemplate:'',contentSid:msgType==='twilio'?contentSid:'',templateId:selectedTemplateId||null,
-    type:msgType==='twilio'?'twilio_template':'custom_message',scheduledAt,isTest,recipientIds};
+    type:msgType==='twilio'?'twilio_template':'custom_message',scheduledAt,isTest,recipientIds,filters};
   const url=campaignId?'/admin/api/campaigns/'+campaignId:'/admin/api/campaigns';
   const method=campaignId?'PATCH':'POST';
   const btn=document.getElementById('submitBtn');
@@ -2335,12 +2493,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Production: segment management
   document.getElementById('saveSegmentBtn')?.addEventListener('click', saveSegment);
   document.getElementById('loadSegmentBtn')?.addEventListener('click', () => {
-    const sel=document.getElementById('segmentSelect'); if(!sel?.value) return;
-    const f=JSON.parse(sel.value);
-    if(f.make)    document.getElementById('filterMake').value=f.make;
-    if(f.model)   document.getElementById('filterModel').value=f.model;
-    if(f.yearMin) document.getElementById('filterYearMin').value=f.yearMin;
-    if(f.yearMax) document.getElementById('filterYearMax').value=f.yearMax;
+    const sel=document.getElementById('segmentSelect');
+    if(!sel?.value) return;
+    const segment = availableSegments.find((item) => String(item.id) === String(sel.value));
+    if (!segment) return;
+    const filters = parseSegmentConfig(segment);
+    applySegmentFilters(filters, segment.id);
+    setRecipientFeedback(filters.mode === 'manual' ? 'Segmento manual cargado.' : 'Filtros del segmento cargados.');
   });
   loadSegments();
 
@@ -2349,8 +2508,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const src=document.getElementById('recipientSource').value;
     document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', src!=='vehicles');
     document.getElementById('recipientContactFilters')?.classList.toggle('hidden', src!=='contacts');
+    prodAudienceTotal = 0;
     document.getElementById('recipientCount').textContent='';
     document.getElementById('recipientPreview').innerHTML='';
+    setRecipientFeedback('');
+    window.selectedRecipients=[];
   });
   document.getElementById('loadRecipientsBtn')?.addEventListener('click', loadProdRecipients);
 
@@ -2363,6 +2525,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Edit mode: restore state
   if ('${isTestCampaign}') { selectMode('${isTestCampaign}'); goToStep(3); }
+  const initialSource = document.getElementById('recipientSource')?.value || '';
+  document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', initialSource!=='vehicles');
+  document.getElementById('recipientContactFilters')?.classList.toggle('hidden', initialSource!=='contacts');
 });
 </script>
   `;
@@ -3400,31 +3565,153 @@ export function renderVehicleFormPage({ vehicle = null, error = null, formData =
 // ============================================================
 // Feature J: Segments Page
 // ============================================================
-export function renderSegmentsPage({ segments = [] }) {
+export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
   const helpText = renderHelpText(
-    `<strong>Segmentos dinámicos:</strong> filtros guardados para reutilizar en campañas.
-    El conteo refleja los contactos activos con vehículo que cumplen cada filtro en tiempo real.`
+    `<strong>Segmentos:</strong> puedes guardar filtros dinámicos sobre tu base o crear segmentos manuales
+    para cargar contactos / vehículos y reutilizarlos luego en campañas.`
   );
+
+  const segmentMetaJson = JSON.stringify(segments).replace(/</g, '\\u003c');
+  const makeOptions = [`<option value="">Todas las marcas</option>`]
+    .concat(makes.map((item) => `<option value="${escapeHtml(item.make)}">${escapeHtml(item.make)} (${item.vehicles})</option>`))
+    .join('');
+  const yearOptions = [`<option value="">Sin límite</option>`]
+    .concat(years.map((year) => `<option value="${year}">${year}</option>`))
+    .join('');
+  const manualSegments = segments.filter((seg) => {
+    try {
+      const filters = typeof seg.filters === 'string' ? JSON.parse(seg.filters || '{}') : (seg.filters || {});
+      return filters.mode === 'manual';
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const createForm = `<section class="panel" style="margin-bottom:18px;">
+    <div class="panel-header"><h3>Crear segmento</h3></div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px;">Usa segmentos dinámicos para filtros vivos y manuales para audiencias curadas.</div>
+    <form id="segmentCreateForm" style="display:grid;grid-template-columns:1.2fr .8fr .8fr 1fr 1fr .8fr .8fr auto;gap:10px;align-items:end;">
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Nombre *</label>
+        <input type="text" id="segmentName" required placeholder="Ej: Toyota 2020+" style="width:100%;" />
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Tipo</label>
+        <select id="segmentMode" style="width:100%;">
+          <option value="dynamic">Dinámico</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Fuente</label>
+        <select id="segmentSource" style="width:100%;">
+          <option value="vehicles">Vehículos</option>
+          <option value="contacts">Contactos</option>
+        </select>
+      </div>
+      <div class="segment-dynamic-field">
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Marca</label>
+        <select id="segmentMake" style="width:100%;">${makeOptions}</select>
+      </div>
+      <div class="segment-dynamic-field">
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Modelo</label>
+        <input type="text" id="segmentModel" placeholder="Corolla" style="width:100%;" />
+      </div>
+      <div class="segment-dynamic-field">
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Desde</label>
+        <select id="segmentYearMin" style="width:100%;">${yearOptions}</select>
+      </div>
+      <div class="segment-dynamic-field">
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Hasta</label>
+        <select id="segmentYearMax" style="width:100%;">${yearOptions}</select>
+      </div>
+      <button type="submit">Crear</button>
+    </form>
+    <div id="segmentFeedback" class="muted" style="margin-top:10px;min-height:18px;"></div>
+  </section>`;
+
+  const manualManager = `<section class="panel" style="margin-bottom:18px;">
+    <div class="panel-header"><h3>Cargar miembros a segmento manual</h3></div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px;">Busca por vehículos o contactos y agrega el lote al segmento vacío o existente.</div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:12px;">
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Segmento manual</label>
+        <select id="manualSegmentSelect" style="width:100%;">
+          <option value="">-- Seleccionar segmento manual --</option>
+          ${manualSegments.map((seg) => `<option value="${seg.id}">${escapeHtml(seg.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Fuente</label>
+        <div id="manualSegmentSourceBadge" class="badge badge-muted">—</div>
+      </div>
+      <div style="align-self:center;" class="muted" id="manualSegmentHint">Selecciona un segmento manual para cargar miembros.</div>
+    </div>
+    <div id="manualVehiclesFilters" style="display:grid;grid-template-columns:1fr 1fr .8fr .8fr auto auto;gap:10px;align-items:end;">
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Marca</label>
+        <select id="manualMake" style="width:100%;">${makeOptions}</select>
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Modelo</label>
+        <input type="text" id="manualModel" placeholder="Corolla" style="width:100%;" />
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Desde</label>
+        <select id="manualYearMin" style="width:100%;">${yearOptions}</select>
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Hasta</label>
+        <select id="manualYearMax" style="width:100%;">${yearOptions}</select>
+      </div>
+      <button type="button" id="previewManualMembersBtn">Previsualizar</button>
+      <button type="button" id="addManualMembersBtn" class="action-btn primary">Cargar al segmento</button>
+    </div>
+    <div id="manualContactsFilters" style="display:none;grid-template-columns:1fr auto auto;gap:10px;align-items:end;">
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Buscar contacto</label>
+        <input type="text" id="manualContactQuery" placeholder="Nombre o teléfono" style="width:100%;" />
+      </div>
+      <button type="button" id="previewManualContactsBtn">Previsualizar</button>
+      <button type="button" id="addManualContactsBtn" class="action-btn primary">Cargar al segmento</button>
+    </div>
+    <div id="manualSegmentFeedback" class="muted" style="margin-top:10px;min-height:18px;"></div>
+    <div id="manualSegmentResults" style="margin-top:10px;max-height:240px;overflow:auto;"></div>
+  </section>`;
 
   const tableHtml = segments.length > 0
     ? `<table>
-        <thead><tr><th>Nombre</th><th>Filtros</th><th style="text-align:right;">Contactos</th><th>Último uso</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>Configuración</th><th style="text-align:right;">Objetivos</th><th>Último uso</th><th>Acciones</th></tr></thead>
         <tbody>
           ${segments.map(seg => {
             let filtersDisplay = '';
+            let mode = 'dynamic';
+            let source = 'vehicles';
             try {
               const f = typeof seg.filters === 'string' ? JSON.parse(seg.filters) : (seg.filters || {});
-              filtersDisplay = Object.entries(f).map(([k, v]) => `<span class="badge badge-muted">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`).join(' ');
+              mode = f.mode === 'manual' ? 'manual' : 'dynamic';
+              source = f.source === 'contacts' ? 'contacts' : 'vehicles';
+              filtersDisplay = Object.entries(f)
+                .filter(([key]) => !['mode'].includes(key))
+                .map(([k, v]) => `<span class="badge badge-muted">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`)
+                .join(' ');
             } catch (_) {
               filtersDisplay = escapeHtml(String(seg.filters || '—'));
             }
+            const typeBadge = mode === 'manual'
+              ? `<span class="badge badge-good">manual · ${source === 'contacts' ? 'contactos' : 'vehículos'}</span>`
+              : `<span class="badge badge-muted">dinámico · ${source === 'contacts' ? 'contactos' : 'vehículos'}</span>`;
             return `<tr>
               <td style="font-weight:600;">${escapeHtml(seg.name)}</td>
+              <td>${typeBadge}</td>
               <td>${filtersDisplay || '<span class="muted">Sin filtros</span>'}</td>
-              <td style="text-align:right;font-weight:700;font-size:15px;">${seg.contact_count ?? 0}</td>
+              <td style="text-align:right;font-weight:700;font-size:15px;">${seg.target_count ?? seg.contact_count ?? 0}</td>
               <td>${seg.last_used_at ? formatDate(seg.last_used_at) : '<span class="muted">—</span>'}</td>
               <td>
-                <button onclick="deleteSegment(${seg.id}, '${escapeHtml(seg.name)}')" class="action-btn danger" title="Eliminar segmento">${renderIcon('trash', 13)}</button>
+                <div class="row-actions">
+                  <a href="/admin/segments/${seg.id}" class="action-btn" title="Abrir segmento">${renderIcon('arrow-right', 13)} Ver</a>
+                  <button onclick="deleteSegment(${seg.id}, '${escapeHtml(seg.name)}')" class="action-btn danger" title="Eliminar segmento">${renderIcon('trash', 13)}</button>
+                </div>
               </td>
             </tr>`;
           }).join('')}
@@ -3432,21 +3719,283 @@ export function renderSegmentsPage({ segments = [] }) {
       </table>`
     : renderEmptyState({
         title: 'Sin segmentos',
-        message: 'Los segmentos se crean desde el formulario de campañas al guardar un conjunto de filtros.',
-        ctaText: 'Ir a campañas',
-        ctaLink: '/admin/campaigns'
+        message: 'Todavía no hay segmentos guardados. Puedes crear el primero desde este panel.',
+        ctaText: null,
+        ctaLink: null
       });
 
   const script = `<script>
+    const SEGMENTS = ${segmentMetaJson};
+
+    function escapeHtml(value = '') {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function parseSegmentFilters(segment) {
+      if (!segment) return {};
+      try {
+        return typeof segment.filters === 'string' ? JSON.parse(segment.filters || '{}') : (segment.filters || {});
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function setSegmentFeedback(message, isError = false) {
+      const el = document.getElementById('segmentFeedback');
+      if (!el) return;
+      el.textContent = message || '';
+      el.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+    }
+
+    function setManualSegmentFeedback(message, isError = false) {
+      const el = document.getElementById('manualSegmentFeedback');
+      if (!el) return;
+      el.textContent = message || '';
+      el.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+    }
+
+    function setManualSegmentLoading(isLoading, action = 'preview') {
+      const previewBtns = [
+        document.getElementById('previewManualMembersBtn'),
+        document.getElementById('previewManualContactsBtn')
+      ].filter(Boolean);
+      const addBtns = [
+        document.getElementById('addManualMembersBtn'),
+        document.getElementById('addManualContactsBtn')
+      ].filter(Boolean);
+
+      [...previewBtns, ...addBtns].forEach((btn) => {
+        btn.disabled = isLoading;
+        btn.style.opacity = isLoading ? '0.6' : '1';
+        btn.style.cursor = isLoading ? 'wait' : 'pointer';
+      });
+
+      addBtns.forEach((btn) => {
+        btn.textContent = isLoading && action === 'add' ? 'Cargando...' : 'Cargar al segmento';
+      });
+
+      previewBtns.forEach((btn) => {
+        btn.textContent = isLoading && action === 'preview' ? 'Buscando...' : 'Previsualizar';
+      });
+    }
+
+    function getSelectedManualSegment() {
+      const segmentId = document.getElementById('manualSegmentSelect')?.value || '';
+      if (!segmentId) return null;
+      return SEGMENTS.find((segment) => String(segment.id) === String(segmentId)) || null;
+    }
+
+    function toggleSegmentCreateMode() {
+      const mode = document.getElementById('segmentMode')?.value || 'dynamic';
+      const source = document.getElementById('segmentSource');
+      document.querySelectorAll('.segment-dynamic-field').forEach((el) => {
+        el.style.display = mode === 'dynamic' ? '' : 'none';
+      });
+      if (source) {
+        source.disabled = mode === 'dynamic';
+        if (mode === 'dynamic') source.value = 'vehicles';
+      }
+    }
+
+    function isInvalidYearRange(yearMin, yearMax) {
+      return Number.isFinite(yearMin) && Number.isFinite(yearMax) && yearMin > yearMax;
+    }
+
+    function getManualFiltersBySource(source) {
+      if (source === 'contacts') {
+        return {
+          query: document.getElementById('manualContactQuery')?.value?.trim() || ''
+        };
+      }
+
+      const yearMinRaw = document.getElementById('manualYearMin')?.value || '';
+      const yearMaxRaw = document.getElementById('manualYearMax')?.value || '';
+      return {
+        make: document.getElementById('manualMake')?.value?.trim() || null,
+        model: document.getElementById('manualModel')?.value?.trim() || null,
+        yearMin: yearMinRaw ? Number(yearMinRaw) : null,
+        yearMax: yearMaxRaw ? Number(yearMaxRaw) : null
+      };
+    }
+
+    function renderManualPreview(samples = [], total = 0, source = 'vehicles') {
+      const container = document.getElementById('manualSegmentResults');
+      if (!container) return;
+      if (!samples.length) {
+        container.innerHTML = '<div class="muted">Sin resultados para mostrar.</div>';
+        return;
+      }
+      container.innerHTML = '<div class="muted" style="margin-bottom:8px;">Resultados: <strong>' + total + '</strong></div>'
+        + samples.map((item) => '<div style="padding:6px 8px;border-bottom:1px solid #eee;">'
+          + escapeHtml(item.phone || '—') + ' — ' + escapeHtml(item.name || 'Sin nombre')
+          + (source === 'vehicles' ? ' · ' + escapeHtml([item.make, item.model, item.year].filter(Boolean).join(' ')) : '')
+          + '</div>').join('');
+    }
+
+    function syncManualSegmentSourceUI() {
+      const segment = getSelectedManualSegment();
+      const sourceBadge = document.getElementById('manualSegmentSourceBadge');
+      const hint = document.getElementById('manualSegmentHint');
+      const vehiclesFilters = document.getElementById('manualVehiclesFilters');
+      const contactsFilters = document.getElementById('manualContactsFilters');
+      const source = parseSegmentFilters(segment).source === 'contacts' ? 'contacts' : 'vehicles';
+
+      if (!segment) {
+        if (sourceBadge) sourceBadge.textContent = '—';
+        if (hint) hint.textContent = 'Selecciona un segmento manual para cargar miembros.';
+        if (vehiclesFilters) vehiclesFilters.style.display = 'grid';
+        if (contactsFilters) contactsFilters.style.display = 'none';
+        return;
+      }
+
+      if (sourceBadge) sourceBadge.textContent = source === 'contacts' ? 'Contactos' : 'Vehículos';
+      if (hint) hint.textContent = source === 'contacts'
+        ? 'Busca por nombre o teléfono y agrega el resultado al segmento manual.'
+        : 'Filtra por vehículo y agrega los resultados al segmento manual.';
+      if (vehiclesFilters) vehiclesFilters.style.display = source === 'vehicles' ? 'grid' : 'none';
+      if (contactsFilters) contactsFilters.style.display = source === 'contacts' ? 'grid' : 'none';
+    }
+
+    async function createSegment(event) {
+      event.preventDefault();
+      const name = document.getElementById('segmentName')?.value?.trim() || '';
+      const mode = document.getElementById('segmentMode')?.value || 'dynamic';
+      const source = document.getElementById('segmentSource')?.value === 'contacts' ? 'contacts' : 'vehicles';
+      const make = document.getElementById('segmentMake')?.value?.trim() || null;
+      const model = document.getElementById('segmentModel')?.value?.trim() || null;
+      const yearMinRaw = document.getElementById('segmentYearMin')?.value || '';
+      const yearMaxRaw = document.getElementById('segmentYearMax')?.value || '';
+      const yearMin = yearMinRaw ? Number(yearMinRaw) : null;
+      const yearMax = yearMaxRaw ? Number(yearMaxRaw) : null;
+
+      if (!name) {
+        setSegmentFeedback('Ingresa un nombre para el segmento.', true);
+        return;
+      }
+      if (mode === 'dynamic' && !make && !model && !yearMin && !yearMax) {
+        setSegmentFeedback('Ingresa al menos un filtro de vehículo para el segmento dinámico.', true);
+        return;
+      }
+      if (mode === 'dynamic' && isInvalidYearRange(yearMin, yearMax)) {
+        setSegmentFeedback('El rango de años es inválido: "Desde" no puede ser mayor que "Hasta".', true);
+        return;
+      }
+
+      const filters = mode === 'manual'
+        ? { mode: 'manual', source }
+        : { mode: 'dynamic', source: 'vehicles', make, model, yearMin, yearMax };
+
+      setSegmentFeedback('Guardando segmento...');
+      try {
+        const r = await fetch('/admin/api/segments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, filters })
+        });
+        if (r.ok) {
+          window.location.reload();
+          return;
+        }
+        const error = await r.json().catch(() => ({ error: 'No se pudo crear el segmento' }));
+        setSegmentFeedback('Error: ' + (error.error || 'No se pudo crear el segmento'), true);
+      } catch (error) {
+        setSegmentFeedback('Error de conexión: ' + error.message, true);
+      }
+    }
+
+    async function previewManualMembers() {
+      const segment = getSelectedManualSegment();
+      if (!segment) {
+        setManualSegmentFeedback('Selecciona un segmento manual.', true);
+        return;
+      }
+
+      const source = parseSegmentFilters(segment).source === 'contacts' ? 'contacts' : 'vehicles';
+      const filters = getManualFiltersBySource(source);
+      if (source === 'vehicles' && isInvalidYearRange(filters.yearMin, filters.yearMax)) {
+        setManualSegmentFeedback('El rango de años es inválido: "Desde" no puede ser mayor que "Hasta".', true);
+        return;
+      }
+      setManualSegmentFeedback('Buscando resultados...');
+      setManualSegmentLoading(true, 'preview');
+      try {
+        const r = await fetch('/admin/api/segments/' + segment.id + '/members/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filters, limit: 10 })
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          setManualSegmentFeedback('Error: ' + (data.error || 'No se pudo previsualizar'), true);
+          return;
+        }
+        renderManualPreview(data.samples || [], data.total || 0, source);
+        setManualSegmentFeedback((data.total || 0) ? 'Vista previa lista.' : 'No se encontraron resultados para ese filtro.');
+      } catch (error) {
+        setManualSegmentFeedback('Error de conexión: ' + error.message, true);
+      } finally {
+        setManualSegmentLoading(false, 'preview');
+      }
+    }
+
+    async function addManualMembers() {
+      const segment = getSelectedManualSegment();
+      if (!segment) {
+        setManualSegmentFeedback('Selecciona un segmento manual.', true);
+        return;
+      }
+
+      const source = parseSegmentFilters(segment).source === 'contacts' ? 'contacts' : 'vehicles';
+      const filters = getManualFiltersBySource(source);
+      if (source === 'vehicles' && isInvalidYearRange(filters.yearMin, filters.yearMax)) {
+        setManualSegmentFeedback('El rango de años es inválido: "Desde" no puede ser mayor que "Hasta".', true);
+        return;
+      }
+      setManualSegmentFeedback('Cargando miembros al segmento...');
+      setManualSegmentLoading(true, 'add');
+      try {
+        const r = await fetch('/admin/api/segments/' + segment.id + '/members/bulk-add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filters })
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          setManualSegmentFeedback('Error: ' + (data.error || 'No se pudo cargar el segmento'), true);
+          return;
+        }
+        setManualSegmentFeedback('Carga completada. Total en segmento: ' + (data.totalMembers || 0));
+      } catch (error) {
+        setManualSegmentFeedback('Error de conexión: ' + error.message, true);
+      } finally {
+        setManualSegmentLoading(false, 'add');
+      }
+    }
+
     async function deleteSegment(id, name) {
       if (!confirm('¿Eliminar segmento "' + name + '"?')) return;
       const r = await fetch('/admin/api/segments/' + id, { method: 'DELETE' });
       if (r.ok) window.location.reload();
       else alert('Error al eliminar');
     }
+
+    document.getElementById('segmentCreateForm')?.addEventListener('submit', createSegment);
+    document.getElementById('segmentMode')?.addEventListener('change', toggleSegmentCreateMode);
+    document.getElementById('manualSegmentSelect')?.addEventListener('change', syncManualSegmentSourceUI);
+    document.getElementById('previewManualMembersBtn')?.addEventListener('click', previewManualMembers);
+    document.getElementById('addManualMembersBtn')?.addEventListener('click', addManualMembers);
+    document.getElementById('previewManualContactsBtn')?.addEventListener('click', previewManualMembers);
+    document.getElementById('addManualContactsBtn')?.addEventListener('click', addManualMembers);
+    toggleSegmentCreateMode();
+    syncManualSegmentSourceUI();
   </script>`;
 
-  const content = `<section class="panel">
+  const content = `${createForm}${manualManager}<section class="panel">
     <div class="panel-header">
       <h1>Segmentos</h1>
     </div>
@@ -3455,6 +4004,112 @@ export function renderSegmentsPage({ segments = [] }) {
   </section>${script}`;
 
   return renderLayout({ title: 'Segmentos', content, active: 'segments' });
+}
+
+export function renderSegmentDetailPage({ segment, segmentFilters = {}, rows = [], total = 0, offset = 0, limit = 50 }) {
+  const filters = typeof segmentFilters === 'string'
+    ? (() => { try { return JSON.parse(segmentFilters || '{}'); } catch (_) { return {}; } })()
+    : (segmentFilters || {});
+  const mode = filters.mode === 'manual' ? 'manual' : 'dynamic';
+  const source = filters.source === 'contacts' ? 'contacts' : 'vehicles';
+
+  const configBits = Object.entries(filters)
+    .filter(([key, value]) => !['mode'].includes(key) && value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => `<span class="badge badge-muted">${escapeHtml(key)}: ${escapeHtml(String(value))}</span>`)
+    .join(' ');
+
+  const sourceLabel = source === 'contacts' ? 'Contactos' : 'Vehículos';
+  const modeBadge = mode === 'manual'
+    ? renderBadge(`manual · ${sourceLabel}`, 'good')
+    : renderBadge(`dinámico · ${sourceLabel}`, 'muted');
+  const helpText = renderHelpText(
+    mode === 'manual'
+      ? `<strong>Segmento manual:</strong> esta vista muestra los miembros guardados actualmente dentro del segmento.`
+      : `<strong>Segmento dinámico:</strong> esta vista muestra la coincidencia viva actual según las reglas guardadas del segmento.`
+  );
+
+  const summary = `<section class="panel" style="margin-bottom:18px;">
+    <div class="panel-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h1>${escapeHtml(segment.name || 'Segmento')}</h1>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${modeBadge}</div>
+      </div>
+      <div class="row-actions">
+        <a href="/admin/segments/${segment.id}/export" class="action-btn">${renderIcon('upload', 13)} Exportar CSV</a>
+        <a href="/admin/segments" class="action-btn">${renderIcon('arrow-left', 13)} Volver</a>
+      </div>
+    </div>
+    ${helpText}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:14px;">
+      <div class="card"><h2>${renderIcon('inbox', 14)}<span>Total actual</span></h2><p>${Number(total || 0).toLocaleString('es-CL')}</p><div class="card-kicker">${mode === 'manual' ? 'miembros guardados' : 'coincidencias vivas'}</div></div>
+      <div class="card"><h2>${renderIcon('filter', 14)}<span>Configuración</span></h2><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${configBits || '<span class="muted">Sin configuración adicional</span>'}</div></div>
+    </div>
+  </section>`;
+
+  const vehicleRows = source === 'vehicles'
+    ? rows.map((row) => ({
+        ...row,
+        vehicle_label: [row.make, row.model, row.year].filter(Boolean).join(' ')
+      }))
+    : [];
+
+  const table = rows.length > 0
+    ? renderTable({
+        columns: source === 'vehicles'
+          ? [
+              { key: 'phone', label: 'Teléfono' },
+              { key: 'name', label: 'Nombre', render: (row) => escapeHtml(row.name || row.contact_name || '—') },
+              { key: 'vehicle_label', label: 'Vehículo', render: (row) => escapeHtml(row.vehicle_label || '—') },
+              { key: 'link', label: 'Link', render: (row) => row.link ? `<a href="${escapeHtml(row.link)}" target="_blank" rel="noopener">Abrir</a>` : '<span class="muted">—</span>' },
+              ...(mode === 'manual'
+                ? [{ key: 'actions', label: 'Acciones', render: (row) => `<button onclick="removeSegmentMember(${row.id}, '${escapeHtml(row.vehicle_label || row.name || row.phone || 'elemento')}')" class="action-btn danger">${renderIcon('trash', 12)} Quitar</button>` }]
+                : [])
+            ]
+          : [
+              { key: 'phone', label: 'Teléfono' },
+              { key: 'name', label: 'Nombre', render: (row) => escapeHtml(row.name || '—') },
+              { key: 'status', label: 'Estado', render: (row) => renderBadge(row.status || 'active', statusTone(row.status || 'active')) },
+              ...(mode === 'manual'
+                ? [{ key: 'actions', label: 'Acciones', render: (row) => `<button onclick="removeSegmentMember(${row.id}, '${escapeHtml(row.name || row.phone || 'contacto')}')" class="action-btn danger">${renderIcon('trash', 12)} Quitar</button>` }]
+                : [])
+            ],
+        rows: source === 'vehicles' ? vehicleRows : rows,
+        searchable: true,
+        sortable: true,
+        tableId: 'segment-detail-table'
+      })
+    : renderEmptyState({
+        title: 'Sin resultados',
+        message: mode === 'manual'
+          ? 'Este segmento manual todavía no tiene miembros cargados.'
+          : 'La regla dinámica hoy no devuelve coincidencias.'
+      });
+
+  const pager = rows.length > 0 ? renderPager({
+    basePath: `/admin/segments/${segment.id}`,
+    query: {},
+    offset,
+    limit,
+    hasNext: offset + rows.length < total
+  }) : '';
+
+  const script = mode === 'manual' ? `
+    <script>
+      async function removeSegmentMember(memberId, label) {
+        if (!confirm('¿Quitar de este segmento a "' + label + '"?')) return;
+        const r = await fetch('/admin/api/segments/${segment.id}/members/' + memberId, { method: 'DELETE' });
+        if (r.ok) {
+          window.location.reload();
+          return;
+        }
+        const data = await r.json().catch(() => ({ error: 'No se pudo quitar el miembro' }));
+        alert(data.error || 'No se pudo quitar el miembro');
+      }
+    </script>
+  ` : '';
+
+  const content = `${summary}<section class="panel"><div class="panel-header"><h3>${mode === 'manual' ? 'Miembros del segmento' : 'Coincidencias actuales del segmento'}</h3></div><div class="muted" style="margin-bottom:10px;font-size:12px;">Usa la búsqueda de la tabla para filtrar lo visible rápidamente.</div>${table}${pager}</section>${script}`;
+  return renderLayout({ title: `Segmento · ${segment.name}`, content, active: 'segments' });
 }
 
 // ============================================================
