@@ -247,7 +247,7 @@ END;
 CREATE TABLE IF NOT EXISTS segments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    filters TEXT NOT NULL,           -- JSON: {"make":"Toyota", "yearMin":2015}
+    filters TEXT NOT NULL,           -- JSON single-source: {"mode":"dynamic|manual","source":"vehicles|contacts", ...}
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     last_used_at TEXT,               -- Feature J: cuándo fue usada por última vez
     last_campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL
@@ -259,8 +259,8 @@ CREATE TABLE IF NOT EXISTS segments (
 CREATE TABLE IF NOT EXISTS segment_members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     segment_id INTEGER NOT NULL,
-    contact_id INTEGER,
-    vehicle_id INTEGER,
+    contact_id INTEGER,              -- contacts/manual => required, vehicles/manual => owner contact redundante
+    vehicle_id INTEGER,              -- vehicles/manual => required, contacts/manual => must remain NULL
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     CHECK (contact_id IS NOT NULL OR vehicle_id IS NOT NULL),
     FOREIGN KEY (segment_id) REFERENCES segments(id) ON DELETE CASCADE,

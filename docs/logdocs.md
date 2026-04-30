@@ -20,6 +20,109 @@ This file is the operational trace of changes applied to the WhatsApp bot and re
 
 ---
 
+### 2026-04-29 11:40 - clearer segment list actions
+
+- Scope: aclarar la acción principal en `/admin/segments` para que el listado comunique mejor cuándo se va a editar un segmento dinámico y cuándo se va a gestionar un segmento manual.
+- Why: después de sumar edición y carga CSV dentro del detalle, la etiqueta genérica `Ver` quedaba ambigua y escondía capacidad operativa real.
+- Files:
+  - `admin/pages.js`: CTA del listado cambia a `Editar` para segmentos dinámicos y `Gestionar` para manuales.
+  - `tests/segment-campaign-flow.test.js`: prueba de render para validar ambas etiquetas.
+- Runtime impact: Muy bajo. Cambio puramente UX/UI en el listado de segmentos.
+- Validation: `node --check admin/pages.js`, `node --check tests/segment-campaign-flow.test.js`, `node --test tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `admin/pages.js`, `tests/segment-campaign-flow.test.js` y esta entrada.
+
+---
+
+### 2026-04-29 11:25 - csv import inside manual contact segments
+
+- Scope: habilitar importación CSV desde el detalle de segmentos manuales de contactos para crear/reutilizar contactos por teléfono y agregarlos al segmento sin duplicar miembros.
+- Why: el flujo operativo necesitaba cargar leads sin autos asociados directamente dentro del segmento, aceptando CSV mínimo con teléfono y aprovechando el `upsert` actual de contactos.
+- Files:
+  - `server.js`: rutas de preview/confirm para importación CSV en `/admin/segments/:id`, parser case-insensitive para `phone|telefono`, y proceso de import seguro con `upsertContact()` + `addMembersToSegment()`.
+  - `admin/pages.js`: panel de importación en detalle de segmentos manuales de contactos, preview de válidos/inválidos, confirmación de import y columna `Agregado al segmento` usando `segment_members.created_at`.
+  - `tests/segment-campaign-flow.test.js`: cobertura UI del panel y prueba HTTP de importación sin duplicar contacto base ni miembro del segmento.
+- Runtime impact: Bajo-medio. Solo agrega capacidad operativa en detalle de segmentos manuales de contactos; no altera campañas ni la importación CSV vehicle-first existente.
+- Validation: `node --check server.js`, `node --check admin/pages.js`, `node --check tests/segment-campaign-flow.test.js`, `node --test tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `server.js`, `admin/pages.js`, `tests/segment-campaign-flow.test.js` y esta entrada.
+
+---
+
+### 2026-04-29 10:40 - campaign wizard false empty-audience warning
+
+- Scope: corregir el falso warning de “audiencia vacía” al programar campañas después de usar `Cargar segmento` en `/admin/campaigns/new`.
+- Why: el botón cargaba filtros del segmento pero no resolvía la audiencia en UI; el backend guardaba bien, pero el wizard seguía creyendo que la audiencia era `0` y disparaba una confirmación engañosa.
+- Files:
+  - `admin/pages.js`: `Cargar segmento` ahora también dispara `loadProdRecipients()` para sincronizar preview, total y feedback antes del guardado.
+  - `tests/segment-campaign-flow.test.js`: regresión para asegurar que el botón de carga de segmento resuelva audiencia desde el propio wizard.
+- Runtime impact: Bajo. No cambia la lógica backend de campañas; solo alinea el estado local del wizard con la audiencia real antes de programar.
+- Validation: `node --check admin/pages.js`, `node --check tests/segment-campaign-flow.test.js`, `node --test tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `admin/pages.js`, `tests/segment-campaign-flow.test.js` y esta entrada.
+
+---
+
+### 2026-04-29 10:20 - campaign wizard source-safe segment selector
+
+- Scope: corregir el wizard `/admin/campaigns/new` para que el selector de segmentos funcione con `contacts` y `vehicles` sin mezclar fuentes en Producción.
+- Why: la UI mostraba el selector solo dentro del panel de vehículos y cargaba todos los segmentos sin filtrar, por lo que los segmentos de contactos no aparecían al elegir `Por contactos` y además se colaban donde no correspondían.
+- Files:
+  - `admin/pages.js`: selector de segmentos compartido para Producción, recarga source-aware al cambiar `recipientSource`, y limpieza del preview al cambiar de fuente.
+  - `server.js`: `GET /admin/api/segments` acepta `?source=contacts|vehicles` para que el wizard pida solo segmentos compatibles.
+  - `db/index.js`: `listSegments()` soporta filtro opcional por `source` manteniendo compatibilidad con el listado completo.
+  - `tests/segment-campaign-flow.test.js`: cobertura del selector compartido y del filtrado HTTP por fuente para el wizard.
+- Runtime impact: Bajo. No cambia la resolución real de audiencias; solo ordena la UX y acota el contrato del listado de segmentos para evitar mezclas inválidas.
+- Validation: `node --check admin/pages.js`, `node --check server.js`, `node --check db/index.js`, `node --check tests/segment-campaign-flow.test.js`, `node --test tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `admin/pages.js`, `server.js`, `db/index.js`, `tests/segment-campaign-flow.test.js` y esta entrada.
+
+---
+
+### 2026-04-29 01:55 - generic-segments-single-source verify hardening
+
+- Scope: segunda pasada para cerrar hallazgos críticos del verify de segmentos single-source, agregando evidencia HTTP/runtime y edición mínima segura para segmentos dinámicos `contacts`.
+- Why: el verify había marcado incompleto el escenario `Edit dynamic contact segment`, faltaba cobertura runtime de rutas clave y el artifact de tasks estaba desincronizado respecto del estado real.
+- Files:
+  - `server.js`: export de `app` para tests HTTP, guard de boot en test, ruta `PATCH /admin/api/segments/:id` y reuse del contrato single-source en edición.
+  - `db/index.js`: helper `updateSegment()` para persistir cambios de segmentos sin tocar el baseline `vehicles`.
+  - `admin/pages.js`: formulario mínimo `segmentEditForm` en detalle de segmentos dinámicos para editar nombre y reglas sin permitir cambio de fuente.
+  - `tests/segment-campaign-flow.test.js`: pruebas HTTP para create/reject mixed-source, vehicle campaign baseline con `segmentId`, y edición de segmento dinámico `contacts`.
+  - `sdd/generic-segments-single-source/tasks`: checklist sincronizado a `[x]`.
+  - `sdd/generic-segments-single-source/apply-progress`: artifact merged con evidencia TDD de la segunda pasada.
+- Runtime impact: Bajo. No cambia el flujo exitoso `vehicles`; agrega capacidad explícita de edición para segmentos dinámicos y deja las validaciones de fuente también probadas a nivel HTTP.
+- Validation: `node --test tests/segment-campaign-flow.test.js`, `node --check server.js`, `node --check db/index.js`, `node --check admin/pages.js`, `node --check tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `server.js`, `db/index.js`, `admin/pages.js`, `tests/segment-campaign-flow.test.js`, `sdd/generic-segments-single-source/tasks`, `sdd/generic-segments-single-source/apply-progress` y esta entrada.
+
+---
+
+### 2026-04-28 23:35 - generic-segments-single-source
+
+- Scope: habilitar segmentos single-source `contacts|vehicles` sin romper el flujo exitoso actual de campañas/segmentos por vehículos.
+- Why: el sistema necesitaba soportar segmentos y campañas basados en contactos, incluyendo contactos sin vehículo, pero sin mezclar esta entrega con el bug visual de preview ni degradar la UX vehicle-first existente.
+- Files:
+  - `lib/segment-audience.js`: helper compartido para normalizar, validar y resolver audiencias single-source.
+  - `server.js`: validación 400 para mezcla de fuentes, resolución de audiencia basada en `segment.source` y reuse del helper compartido.
+  - `db/index.js`: guardrails de membresía manual por fuente y conteo de segmentos usando normalización única.
+  - `db/schema.sql`: comentarios del contrato single-source para `segments.filters` y `segment_members`.
+  - `admin/pages.js`: creación mínima de segmentos dinámicos `contacts` por `query` sin tocar el happy path de `vehicles`.
+  - `tests/segment-campaign-flow.test.js`: regresión de vehículos legacy, rechazo mixed-source, manual/dynamic contacts y uso en campañas.
+  - `sdd/generic-segments-single-source/apply-progress`: evidencia TDD y estado de implementación.
+- Runtime impact: Medio-bajo. Se agrega validación compartida y soporte `contacts` para segmentos/campañas; el baseline de vehículos conserva defaults legacy (`source = vehicles`) y el wizard principal sigue vehicle-first.
+- Validation: `node --test tests/segment-campaign-flow.test.js`, `node --check server.js`, `node --check db/index.js`, `node --check admin/pages.js`, `node --check lib/segment-audience.js`, `node --check tests/segment-campaign-flow.test.js`.
+- Rollback: revertir `lib/segment-audience.js`, `server.js`, `db/index.js`, `db/schema.sql`, `admin/pages.js`, `tests/segment-campaign-flow.test.js`, `sdd/generic-segments-single-source/apply-progress` y esta entrada.
+
+---
+
+### 2026-04-29 01:15 - Spec de segmentos genéricos con fuente única
+
+- Scope: documentación/spec para desacoplar el concepto de segmento de autos sin romper el flujo actual basado en vehículos.
+- Why: el proyecto necesita seguir operando campañas por autos como hoy, pero habilitar a futuro segmentos de contactos sin vehículo asociado y evitar quedar amarrado solo a marcas/autos.
+- Files:
+  - `docs/design/generic-segments-single-source-spec.md`: spec funcional para implementación con contrato `source = vehicles|contacts`, compatibilidad hacia atrás y no-objetivos.
+  - `docs/logdocs.md`: traza operativa de esta definición.
+- Runtime impact: Ninguno. Es documentación de diseño previa a implementación.
+- Validation: revisión contra la idea 2 de `docs/campaigns/ideas/ideas.md` y contra el comportamiento actual auditado de segmentos/campañas.
+- Rollback: eliminar `docs/design/generic-segments-single-source-spec.md` y esta entrada si se descarta la línea de trabajo.
+
+---
+
 ### 2026-04-26 - Segmentos manuales + resolución real de audiencia en campañas
 
 - Scope: corregir el wizard de campañas para que deje de guardar solo una muestra de 5 destinatarios, resolver la audiencia completa en backend desde filtros/segmentos, habilitar segmentos manuales con carga de miembros desde contactos o vehículos, y mejorar la UX de segmentos con selects de marca/año y vista de detalle por segmento.

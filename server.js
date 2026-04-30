@@ -81,6 +81,7 @@ import {
     updateTemplate,
     deleteTemplate as dbDeleteTemplate,
     createSegment,
+    updateSegment,
     listSegments,
     getSegmentById,
     deleteSegment as dbDeleteSegment,
@@ -126,6 +127,11 @@ import {
 } from './admin/pages.js';
 import { sendOneRecipient } from './lib/twilio-sender.js';
 import {
+    normalizeAudienceFilters,
+    resolveAudienceCandidatesFromFns,
+    validateSegmentDefinition
+} from './lib/segment-audience.js';
+import {
     activateWorkflowById,
     createWorkflow,
     deactivateWorkflowById,
@@ -139,6 +145,7 @@ import {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SHOULD_BOOT_BACKGROUND_JOBS = process.env.SKIP_SERVER_LISTEN !== '1';
 
 // Aviso temprano si faltan variables criticas (no aborta: permite levantar la UI
 // admin aunque Twilio no este configurado para diagnosticar via /health).
@@ -946,53 +953,6 @@ function normalizeRecipientAssignments(rawRecipients = []) {
         .filter(Boolean);
 }
 
-function parseStoredFilters(rawFilters = {}) {
-    if (!rawFilters) {
-        return {};
-    }
-
-    if (typeof rawFilters === 'string') {
-        try {
-            return JSON.parse(rawFilters || '{}');
-        } catch (_) {
-            return {};
-        }
-    }
-
-    return typeof rawFilters === 'object' ? { ...rawFilters } : {};
-}
-
-function normalizeAudienceFilters(rawFilters = {}) {
-    const filters = parseStoredFilters(rawFilters);
-    const normalizeText = (value) => {
-        const text = String(value ?? '').trim();
-        return text ? text : null;
-    };
-    const normalizeYear = (value) => {
-        if (value === null || value === undefined || value === '') {
-            return null;
-        }
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : null;
-    };
-
-    const source = filters.source === 'contacts' ? 'contacts' : 'vehicles';
-    const mode = filters.mode === 'manual' ? 'manual' : 'dynamic';
-    const segmentIdRaw = Number(filters.segmentId || 0);
-
-    return {
-        ...filters,
-        source,
-        mode,
-        segmentId: Number.isInteger(segmentIdRaw) && segmentIdRaw > 0 ? segmentIdRaw : null,
-        make: normalizeText(filters.make),
-        model: normalizeText(filters.model),
-        query: source === 'contacts' ? String(filters.query || '').trim() : '',
-        yearMin: normalizeYear(filters.yearMin),
-        yearMax: normalizeYear(filters.yearMax)
-    };
-}
-
 function getSegmentDescriptor(segmentId) {
     if (!Number.isInteger(Number(segmentId)) || Number(segmentId) <= 0) {
         return null;
@@ -1007,6 +967,229 @@ function getSegmentDescriptor(segmentId) {
         segment,
         filters: normalizeAudienceFilters(segment.filters)
     };
+}
+
+function assertManualContactSegment(descriptor) {
+    if (!descriptor || descriptor.filters.mode !== 'manual' || descriptor.filters.source !== 'contacts') {
+        const error = new Error('Only manual contact segments support CSV contact import');
+        error.statusCode = 400;
+        throw error;
+    }
+}
+
+function getSegmentDetailRows(descriptor, { limit, offset }) {
+    const id = Number(descriptor.segment.id);
+    const mode = descriptor.filters.mode;
+    const source = descriptor.filters.source;
+
+    if (mode === 'manual') {
+        return {
+            total: countSegmentMembers(id),
+            rows: listSegmentMembers(id, { limit, offset })
+        };
+    }
+
+    if (source === 'contacts') {
+        return {
+            total: countContactsForCampaign({ query: descriptor.filters.query || '' }),
+            rows: listContactAudiencePage({ query: descriptor.filters.query || '', limit, offset })
+        };
+    }
+
+    return {
+        total: countVehicleAudienceByFilters(descriptor.filters),
+        rows: listVehicleAudiencePage({ ...descriptor.filters, limit, offset })
+    };
+}
+
+function renderSegmentDetailResponse(req, { descriptor, importPreview = null, importResult = null } = {}) {
+    const { limit, offset } = getPaging(req);
+    const { rows, total } = getSegmentDetailRows(descriptor, { limit, offset });
+
+    return renderSegmentDetailPage({
+        segment: descriptor.segment,
+        segmentFilters: descriptor.filters,
+        rows,
+        total,
+        offset,
+        limit,
+        importPreview,
+        importResult
+    });
+}
+
+function parseSegmentContactCsv(fileBuffer) {
+    const csvContent = fileBuffer.toString('utf8').replace(/^\uFEFF/, '');
+    let records;
+
+    try {
+        records = parse(csvContent, {
+            columns: true,
+            skip_empty_lines: true,
+            trim: true,
+            bom: true,
+            relax_column_count: true
+        });
+    } catch (parseError) {
+        const error = new Error(`Error al parsear CSV: ${parseError.message}`);
+        error.statusCode = 400;
+        throw error;
+    }
+
+    if (!records.length) {
+        const error = new Error('El archivo CSV está vacío');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    if (records.length > 5000) {
+        const error = new Error('Máximo 5000 registros por importación');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const firstRecord = records[0];
+    const originalHeaders = Object.keys(firstRecord);
+    const normalizedHeaders = originalHeaders.reduce((acc, header) => {
+        const key = String(header || '').trim().toLowerCase();
+        if (key) {
+            acc[key] = header;
+        }
+        return acc;
+    }, {});
+
+    const phoneHeader = normalizedHeaders.phone || normalizedHeaders.telefono || normalizedHeaders['teléfono'];
+    const nameHeader = normalizedHeaders.name || normalizedHeaders.nombre || null;
+
+    if (!phoneHeader) {
+        const error = new Error('Falta columna requerida: phone o telefono');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const validRecords = [];
+    const invalidRows = [];
+    const seenPhones = new Set();
+
+    records.forEach((row, index) => {
+        const rowNum = index + 2;
+        const rawPhone = String(row[phoneHeader] || '').trim();
+        const rawName = nameHeader ? String(row[nameHeader] || '').trim() : '';
+
+        if (!rawPhone) {
+            invalidRows.push({ row: rowNum, phone: '', error: 'Teléfono vacío' });
+            return;
+        }
+
+        const phone = normalizePhone(rawPhone);
+        if (!phone || !phone.match(/^\+[1-9]\d{7,14}$/)) {
+            invalidRows.push({ row: rowNum, phone: rawPhone, error: 'Formato de teléfono inválido (E.164)' });
+            return;
+        }
+
+        if (seenPhones.has(phone)) {
+            invalidRows.push({ row: rowNum, phone, error: 'Teléfono duplicado en archivo' });
+            return;
+        }
+
+        seenPhones.add(phone);
+        validRecords.push({ row: rowNum, phone, name: rawName || null });
+    });
+
+    return { validRecords, invalidRows };
+}
+
+function buildSegmentContactImportPreview(segmentId, records = [], invalidRows = []) {
+    const existingSegmentIds = new Set(
+        listSegmentRecipientTargets(segmentId, { limit: 100000 })
+            .map((item) => Number(item.contact_id || 0))
+            .filter((id) => id > 0)
+    );
+
+    const validRows = records.map((record) => {
+        const existingContact = getContactByPhone(record.phone);
+        const inSegment = existingContact ? existingSegmentIds.has(Number(existingContact.id || 0)) : false;
+        const optedOut = isOptedOut(record.phone);
+        const inactive = existingContact ? existingContact.status !== 'active' : false;
+
+        let state = 'nuevo';
+        if (inSegment) {
+            state = 'ya en segmento';
+        } else if (optedOut || inactive) {
+            state = 'no elegible';
+        } else if (existingContact) {
+            state = 'existente';
+        }
+
+        return {
+            phone: record.phone,
+            name: record.name || existingContact?.name || '',
+            state
+        };
+    });
+
+    return {
+        records,
+        validRows,
+        invalidRows,
+        validCount: records.length,
+        invalidCount: invalidRows.length
+    };
+}
+
+function importContactsIntoManualSegment(segmentId, records = []) {
+    const existingSegmentIds = new Set(
+        listSegmentRecipientTargets(segmentId, { limit: 100000 })
+            .map((item) => Number(item.contact_id || 0))
+            .filter((id) => id > 0)
+    );
+
+    const result = {
+        processed: Array.isArray(records) ? records.length : 0,
+        createdContacts: 0,
+        reusedContacts: 0,
+        addedToSegment: 0,
+        alreadyInSegment: 0,
+        skippedIneligible: 0,
+        totalMembers: countSegmentMembers(segmentId)
+    };
+
+    const recipientsToAdd = [];
+
+    for (const record of Array.isArray(records) ? records : []) {
+        const existingBefore = getContactByPhone(record.phone);
+        const contact = upsertContact(record.phone, record.name || null);
+
+        if (!existingBefore) {
+            result.createdContacts++;
+        } else {
+            result.reusedContacts++;
+        }
+
+        const contactId = Number(contact?.id || 0);
+        if (!contactId) {
+            continue;
+        }
+
+        if ((contact.status && contact.status !== 'active') || isOptedOut(contact.phone || record.phone)) {
+            result.skippedIneligible++;
+            continue;
+        }
+
+        if (existingSegmentIds.has(contactId)) {
+            result.alreadyInSegment++;
+            continue;
+        }
+
+        recipientsToAdd.push({ contact_id: contactId });
+        existingSegmentIds.add(contactId);
+    }
+
+    const previousTotal = result.totalMembers;
+    result.totalMembers = addMembersToSegment(segmentId, recipientsToAdd);
+    result.addedToSegment = Math.max(0, result.totalMembers - previousTotal);
+
+    return result;
 }
 
 function resolveAudiencePreviewItems(candidates = [], source = 'vehicles', limit = 10) {
@@ -1060,85 +1243,20 @@ function toSegmentFileSafeName(name = '') {
 }
 
 function resolveAudienceCandidates({ source = 'vehicles', filters = {}, limit = 10000 } = {}) {
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 10000, 10000));
-    const requested = normalizeAudienceFilters({ source, ...filters });
-    const segmentDescriptor = requested.segmentId ? getSegmentDescriptor(requested.segmentId) : null;
-    const segmentFilters = segmentDescriptor?.filters || {};
-    const mode = requested.segmentId && segmentFilters.mode === 'manual'
-        ? 'manual'
-        : requested.mode;
-    const resolvedSource = mode === 'manual'
-        ? (segmentFilters.source === 'contacts' ? 'contacts' : 'vehicles')
-        : (requested.source === 'contacts' ? 'contacts' : 'vehicles');
+    return resolveAudienceCandidatesFromFns({
+        getSegmentById,
+        countSegmentMembers,
+        listSegmentRecipientTargets,
+        listContactsForCampaign,
+        countContactsForCampaign,
+        listVehicleContactsByFilters,
+        countVehicleAudienceByFilters
+    }, { source, filters, limit });
+}
 
-    if (mode === 'manual') {
-        const total = requested.segmentId ? countSegmentMembers(requested.segmentId) : 0;
-        const candidates = requested.segmentId
-            ? listSegmentRecipientTargets(requested.segmentId, { limit: safeLimit })
-            : [];
-
-        return {
-            mode,
-            source: resolvedSource,
-            total,
-            candidates,
-            segmentId: requested.segmentId,
-            segment: segmentDescriptor?.segment || null,
-            filters: {
-                source: resolvedSource,
-                mode,
-                segmentId: requested.segmentId
-            }
-        };
-    }
-
-    if (resolvedSource === 'contacts') {
-        const query = requested.query || (requested.segmentId ? String(segmentFilters.query || '').trim() : '');
-        const candidates = listContactsForCampaign({ query, limit: safeLimit }).map((contact) => ({
-            ...contact,
-            contact_id: contact.id
-        }));
-        const total = countContactsForCampaign({ query });
-
-        return {
-            mode,
-            source: resolvedSource,
-            total,
-            candidates,
-            segmentId: requested.segmentId,
-            segment: segmentDescriptor?.segment || null,
-            filters: {
-                source: resolvedSource,
-                mode,
-                segmentId: requested.segmentId,
-                query
-            }
-        };
-    }
-
-    const effectiveFilters = {
-        make: requested.make,
-        model: requested.model,
-        yearMin: requested.yearMin,
-        yearMax: requested.yearMax
-    };
-    const candidates = listVehicleContactsByFilters({ ...effectiveFilters, limit: safeLimit });
-    const total = countVehicleAudienceByFilters(effectiveFilters);
-
-    return {
-        mode,
-        source: resolvedSource,
-        total,
-        candidates,
-        segmentId: requested.segmentId,
-        segment: segmentDescriptor?.segment || null,
-        filters: {
-            source: resolvedSource,
-            mode,
-            segmentId: requested.segmentId,
-            ...effectiveFilters
-        }
-    };
+function sendJsonError(res, error, fallbackMessage) {
+    const statusCode = Number(error?.statusCode) === 400 ? 400 : 500;
+    return res.status(statusCode).json({ error: error?.message || fallbackMessage });
 }
 
 async function processCampaignQueue() {
@@ -1189,8 +1307,10 @@ async function processCampaignSendBatch(campaign) {
 
 app.use(express.urlencoded({ extended: false })); // Twilio envia form-urlencoded
 
-setInterval(processCampaignQueue, SCHEDULER_INTERVAL_MS);
-processCampaignQueue();
+if (SHOULD_BOOT_BACKGROUND_JOBS) {
+    setInterval(processCampaignQueue, SCHEDULER_INTERVAL_MS);
+    processCampaignQueue();
+}
 
 app.use('/admin', adminAuth);
 
@@ -2295,7 +2415,7 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
         const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
         const status = normalizedScheduledAt ? 'scheduled' : 'draft';
         const normalizedTemplateId = normalizeTemplateId(templateId);
-        let resolvedFilters = filters ? normalizeAudienceFilters(filters) : null;
+        let resolvedFilters = filters ? validateSegmentDefinition(filters) : null;
         let resolvedRecipients = normalizeRecipientAssignments(recipients || recipientIds || []);
         let resolvedAudience = null;
 
@@ -2357,7 +2477,7 @@ app.post('/admin/api/campaigns', adminAuth, express.json(), (req, res) => {
         res.status(201).json(getCampaignById(campaign.id) || campaign);
     } catch (error) {
         console.error('Create campaign error:', error);
-        res.status(500).json({ error: 'Failed to create campaign' });
+        sendJsonError(res, error, 'Failed to create campaign');
     }
 });
 
@@ -2407,7 +2527,7 @@ app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
             || Object.prototype.hasOwnProperty.call(updates, 'filters');
 
         let resolvedFilters = Object.prototype.hasOwnProperty.call(updates, 'filters')
-            ? (updates.filters ? normalizeAudienceFilters(updates.filters) : null)
+            ? (updates.filters ? validateSegmentDefinition(updates.filters) : null)
             : (current.filters ? normalizeAudienceFilters(current.filters) : null);
         let resolvedAudience = null;
         let resolvedRecipients = normalizeRecipientAssignments(updates.recipients || updates.recipientIds || []);
@@ -2465,7 +2585,7 @@ app.patch('/admin/api/campaigns/:id', adminAuth, express.json(), (req, res) => {
         res.json(campaign);
     } catch (error) {
         console.error('Update campaign error:', error);
-        res.status(500).json({ error: 'Failed to update campaign' });
+        sendJsonError(res, error, 'Failed to update campaign');
     }
 });
 
@@ -2777,7 +2897,7 @@ app.post('/admin/api/campaigns/preview-samples', adminAuth, express.json(), (req
         });
     } catch (error) {
         console.error('Preview samples error:', error);
-        res.status(500).json({ error: 'Preview samples failed' });
+        sendJsonError(res, error, 'Preview samples failed');
     }
 });
 
@@ -2913,40 +3033,96 @@ app.get('/admin/segments/:id', adminAuth, (req, res) => {
         }
 
         const descriptor = getSegmentDescriptor(id);
-        const { limit, offset } = getPaging(req);
-        const mode = descriptor.filters.mode;
-        const source = descriptor.filters.source;
-
-        let rows = [];
-        let total = 0;
-        if (mode === 'manual') {
-            total = countSegmentMembers(id);
-            rows = listSegmentMembers(id, { limit, offset });
-        } else if (source === 'contacts') {
-            total = countContactsForCampaign({ query: descriptor.filters.query || '' });
-            rows = listContactAudiencePage({ query: descriptor.filters.query || '', limit, offset });
-        } else {
-            total = countVehicleAudienceByFilters(descriptor.filters);
-            rows = listVehicleAudiencePage({ ...descriptor.filters, limit, offset });
-        }
-
-        res.status(200).type('text/html').send(renderSegmentDetailPage({
-            segment: descriptor.segment,
-            segmentFilters: descriptor.filters,
-            rows,
-            total,
-            offset,
-            limit
-        }));
+        res.status(200).type('text/html').send(renderSegmentDetailResponse(req, { descriptor }));
     } catch (error) {
         console.error('Segment detail error:', error);
         res.status(500).send('Failed to load segment detail');
     }
 });
 
+app.post('/admin/segments/:id/import-contacts/upload', adminAuth, upload.single('csvFile'), (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const descriptor = getSegmentDescriptor(id);
+        assertManualContactSegment(descriptor);
+
+        if (!req.file) {
+            return res.status(200).type('text/html').send(renderSegmentDetailResponse(req, {
+                descriptor,
+                importPreview: { error: 'No se seleccionó archivo', records: [], validRows: [], invalidRows: [], validCount: 0, invalidCount: 0 }
+            }));
+        }
+
+        const { validRecords, invalidRows } = parseSegmentContactCsv(req.file.buffer);
+        const importPreview = buildSegmentContactImportPreview(id, validRecords, invalidRows);
+        res.status(200).type('text/html').send(renderSegmentDetailResponse(req, { descriptor, importPreview }));
+    } catch (error) {
+        console.error('Segment contact import preview error:', error);
+        const id = Number(req.params.id);
+        const descriptor = Number.isInteger(id) && id > 0 ? getSegmentDescriptor(id) : null;
+        if (descriptor) {
+            return res.status(200).type('text/html').send(renderSegmentDetailResponse(req, {
+                descriptor,
+                importPreview: {
+                    error: error.message || 'No se pudo procesar el CSV',
+                    records: [],
+                    validRows: [],
+                    invalidRows: [],
+                    validCount: 0,
+                    invalidCount: 0
+                }
+            }));
+        }
+        res.status(error.statusCode || 500).send(error.message || 'Failed to preview contact CSV import');
+    }
+});
+
+app.post('/admin/segments/:id/import-contacts/confirm', adminAuth, express.urlencoded({ extended: false, limit: '10mb' }), (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const descriptor = getSegmentDescriptor(id);
+        assertManualContactSegment(descriptor);
+
+        const csvData = String(req.body?.csvData || '').trim();
+        if (!csvData) {
+            return res.status(200).type('text/html').send(renderSegmentDetailResponse(req, {
+                descriptor,
+                importResult: { error: 'No hay registros válidos para importar' }
+            }));
+        }
+
+        let records;
+        try {
+            records = JSON.parse(csvData);
+        } catch (_) {
+            return res.status(200).type('text/html').send(renderSegmentDetailResponse(req, {
+                descriptor,
+                importResult: { error: 'Datos de importación inválidos' }
+            }));
+        }
+
+        const importResult = importContactsIntoManualSegment(id, Array.isArray(records) ? records : []);
+        res.status(200).type('text/html').send(renderSegmentDetailResponse(req, { descriptor, importResult }));
+    } catch (error) {
+        console.error('Segment contact import confirm error:', error);
+        const id = Number(req.params.id);
+        const descriptor = Number.isInteger(id) && id > 0 ? getSegmentDescriptor(id) : null;
+        if (descriptor) {
+            return res.status(200).type('text/html').send(renderSegmentDetailResponse(req, {
+                descriptor,
+                importResult: { error: error.message || 'No se pudo importar el CSV' }
+            }));
+        }
+        res.status(error.statusCode || 500).send(error.message || 'Failed to import contact CSV');
+    }
+});
+
 app.get('/admin/api/segments', adminAuth, (req, res) => {
     try {
-        const segments = listSegments();
+        const source = req.query?.source === 'contacts'
+            ? 'contacts'
+            : (req.query?.source === 'vehicles' ? 'vehicles' : null);
+        const segments = listSegments(source ? { source } : undefined);
         res.json({ segments });
     } catch (error) {
         console.error('API segments error:', error);
@@ -2960,12 +3136,46 @@ app.post('/admin/api/segments', adminAuth, express.json(), (req, res) => {
         return res.status(400).json({ error: 'Name is required' });
     }
     try {
-        const normalizedFilters = normalizeAudienceFilters(filters || {});
+        const normalizedFilters = validateSegmentDefinition(filters || {});
         const segment = createSegment(name.trim(), normalizedFilters);
         res.status(201).json({ segment });
     } catch (error) {
         console.error('Segment create error:', error);
-        res.status(500).json({ error: error.message });
+        sendJsonError(res, error, 'Failed to create segment');
+    }
+});
+
+app.patch('/admin/api/segments/:id', adminAuth, express.json(), (req, res) => {
+    const id = Number(req.params.id);
+    const current = Number.isInteger(id) && id > 0 ? getSegmentById(id) : null;
+    if (!current) {
+        return res.status(404).json({ error: 'Segment not found' });
+    }
+
+    const nextName = String(req.body?.name ?? current.name ?? '').trim();
+    if (!nextName) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+
+    try {
+        const currentFilters = normalizeAudienceFilters(current.filters);
+        const nextFilters = validateSegmentDefinition({
+            ...currentFilters,
+            ...(req.body?.filters || {}),
+            source: req.body?.filters?.source ?? currentFilters.source,
+            mode: req.body?.filters?.mode ?? currentFilters.mode,
+            segmentId: null
+        }, {
+            expectedSource: currentFilters.source
+        });
+        const segment = updateSegment(id, {
+            name: nextName,
+            filters: nextFilters
+        });
+        res.status(200).json({ segment });
+    } catch (error) {
+        console.error('Segment update error:', error);
+        sendJsonError(res, error, 'Failed to update segment');
     }
 });
 
@@ -2995,10 +3205,14 @@ app.post('/admin/api/segments/:id/members/preview', adminAuth, express.json(), (
 
         const descriptor = getSegmentDescriptor(id);
         const source = descriptor.filters.source;
-        const incomingFilters = req.body?.filters || {};
+        const requestFilters = req.body?.filters || {};
+        const incomingFilters = validateSegmentDefinition({
+            ...requestFilters,
+            source: requestFilters.source ?? source
+        }, { expectedSource: source });
         const resolved = resolveAudienceCandidates({
             source,
-            filters: { ...incomingFilters, source },
+            filters: incomingFilters,
             limit: Math.max(1, Math.min(Number(req.body?.limit) || 10, 20))
         });
 
@@ -3013,7 +3227,7 @@ app.post('/admin/api/segments/:id/members/preview', adminAuth, express.json(), (
         });
     } catch (error) {
         console.error('Segment members preview error:', error);
-        res.status(500).json({ error: error.message || 'Failed to preview segment members' });
+        sendJsonError(res, error, 'Failed to preview segment members');
     }
 });
 
@@ -3029,9 +3243,15 @@ app.post('/admin/api/segments/:id/members/bulk-add', adminAuth, express.json(), 
             return res.status(400).json({ error: 'Only manual segments accept explicit members' });
         }
 
+        const requestFilters = req.body?.filters || {};
+        const incomingFilters = validateSegmentDefinition({
+            ...requestFilters,
+            source: requestFilters.source ?? descriptor.filters.source
+        }, { expectedSource: descriptor.filters.source });
+
         const resolved = resolveAudienceCandidates({
             source: descriptor.filters.source,
-            filters: { ...(req.body?.filters || {}), source: descriptor.filters.source },
+            filters: incomingFilters,
             limit: 10000
         });
         const recipients = normalizeRecipientAssignments(resolved.candidates);
@@ -3044,7 +3264,7 @@ app.post('/admin/api/segments/:id/members/bulk-add', adminAuth, express.json(), 
         });
     } catch (error) {
         console.error('Segment members bulk add error:', error);
-        res.status(500).json({ error: error.message || 'Failed to add segment members' });
+        sendJsonError(res, error, 'Failed to add segment members');
     }
 });
 
@@ -3684,4 +3904,8 @@ app.get('/health', (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log('Listening on', PORT));
+export { app };
+
+if (SHOULD_BOOT_BACKGROUND_JOBS) {
+    app.listen(PORT, () => console.log('Listening on', PORT));
+}

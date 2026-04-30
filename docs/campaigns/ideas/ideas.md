@@ -4,7 +4,7 @@
 
 #### Contexto
 - Vamos a contactar clientes obtenidos desde Chileautos.
-- Muchos vehículos pueden aparecer todavía publicados aunque ya estén vendidos o no disponibles.
+- Muchos vehículos pueden aparece   r todavía publicados aunque ya estén vendidos o no disponibles.
 - Esto va a generar respuestas frecuentes como: "ya lo vendí" o "ya no está disponible".
 
 #### Problema
@@ -48,3 +48,9 @@ Si bloqueamos siempre por teléfono, podemos perder futuros leads válidos del m
 
 #### Valor
 Esta lógica puede mejorar la calidad de las campañas, reducir fricción con usuarios y evitar contactos innecesarios.
+
+
+### 2. 
+  - Como agregar a Segmentos manuales Autos, un contacto en especifico y viceverza. ya que a futuro quizar cree un segmento no relacionado a auto, sino algo por ejemplo a ubicacion u otro segmento. asi que no quiero amarrarlo. 
+  - actualmente al crear campaña y cargar segmento, aunque el segmento si posea contactos lanza un msj que dice que campaña esta creada sin contactos. cosa que no es real ya que al crear,salir y verificar sale los contactos que corresponde.
+

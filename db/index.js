@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
+import { createBadRequestError, normalizeAudienceFilters } from '../lib/segment-audience.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.join(__dirname, 'schema.sql');
@@ -1710,6 +1711,11 @@ const segmentStatements = {
         INSERT INTO segments (name, filters, created_at)
         VALUES (?, ?, datetime('now', 'localtime'))
     `),
+    update: db.prepare(`
+        UPDATE segments
+        SET name = ?, filters = ?
+        WHERE id = ?
+    `),
     list: db.prepare(`
         SELECT id, name, filters, created_at
         FROM segments
@@ -1785,8 +1791,19 @@ export function createSegment(name, filters) {
     return segmentStatements.getById.get(result.lastInsertRowid);
 }
 
-export function listSegments() {
-    return segmentStatements.list.all();
+export function updateSegment(id, { name, filters }) {
+    const filtersJson = JSON.stringify(filters || {});
+    const info = segmentStatements.update.run(name, filtersJson, id);
+    return info.changes > 0 ? segmentStatements.getById.get(id) : null;
+}
+
+export function listSegments({ source = null } = {}) {
+    const segments = segmentStatements.list.all();
+    if (source !== 'contacts' && source !== 'vehicles') {
+        return segments;
+    }
+
+    return segments.filter((segment) => normalizeAudienceFilters(segment.filters).source === source);
 }
 
 export function getSegmentById(id) {
@@ -1814,6 +1831,37 @@ export function addMembersToSegment(segmentId, recipients) {
     const rows = Array.isArray(recipients) ? recipients.filter(Boolean) : [];
     if (!rows.length) {
         return countSegmentMembers(segmentId);
+    }
+
+    const segment = getSegmentById(segmentId);
+    if (!segment) {
+        throw new Error('Segment not found');
+    }
+
+    const segmentFilters = normalizeAudienceFilters(segment.filters);
+    const source = segmentFilters.source;
+
+    for (const item of rows) {
+        if (typeof item === 'number') {
+            if (source !== 'contacts') {
+                throw createBadRequestError('Vehicle segments only accept vehicle members');
+            }
+            continue;
+        }
+
+        const vehicleId = Number(item?.vehicle_id || 0);
+        const contactId = Number(item?.contact_id || item?.id || 0);
+
+        if (source === 'contacts') {
+            if (vehicleId > 0 || contactId <= 0) {
+                throw createBadRequestError('Contact segments only accept contact members');
+            }
+            continue;
+        }
+
+        if (vehicleId <= 0) {
+            throw createBadRequestError('Vehicle segments only accept vehicle members');
+        }
     }
 
     const transaction = db.transaction((items) => {
@@ -2117,7 +2165,7 @@ export function listSegmentsWithCount() {
         let segment_source = 'vehicles';
 
         try {
-            const f = JSON.parse(seg.filters || '{}');
+            const f = normalizeAudienceFilters(seg.filters);
             segment_mode = f.mode === 'manual' ? 'manual' : 'dynamic';
             segment_source = f.source === 'contacts' ? 'contacts' : 'vehicles';
 

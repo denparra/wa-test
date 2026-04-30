@@ -32,3 +32,4 @@ fix_*.js
 # Artefactos de herramientas locales (Claude Code, Playwright MCP)
 .claude/
 .playwright-mcp/
+.atl/

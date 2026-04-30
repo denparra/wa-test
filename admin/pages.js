@@ -1921,40 +1921,46 @@ export function renderCampaignFormPage({ campaign = {}, makes = [], templates = 
   </div>
 
   <!-- Panel 🚀 Producción -->
-  <div id="panelProd" style="display:none;margin-bottom:20px;">
-    <div class="inline" style="margin-bottom:10px;">
-      <label class="muted">Fuente:</label>
-      <select id="recipientSource">
-        <option value="" ${!initialRecipientSource ? 'selected' : ''}>No asignar ahora (borrador)</option>
-        <option value="vehicles" ${initialRecipientSource === 'vehicles' ? 'selected' : ''}>Por vehículos</option>
-        <option value="contacts" ${initialRecipientSource === 'contacts' ? 'selected' : ''}>Por contactos</option>
-      </select>
-      <button type="button" id="loadRecipientsBtn">Cargar destinatarios</button>
-    </div>
-
-    <div id="recipientVehicleFilters" class="hidden" style="background:#f8f5f1;padding:12px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #eee;">
-        <div class="inline">
-          <select id="segmentSelect" style="max-width:200px;">
-            <option value="">-- Cargar Segmento --</option>
-          </select>
-          <button type="button" id="loadSegmentBtn" class="action-btn">Cargar</button>
-        </div>
-        <button type="button" id="saveSegmentBtn" class="action-btn" style="background:var(--accent-2);border-color:var(--accent-2);color:white;">Guardar Filtros</button>
+    <div id="panelProd" style="display:none;margin-bottom:20px;">
+      <div class="inline" style="margin-bottom:10px;">
+        <label class="muted">Fuente:</label>
+        <select id="recipientSource">
+          <option value="" ${!initialRecipientSource ? 'selected' : ''}>No asignar ahora (borrador)</option>
+          <option value="vehicles" ${initialRecipientSource === 'vehicles' ? 'selected' : ''}>Por vehículos</option>
+          <option value="contacts" ${initialRecipientSource === 'contacts' ? 'selected' : ''}>Por contactos</option>
+        </select>
+        <button type="button" id="loadRecipientsBtn">Cargar destinatarios</button>
       </div>
-      <div class="inline">
-        <input type="text" id="filterMake" placeholder="Marca (opcional)" value="${escapeHtml(initialFilterMake)}" />
-        <input type="text" id="filterModel" placeholder="Modelo (opcional)" value="${escapeHtml(initialFilterModel)}" />
+
+      <div id="recipientSegmentTools" class="hidden" style="background:#f8f5f1;padding:12px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div class="inline">
+            <select id="segmentSelect" style="max-width:260px;">
+              <option value="">-- Cargar Segmento --</option>
+            </select>
+            <button type="button" id="loadSegmentBtn" class="action-btn">Cargar segmento</button>
+          </div>
+          <div class="muted" style="font-size:12px;">Solo se muestran segmentos compatibles con la fuente elegida.</div>
+        </div>
+      </div>
+
+      <div id="recipientVehicleFilters" class="hidden" style="background:#f8f5f1;padding:12px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #eee;">
+          <button type="button" id="saveSegmentBtn" class="action-btn" style="background:var(--accent-2);border-color:var(--accent-2);color:white;">Guardar Filtros</button>
+        </div>
+        <div class="inline">
+          <input type="text" id="filterMake" placeholder="Marca (opcional)" value="${escapeHtml(initialFilterMake)}" />
+          <input type="text" id="filterModel" placeholder="Modelo (opcional)" value="${escapeHtml(initialFilterModel)}" />
         <input type="number" id="filterYearMin" placeholder="Año min" value="${escapeHtml(initialFilterYearMin)}" />
         <input type="number" id="filterYearMax" placeholder="Año max" value="${escapeHtml(initialFilterYearMax)}" />
       </div>
     </div>
 
-    <div id="recipientContactFilters" class="hidden" style="margin-bottom:10px;">
-      <div class="inline">
-        <input type="text" id="filterQuery" placeholder="Teléfono o nombre" value="${escapeHtml(initialFilterQuery)}" />
+      <div id="recipientContactFilters" class="hidden" style="background:#f8f5f1;padding:12px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">
+        <div class="inline">
+          <input type="text" id="filterQuery" placeholder="Teléfono o nombre" value="${escapeHtml(initialFilterQuery)}" />
+        </div>
       </div>
-    </div>
 
     <div id="recipientFeedback" class="muted" style="margin-top:8px;min-height:18px;"></div>
     <div id="recipientCount" class="muted" style="margin-top:8px;"></div>
@@ -2229,12 +2235,24 @@ async function loadTestContacts() {
 // ── Segmentos (producción) ───────────
 let availableSegments = [];
 let prodAudienceTotal = 0;
+const INITIAL_SEGMENT_ID = '${initialSegmentId}';
 
 function setRecipientFeedback(msg, isError = false) {
   const el = document.getElementById('recipientFeedback');
   if (!el) return;
   el.textContent = msg || '';
   el.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+}
+
+function getCurrentRecipientSource() {
+  return document.getElementById('recipientSource')?.value || '';
+}
+
+function resetProdRecipientPreview() {
+  prodAudienceTotal = 0;
+  document.getElementById('recipientCount').textContent = '';
+  document.getElementById('recipientPreview').innerHTML = '';
+  window.selectedRecipients = [];
 }
 
 function parseSegmentConfig(segment) {
@@ -2250,6 +2268,30 @@ function getSelectedSegmentMeta() {
   const segmentId = document.getElementById('segmentSelect')?.value || '';
   if (!segmentId) return null;
   return availableSegments.find((segment) => String(segment.id) === String(segmentId)) || null;
+}
+
+function renderSegmentOptions(selectedSegmentId = '') {
+  const sel = document.getElementById('segmentSelect');
+  if (!sel) return;
+
+  const source = getCurrentRecipientSource();
+  let placeholder = '-- Selecciona una fuente --';
+  if (source) {
+    placeholder = availableSegments.length
+      ? '-- Cargar Segmento --'
+      : '-- Sin segmentos para esta fuente --';
+  }
+
+  sel.innerHTML = '<option value="">' + escapeHtml(placeholder) + '</option>'
+    + availableSegments.map((segment) => {
+      const parsed = parseSegmentConfig(segment);
+      const mode = parsed.mode === 'manual' ? 'manual' : 'dinámico';
+      const sourceLabel = parsed.source === 'contacts' ? 'contactos' : 'vehículos';
+      const selected = selectedSegmentId && String(segment.id) === String(selectedSegmentId) ? ' selected' : '';
+      return "<option value='" + String(segment.id) + "'" + selected + ">"
+        + escapeHtml(segment.name + ' · ' + mode + ' · ' + sourceLabel)
+        + '</option>';
+    }).join('');
 }
 
 function getVehicleFilters() {
@@ -2323,29 +2365,36 @@ function applySegmentFilters(filters = {}, segmentId = '') {
     segmentSelect.value = segmentId ? String(segmentId) : '';
   }
 
+  updateRecipientSourceUI();
+}
+
+function updateRecipientSourceUI() {
+  const source = getCurrentRecipientSource();
+  document.getElementById('recipientSegmentTools')?.classList.toggle('hidden', !source);
   document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', source !== 'vehicles');
   document.getElementById('recipientContactFilters')?.classList.toggle('hidden', source !== 'contacts');
 }
 
-async function loadSegments() {
+async function loadSegments(selectedSegmentId = '') {
   const sel = document.getElementById('segmentSelect');
   if (!sel) return;
+
+  const source = getCurrentRecipientSource();
+  availableSegments = [];
+  renderSegmentOptions(selectedSegmentId);
+  if (!source) {
+    return;
+  }
+
   try {
-    const r = await fetch('/admin/api/segments');
+    const r = await fetch('/admin/api/segments?source=' + encodeURIComponent(source));
     if (r.ok) {
       const d = await r.json();
       availableSegments = Array.isArray(d.segments) ? d.segments : [];
-      sel.innerHTML = '<option value="">-- Cargar Segmento --</option>'
-        + availableSegments.map((s) => {
-          const parsed = parseSegmentConfig(s);
-          const mode = parsed.mode === 'manual' ? 'manual' : 'dinámico';
-          const source = parsed.source === 'contacts' ? 'contactos' : 'vehículos';
-          const selected = '${initialSegmentId}' && String(s.id) === '${initialSegmentId}' ? ' selected' : '';
-          return "<option value='" + String(s.id) + "'" + selected + ">" + escapeHtml(s.name + ' · ' + mode + ' · ' + source) + '</option>';
-        }).join('');
+      renderSegmentOptions(selectedSegmentId);
 
-      if ('${initialSegmentId}') {
-        const initialSegment = availableSegments.find((segment) => String(segment.id) === '${initialSegmentId}');
+      if (selectedSegmentId) {
+        const initialSegment = availableSegments.find((segment) => String(segment.id) === String(selectedSegmentId));
         if (initialSegment) {
           const filters = parseSegmentConfig(initialSegment);
           applySegmentFilters(filters, initialSegment.id);
@@ -2492,27 +2541,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Production: segment management
   document.getElementById('saveSegmentBtn')?.addEventListener('click', saveSegment);
-  document.getElementById('loadSegmentBtn')?.addEventListener('click', () => {
+  document.getElementById('loadSegmentBtn')?.addEventListener('click', async () => {
     const sel=document.getElementById('segmentSelect');
     if(!sel?.value) return;
     const segment = availableSegments.find((item) => String(item.id) === String(sel.value));
     if (!segment) return;
     const filters = parseSegmentConfig(segment);
     applySegmentFilters(filters, segment.id);
-    setRecipientFeedback(filters.mode === 'manual' ? 'Segmento manual cargado.' : 'Filtros del segmento cargados.');
+    setRecipientFeedback(filters.mode === 'manual'
+      ? 'Segmento manual cargado. Resolviendo audiencia...'
+      : 'Filtros del segmento cargados. Resolviendo audiencia...');
+    await loadProdRecipients();
   });
-  loadSegments();
+  updateRecipientSourceUI();
+  loadSegments(INITIAL_SEGMENT_ID);
 
   // Production: recipient source toggle
-  document.getElementById('recipientSource')?.addEventListener('change', () => {
-    const src=document.getElementById('recipientSource').value;
-    document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', src!=='vehicles');
-    document.getElementById('recipientContactFilters')?.classList.toggle('hidden', src!=='contacts');
-    prodAudienceTotal = 0;
-    document.getElementById('recipientCount').textContent='';
-    document.getElementById('recipientPreview').innerHTML='';
+  document.getElementById('recipientSource')?.addEventListener('change', async () => {
+    updateRecipientSourceUI();
+    await loadSegments();
+    resetProdRecipientPreview();
     setRecipientFeedback('');
-    window.selectedRecipients=[];
   });
   document.getElementById('loadRecipientsBtn')?.addEventListener('click', loadProdRecipients);
 
@@ -2525,9 +2574,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Edit mode: restore state
   if ('${isTestCampaign}') { selectMode('${isTestCampaign}'); goToStep(3); }
-  const initialSource = document.getElementById('recipientSource')?.value || '';
-  document.getElementById('recipientVehicleFilters')?.classList.toggle('hidden', initialSource!=='vehicles');
-  document.getElementById('recipientContactFilters')?.classList.toggle('hidden', initialSource!=='contacts');
+  updateRecipientSourceUI();
 });
 </script>
   `;
@@ -3590,7 +3637,7 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
   const createForm = `<section class="panel" style="margin-bottom:18px;">
     <div class="panel-header"><h3>Crear segmento</h3></div>
     <div class="muted" style="font-size:12px;margin-bottom:12px;">Usa segmentos dinámicos para filtros vivos y manuales para audiencias curadas.</div>
-    <form id="segmentCreateForm" style="display:grid;grid-template-columns:1.2fr .8fr .8fr 1fr 1fr .8fr .8fr auto;gap:10px;align-items:end;">
+    <form id="segmentCreateForm" style="display:grid;grid-template-columns:1.2fr .8fr .8fr 1fr 1fr .8fr .8fr 1fr auto;gap:10px;align-items:end;">
       <div>
         <label style="display:block;font-weight:600;margin-bottom:5px;">Nombre *</label>
         <input type="text" id="segmentName" required placeholder="Ej: Toyota 2020+" style="width:100%;" />
@@ -3624,6 +3671,10 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
       <div class="segment-dynamic-field">
         <label style="display:block;font-weight:600;margin-bottom:5px;">Hasta</label>
         <select id="segmentYearMax" style="width:100%;">${yearOptions}</select>
+      </div>
+      <div id="segmentContactsQueryField" class="segment-contacts-field" style="display:none;">
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Buscar contacto</label>
+        <input type="text" id="segmentContactQuery" placeholder="Nombre o teléfono" style="width:100%;" />
       </div>
       <button type="submit">Crear</button>
     </form>
@@ -3701,6 +3752,8 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
             const typeBadge = mode === 'manual'
               ? `<span class="badge badge-good">manual · ${source === 'contacts' ? 'contactos' : 'vehículos'}</span>`
               : `<span class="badge badge-muted">dinámico · ${source === 'contacts' ? 'contactos' : 'vehículos'}</span>`;
+            const openLabel = mode === 'manual' ? 'Gestionar' : 'Editar';
+            const openTitle = mode === 'manual' ? 'Gestionar segmento' : 'Editar segmento';
             return `<tr>
               <td style="font-weight:600;">${escapeHtml(seg.name)}</td>
               <td>${typeBadge}</td>
@@ -3709,7 +3762,7 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
               <td>${seg.last_used_at ? formatDate(seg.last_used_at) : '<span class="muted">—</span>'}</td>
               <td>
                 <div class="row-actions">
-                  <a href="/admin/segments/${seg.id}" class="action-btn" title="Abrir segmento">${renderIcon('arrow-right', 13)} Ver</a>
+                  <a href="/admin/segments/${seg.id}" class="action-btn" title="${openTitle}">${renderIcon('arrow-right', 13)} ${openLabel}</a>
                   <button onclick="deleteSegment(${seg.id}, '${escapeHtml(seg.name)}')" class="action-btn danger" title="Eliminar segmento">${renderIcon('trash', 13)}</button>
                 </div>
               </td>
@@ -3792,14 +3845,13 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
 
     function toggleSegmentCreateMode() {
       const mode = document.getElementById('segmentMode')?.value || 'dynamic';
-      const source = document.getElementById('segmentSource');
+      const source = document.getElementById('segmentSource')?.value === 'contacts' ? 'contacts' : 'vehicles';
       document.querySelectorAll('.segment-dynamic-field').forEach((el) => {
-        el.style.display = mode === 'dynamic' ? '' : 'none';
+        el.style.display = mode === 'dynamic' && source === 'vehicles' ? '' : 'none';
       });
-      if (source) {
-        source.disabled = mode === 'dynamic';
-        if (mode === 'dynamic') source.value = 'vehicles';
-      }
+      document.querySelectorAll('.segment-contacts-field').forEach((el) => {
+        el.style.display = mode === 'dynamic' && source === 'contacts' ? '' : 'none';
+      });
     }
 
     function isInvalidYearRange(yearMin, yearMax) {
@@ -3868,6 +3920,7 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
       const source = document.getElementById('segmentSource')?.value === 'contacts' ? 'contacts' : 'vehicles';
       const make = document.getElementById('segmentMake')?.value?.trim() || null;
       const model = document.getElementById('segmentModel')?.value?.trim() || null;
+      const query = document.getElementById('segmentContactQuery')?.value?.trim() || '';
       const yearMinRaw = document.getElementById('segmentYearMin')?.value || '';
       const yearMaxRaw = document.getElementById('segmentYearMax')?.value || '';
       const yearMin = yearMinRaw ? Number(yearMinRaw) : null;
@@ -3877,18 +3930,24 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
         setSegmentFeedback('Ingresa un nombre para el segmento.', true);
         return;
       }
-      if (mode === 'dynamic' && !make && !model && !yearMin && !yearMax) {
+      if (mode === 'dynamic' && source === 'vehicles' && !make && !model && !yearMin && !yearMax) {
         setSegmentFeedback('Ingresa al menos un filtro de vehículo para el segmento dinámico.', true);
         return;
       }
-      if (mode === 'dynamic' && isInvalidYearRange(yearMin, yearMax)) {
+      if (mode === 'dynamic' && source === 'contacts' && !query) {
+        setSegmentFeedback('Ingresa una búsqueda para el segmento dinámico de contactos.', true);
+        return;
+      }
+      if (mode === 'dynamic' && source === 'vehicles' && isInvalidYearRange(yearMin, yearMax)) {
         setSegmentFeedback('El rango de años es inválido: "Desde" no puede ser mayor que "Hasta".', true);
         return;
       }
 
       const filters = mode === 'manual'
         ? { mode: 'manual', source }
-        : { mode: 'dynamic', source: 'vehicles', make, model, yearMin, yearMax };
+        : (source === 'contacts'
+          ? { mode: 'dynamic', source: 'contacts', query }
+          : { mode: 'dynamic', source: 'vehicles', make, model, yearMin, yearMax });
 
       setSegmentFeedback('Guardando segmento...');
       try {
@@ -3986,6 +4045,7 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
 
     document.getElementById('segmentCreateForm')?.addEventListener('submit', createSegment);
     document.getElementById('segmentMode')?.addEventListener('change', toggleSegmentCreateMode);
+    document.getElementById('segmentSource')?.addEventListener('change', toggleSegmentCreateMode);
     document.getElementById('manualSegmentSelect')?.addEventListener('change', syncManualSegmentSourceUI);
     document.getElementById('previewManualMembersBtn')?.addEventListener('click', previewManualMembers);
     document.getElementById('addManualMembersBtn')?.addEventListener('click', addManualMembers);
@@ -4006,7 +4066,7 @@ export function renderSegmentsPage({ segments = [], makes = [], years = [] }) {
   return renderLayout({ title: 'Segmentos', content, active: 'segments' });
 }
 
-export function renderSegmentDetailPage({ segment, segmentFilters = {}, rows = [], total = 0, offset = 0, limit = 50 }) {
+export function renderSegmentDetailPage({ segment, segmentFilters = {}, rows = [], total = 0, offset = 0, limit = 50, importPreview = null, importResult = null }) {
   const filters = typeof segmentFilters === 'string'
     ? (() => { try { return JSON.parse(segmentFilters || '{}'); } catch (_) { return {}; } })()
     : (segmentFilters || {});
@@ -4070,6 +4130,9 @@ export function renderSegmentDetailPage({ segment, segmentFilters = {}, rows = [
               { key: 'name', label: 'Nombre', render: (row) => escapeHtml(row.name || '—') },
               { key: 'status', label: 'Estado', render: (row) => renderBadge(row.status || 'active', statusTone(row.status || 'active')) },
               ...(mode === 'manual'
+                ? [{ key: 'created_at', label: 'Agregado al segmento', render: (row) => escapeHtml(formatDate(row.created_at)) }]
+                : []),
+              ...(mode === 'manual'
                 ? [{ key: 'actions', label: 'Acciones', render: (row) => `<button onclick="removeSegmentMember(${row.id}, '${escapeHtml(row.name || row.phone || 'contacto')}')" class="action-btn danger">${renderIcon('trash', 12)} Quitar</button>` }]
                 : [])
             ],
@@ -4093,8 +4156,170 @@ export function renderSegmentDetailPage({ segment, segmentFilters = {}, rows = [
     hasNext: offset + rows.length < total
   }) : '';
 
-  const script = mode === 'manual' ? `
+  const editPanel = mode === 'dynamic' ? `<section class="panel" style="margin-bottom:18px;">
+    <div class="panel-header"><h3>Editar segmento</h3></div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px;">Actualiza el nombre o las reglas sin cambiar la fuente del segmento.</div>
+    <form id="segmentEditForm" style="display:grid;grid-template-columns:1.1fr ${source === 'contacts' ? '1fr' : '1fr 1fr .8fr .8fr'} auto;gap:10px;align-items:end;">
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:5px;">Nombre</label>
+        <input type="text" id="segmentEditName" value="${escapeHtml(segment.name || '')}" required style="width:100%;" />
+      </div>
+      ${source === 'contacts'
+        ? `<div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Buscar contacto</label>
+            <input type="text" id="segmentEditQuery" value="${escapeHtml(String(filters.query || ''))}" placeholder="Nombre o teléfono" style="width:100%;" />
+          </div>`
+        : `<div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Marca</label>
+            <input type="text" id="segmentEditMake" value="${escapeHtml(String(filters.make || ''))}" placeholder="Toyota" style="width:100%;" />
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Modelo</label>
+            <input type="text" id="segmentEditModel" value="${escapeHtml(String(filters.model || ''))}" placeholder="Corolla" style="width:100%;" />
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Desde</label>
+            <input type="number" id="segmentEditYearMin" value="${filters.yearMin ?? ''}" placeholder="2020" style="width:100%;" />
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;margin-bottom:5px;">Hasta</label>
+            <input type="number" id="segmentEditYearMax" value="${filters.yearMax ?? ''}" placeholder="2024" style="width:100%;" />
+          </div>`}
+      <button type="submit">Guardar cambios</button>
+    </form>
+    <div id="segmentEditFeedback" class="muted" style="margin-top:10px;min-height:18px;"></div>
+  </section>` : '';
+
+  const importPreviewValidRows = Array.isArray(importPreview?.validRows) ? importPreview.validRows : [];
+  const importPreviewInvalidRows = Array.isArray(importPreview?.invalidRows) ? importPreview.invalidRows : [];
+  const importPreviewData = Array.isArray(importPreview?.records) ? importPreview.records : [];
+  const importPreviewBlock = importPreview
+    ? `<div style="margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fff;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <h4 style="margin:0;">Vista previa importación CSV</h4>
+          <div class="muted" style="font-size:12px;">Válidos: <strong>${Number(importPreview.validCount || 0)}</strong> · Inválidos: <strong>${Number(importPreview.invalidCount || 0)}</strong></div>
+        </div>
+        ${importPreview.error
+          ? `<div style="margin-bottom:10px;color:var(--bad);font-size:13px;">${escapeHtml(importPreview.error)}</div>`
+          : ''}
+        ${importPreviewValidRows.length > 0
+          ? `<div style="margin-bottom:12px;">${renderTable({
+              columns: [
+                { key: 'phone', label: 'Teléfono' },
+                { key: 'name', label: 'Nombre', render: (row) => escapeHtml(row.name || '—') },
+                { key: 'state', label: 'Estado importación', render: (row) => renderBadge(row.state || 'válido', row.state === 'nuevo' ? 'good' : (row.state === 'existente' ? 'info' : 'muted')) }
+              ],
+              rows: importPreviewValidRows.slice(0, 100),
+              searchable: false,
+              sortable: false,
+              tableId: 'segment-import-preview-valid-table'
+            })}</div>`
+          : '<div class="muted" style="margin-bottom:12px;">No hay registros válidos en este archivo.</div>'}
+        ${importPreviewValidRows.length > 100 ? `<div class="muted" style="font-size:12px;margin-top:-6px;margin-bottom:12px;">Mostrando primeros 100 de ${importPreviewValidRows.length} registros válidos.</div>` : ''}
+        ${importPreviewInvalidRows.length > 0
+          ? `<div style="margin-top:10px;">${renderTable({
+              columns: [
+                { key: 'row', label: 'Fila' },
+                { key: 'phone', label: 'Teléfono', render: (row) => escapeHtml(row.phone || '—') },
+                { key: 'error', label: 'Error', render: (row) => escapeHtml(row.error || 'Dato inválido') }
+              ],
+              rows: importPreviewInvalidRows.slice(0, 50),
+              searchable: false,
+              sortable: false,
+              tableId: 'segment-import-preview-invalid-table'
+            })}</div>`
+          : ''}
+        ${importPreviewInvalidRows.length > 50 ? `<div class="muted" style="font-size:12px;margin-top:8px;">Mostrando primeros 50 de ${importPreviewInvalidRows.length} registros inválidos.</div>` : ''}
+        ${importPreviewData.length > 0
+          ? `<form method="POST" action="/admin/segments/${segment.id}/import-contacts/confirm" style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <textarea name="csvData" style="display:none;">${escapeHtml(JSON.stringify(importPreviewData))}</textarea>
+              <button type="submit">Confirmar e importar ${importPreviewData.length} contacto(s)</button>
+              <span class="muted" style="font-size:12px;">Se hará upsert por teléfono y luego se agregará al segmento sin duplicar miembros.</span>
+            </form>`
+          : ''}
+      </div>`
+    : '';
+
+  const importResultBlock = importResult
+    ? `<div style="margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fffbeb;">
+        <h4 style="margin:0 0 10px;">Resultado importación CSV</h4>
+        ${importResult.error
+          ? `<div style="color:var(--bad);font-size:13px;">${escapeHtml(importResult.error)}</div>`
+          : `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <span class="badge badge-good">creados: ${Number(importResult.createdContacts || 0)}</span>
+              <span class="badge badge-info">reutilizados: ${Number(importResult.reusedContacts || 0)}</span>
+              <span class="badge badge-good">agregados al segmento: ${Number(importResult.addedToSegment || 0)}</span>
+              <span class="badge badge-muted">ya en segmento: ${Number(importResult.alreadyInSegment || 0)}</span>
+              <span class="badge badge-warn">no elegibles: ${Number(importResult.skippedIneligible || 0)}</span>
+              <span class="badge badge-muted">total actual: ${Number(importResult.totalMembers || total || 0)}</span>
+            </div>`}
+      </div>`
+    : '';
+
+  const importPanel = mode === 'manual' && source === 'contacts' ? `<section class="panel" style="margin-bottom:18px;">
+    <div class="panel-header"><h3>Importar contactos al segmento</h3></div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px;">Sube un CSV para crear o reutilizar contactos por teléfono y agregarlos a este segmento manual sin duplicar miembros. Columnas aceptadas: <code>phone</code> o <code>telefono</code>. <code>name</code> o <code>nombre</code> es opcional.</div>
+    <form id="importContactsCsvForm" method="POST" action="/admin/segments/${segment.id}/import-contacts/upload" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <input type="file" name="csvFile" accept=".csv,text/csv" required style="max-width:320px;" />
+      <button type="submit">Previsualizar CSV</button>
+      <span class="muted" style="font-size:12px;">Si el contacto ya existe, se reutiliza; si no existe, se crea.</span>
+    </form>
+    ${importResultBlock}
+    ${importPreviewBlock}
+  </section>` : '';
+
+  const script = `
     <script>
+      function setSegmentEditFeedback(message, isError) {
+        const el = document.getElementById('segmentEditFeedback');
+        if (!el) return;
+        el.textContent = message || '';
+        el.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+      }
+
+      async function submitSegmentEdit(event) {
+        event.preventDefault();
+        const name = document.getElementById('segmentEditName')?.value?.trim() || '';
+        if (!name) {
+          setSegmentEditFeedback('Ingresa un nombre para el segmento.', true);
+          return;
+        }
+
+        const filters = ${source === 'contacts'
+          ? `{ mode: 'dynamic', source: 'contacts', query: document.getElementById('segmentEditQuery')?.value?.trim() || '' }`
+          : `{ mode: 'dynamic', source: 'vehicles', make: document.getElementById('segmentEditMake')?.value?.trim() || null, model: document.getElementById('segmentEditModel')?.value?.trim() || null, yearMin: document.getElementById('segmentEditYearMin')?.value ? Number(document.getElementById('segmentEditYearMin').value) : null, yearMax: document.getElementById('segmentEditYearMax')?.value ? Number(document.getElementById('segmentEditYearMax').value) : null }`};
+
+        if (filters.source === 'contacts' && !filters.query) {
+          setSegmentEditFeedback('Ingresa una búsqueda para el segmento dinámico de contactos.', true);
+          return;
+        }
+        if (filters.source === 'vehicles' && !filters.make && !filters.model && !filters.yearMin && !filters.yearMax) {
+          setSegmentEditFeedback('Ingresa al menos un filtro de vehículo.', true);
+          return;
+        }
+        if (filters.source === 'vehicles' && Number.isFinite(filters.yearMin) && Number.isFinite(filters.yearMax) && filters.yearMin > filters.yearMax) {
+          setSegmentEditFeedback('El rango de años es inválido.', true);
+          return;
+        }
+
+        setSegmentEditFeedback('Guardando cambios...');
+        try {
+          const response = await fetch('/admin/api/segments/${segment.id}', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, filters })
+          });
+          const data = await response.json().catch(() => ({ error: 'No se pudo actualizar el segmento' }));
+          if (!response.ok) {
+            setSegmentEditFeedback('Error: ' + (data.error || 'No se pudo actualizar el segmento'), true);
+            return;
+          }
+          window.location.reload();
+        } catch (error) {
+          setSegmentEditFeedback('Error de conexión: ' + error.message, true);
+        }
+      }
+
       async function removeSegmentMember(memberId, label) {
         if (!confirm('¿Quitar de este segmento a "' + label + '"?')) return;
         const r = await fetch('/admin/api/segments/${segment.id}/members/' + memberId, { method: 'DELETE' });
@@ -4105,10 +4330,12 @@ export function renderSegmentDetailPage({ segment, segmentFilters = {}, rows = [
         const data = await r.json().catch(() => ({ error: 'No se pudo quitar el miembro' }));
         alert(data.error || 'No se pudo quitar el miembro');
       }
-    </script>
-  ` : '';
 
-  const content = `${summary}<section class="panel"><div class="panel-header"><h3>${mode === 'manual' ? 'Miembros del segmento' : 'Coincidencias actuales del segmento'}</h3></div><div class="muted" style="margin-bottom:10px;font-size:12px;">Usa la búsqueda de la tabla para filtrar lo visible rápidamente.</div>${table}${pager}</section>${script}`;
+      document.getElementById('segmentEditForm')?.addEventListener('submit', submitSegmentEdit);
+    </script>
+  `;
+
+  const content = `${summary}${editPanel}${importPanel}<section class="panel"><div class="panel-header"><h3>${mode === 'manual' ? 'Miembros del segmento' : 'Coincidencias actuales del segmento'}</h3></div><div class="muted" style="margin-bottom:10px;font-size:12px;">Usa la búsqueda de la tabla para filtrar lo visible rápidamente.</div>${table}${pager}</section>${script}`;
   return renderLayout({ title: `Segmento · ${segment.name}`, content, active: 'segments' });
 }
 
